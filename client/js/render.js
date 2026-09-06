@@ -103,6 +103,7 @@ export class Renderer {
     ctx.save();
     ctx.translate(shx, shy);
 
+    this.labels = [];
     this.drawSky(world);
     this.drawGround(world);
     this.drawObjects(world, dt);
@@ -241,7 +242,7 @@ export class Renderer {
         const p1 = this.project(x, 2.6, zz);
         if (p0 && p1 && p0.dz > 2) {
           ctx.strokeStyle = side < 0 ? 'rgba(46,230,255,0.30)' : 'rgba(255,61,104,0.30)';
-          ctx.lineWidth = Math.max(1, p0.s * 0.05);
+          ctx.lineWidth = Math.min(6, Math.max(1, p0.s * 0.05));
           ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
         }
         zz += 14;
@@ -259,20 +260,26 @@ export class Renderer {
     while (z > z0) {
       const step = (z - this.cam.z) > 60 ? 10 : 4;
       const a = Math.max(z0, z - step);
-      this.roadSlab(a, z, half, ox, y, Math.floor(a / 7) % 2 === 0 ? '#2a1f42' : '#241a3a');
+      this.roadSlab(a, z, half, ox, y, Math.floor(a / 7) % 2 === 0 ? '#3c2c60' : '#332552');
       z -= step;
+    }
+    for (let l = 1; l < C.SHORTCUT_LANES; l++) {
+      const lx = ox + (l - C.SHORTCUT_LANES / 2) * C.LANE_W;
+      for (let zz = Math.floor(z0 / 6) * 6; zz < z1; zz += 6) {
+        this.groundLine(lx, zz + 1, zz + 3.4, y, 0.14, 'rgba(255,225,150,0.30)');
+      }
     }
     // glowing edges
     this.railEdge(ox - half, ox - half, y, z0, z1, 'rgba(255,210,63,0.55)');
     this.railEdge(ox + half, ox + half, y, z0, z1, 'rgba(255,210,63,0.55)');
 
     // support pillars
-    ctx.fillStyle = 'rgba(18,22,40,0.9)';
+    ctx.fillStyle = 'rgba(38,30,62,0.95)';
     for (let pz = Math.ceil(z0 / 16) * 16; pz < z1; pz += 16) {
       const top = this.project(ox, y, pz);
       const bot = this.project(ox, 0, pz);
-      if (!top || !bot) continue;
-      const w = Math.max(1.5, top.s * 0.5);
+      if (!top || !bot || top.dz < 4) continue;
+      const w = Math.min(26, Math.max(1.5, top.s * 0.5));
       ctx.fillRect(top.x - w / 2, top.y, w, bot.y - top.y);
     }
 
@@ -281,21 +288,18 @@ export class Renderer {
     if (arch && sc.entryZ - 4 > this.cam.z + 2) {
       const s = arch.s;
       ctx.strokeStyle = 'rgba(255,210,63,0.9)';
-      ctx.lineWidth = Math.max(1.5, s * 0.09);
+      ctx.lineWidth = Math.min(9, Math.max(1.5, s * 0.09));
       ctx.beginPath();
       ctx.moveTo(arch.x - s * 1.4, arch.y);
       ctx.lineTo(arch.x - s * 1.4, arch.y - s * 3.4);
       ctx.lineTo(arch.x + s * 1.4, arch.y - s * 3.4);
       ctx.lineTo(arch.x + s * 1.4, arch.y);
       ctx.stroke();
-      ctx.fillStyle = 'rgba(255,210,63,0.95)';
-      const fs = Math.min(22, Math.max(8, s * 0.9));
-      ctx.font = `900 ${fs}px system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      const tw = ctx.measureText('SHORTCUT').width;
-      const tx = Math.max(tw / 2 + 6, Math.min(this.W - tw / 2 - 6, arch.x));
-      ctx.fillText('SHORTCUT', tx, Math.max(fs + 4, arch.y - s * 3.75));
-      ctx.textAlign = 'left';
+      this.labels.push({
+        text: 'SHORTCUT', color: 'rgba(255,210,63,0.95)',
+        fs: Math.min(22, Math.max(9, s * 0.9)),
+        x: arch.x, y: arch.y - s * 3.75
+      });
     }
   }
 
@@ -361,11 +365,61 @@ export class Renderer {
     for (const pt of this.particles) items.push({ z: pt.z, kind: 't', pt });
 
     items.sort((a, b) => b.z - a.z);
+    this.tags = [];
     for (const it of items) {
       if (it.kind === 'e') this.drawEntity(it.e);
       else if (it.kind === 'p') this.drawRunner(it.p, world);
       else if (it.kind === 'r') this.drawProjectile(it.pr);
       else this.drawParticle(it.pt);
+    }
+    this.drawTags();
+    this.drawLabels();
+  }
+
+  drawLabels() {
+    const ctx = this.ctx;
+    for (const l of this.labels || []) {
+      ctx.font = `900 ${l.fs}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      const w = ctx.measureText(l.text).width;
+      const x = Math.max(w / 2 + 6, Math.min(this.W - w / 2 - 6, l.x));
+      const y = Math.max(l.fs + 4, l.y);
+      ctx.fillStyle = 'rgba(6,9,18,0.55)';
+      roundRect(ctx, x - w / 2 - 6, y - l.fs, w + 12, l.fs + 6, 5);
+      ctx.fill();
+      ctx.fillStyle = l.color;
+      ctx.fillText(l.text, x, y);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  // Name tags are drawn last, nearest first, and any tag that would land on
+  // top of one already drawn is dropped - a bunched pack stays readable.
+  drawTags() {
+    const ctx = this.ctx;
+    const placed = [];
+    this.tags.sort((a, b) => a.dz - b.dz);
+    let drawn = 0;
+    for (const t of this.tags) {
+      if (drawn >= 6) break;
+      ctx.font = `800 ${t.fs}px system-ui, sans-serif`;
+      const w = ctx.measureText(t.label).width + 10;
+      const h = t.fs + 5;
+      const x = Math.max(w / 2 + 8, Math.min(this.W - w / 2 - 8, t.x));
+      const y = Math.max(h + 2, t.y);
+      const box = { l: x - w / 2, r: x + w / 2, t: y - h, b: y + 4 };
+      if (placed.some(p => box.l < p.r && box.r > p.l && box.t < p.b && box.b > p.t)) continue;
+      placed.push(box);
+      drawn++;
+      ctx.globalAlpha = t.alpha;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(6,9,18,0.72)';
+      roundRect(ctx, box.l, y - h, w, h, 6);
+      ctx.fill();
+      ctx.fillStyle = t.color;
+      ctx.fillText(t.label, x, y);
+      ctx.globalAlpha = 1;
+      ctx.textAlign = 'left';
     }
   }
 
@@ -373,6 +427,8 @@ export class Renderer {
 
   drawEntity(e) {
     const ctx = this.ctx;
+    // Anything already behind the runner just smears across the camera.
+    if (e.z + (e.len || 1) < this.cam.z + 3.4) return;
     const yb = this.yOff(e.path);
     if (e.kind === PICK.COIN) {
       const bob = Math.sin(this.time * 4 + e.z) * 0.18;
@@ -439,7 +495,7 @@ export class Renderer {
           const b2 = this.project(e.x + sgn * e.w / 2, yb + 3.4, e.z + 0.4);
           if (!a || !b2) continue;
           ctx.strokeStyle = '#8d97b5';
-          ctx.lineWidth = Math.max(1, a.s * 0.09);
+          ctx.lineWidth = Math.min(7, Math.max(1, a.s * 0.09));
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
         }
         break;
@@ -612,22 +668,14 @@ export class Renderer {
 
     // Name tag, kept just above the head in screen space so close runners do
     // not fling their labels off the top of the phone.
-    if (!p.self && s > 3 && nearFade > 0.5) {
-      const fs = Math.min(15, Math.max(8, s * 0.5));
-      const ty = Math.max(fs + 6, base.y - Math.min(s * (h + 0.7), this.H * 0.22));
-      const label = `${p.place ? p.place + '· ' : ''}${p.name}`;
-      ctx.font = `800 ${fs}px system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      const wpx = ctx.measureText(label).width;
-      const tx = Math.max(wpx / 2 + 8, Math.min(this.W - wpx / 2 - 8, base.x));
-      ctx.globalAlpha = nearFade;
-      ctx.fillStyle = 'rgba(6,9,18,0.7)';
-      roundRect(ctx, tx - wpx / 2 - 5, ty - fs, wpx + 10, fs + 5, 6);
-      ctx.fill();
-      ctx.fillStyle = p.color;
-      ctx.fillText(label, tx, ty);
-      ctx.globalAlpha = 1;
-      ctx.textAlign = 'left';
+    if (!p.self && s > 3.5 && nearFade > 0.5) {
+      this.tags.push({
+        label: `${p.place ? p.place + '· ' : ''}${p.name}`,
+        color: p.color, alpha: nearFade, dz: base.dz,
+        fs: Math.min(15, Math.max(8, s * 0.5)),
+        x: base.x,
+        y: base.y - Math.min(s * (h + 0.7), this.H * 0.13)
+      });
     }
 
     // A marker over your own runner so you never lose yourself in a pack.

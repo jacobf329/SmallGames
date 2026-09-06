@@ -347,11 +347,14 @@ function countdownFx(cd) {
 }
 
 function toast(text, color) {
+  const host = $('#toasts');
+  if ([...host.children].some(c => c.textContent === text)) return;
+  while (host.children.length >= 3) host.firstChild.remove();
   const t = document.createElement('div');
   t.className = 'toast';
   t.textContent = text;
   if (color) { t.style.color = color; t.style.borderColor = color; }
-  $('#toasts').appendChild(t);
+  host.appendChild(t);
   setTimeout(() => t.remove(), 1700);
 }
 function flash() {
