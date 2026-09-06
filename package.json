@@ -1,0 +1,14 @@
+{
+  "name": "turbo-surfers",
+  "version": "1.0.0",
+  "description": "Turbo Surfers - a LAN multiplayer endless-runner kart racer for phones. Subway Surfers movement, Mario Kart items. Up to 12 players.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js --port 8080"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "private": true
+}
