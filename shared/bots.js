@@ -1,10 +1,10 @@
 // Bot runners. They fill empty slots so a race always feels like a race, and
 // they drive with the exact same inputs a phone sends.
 
-import * as C from '../shared/constants.js';
-import { OB, PICK } from '../shared/constants.js';
-import { laneX, laneCount } from '../shared/track.js';
-import { ITEM } from '../shared/items.js';
+import * as C from './constants.js';
+import { OB, PICK } from './constants.js';
+import { laneX, laneCount } from './track.js';
+import { ITEM } from './items.js';
 
 const BOT_NAMES = [
   'Rusty', 'Blip', 'Nova', 'Zigzag', 'Turbo Ted', 'Mika', 'Cinder', 'Pip',

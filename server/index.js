@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import { attachWebSocket } from './ws.js';
-import { Room, STATE, DISTANCES, sanitizeName } from './room.js';
+import { Room, STATE, DISTANCES, sanitizeName } from '../shared/room.js';
 import * as C from '../shared/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

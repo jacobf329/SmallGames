@@ -1,0 +1,2837 @@
+<title>Turbo Surfers</title>
+<style>
+/* Turbo Surfers - phone-first UI. Portrait is the primary orientation;
+   landscape just gets a wider canvas and the same HUD. */
+
+:root {
+  --bg: #070b14;
+  --panel: rgba(14, 20, 36, 0.92);
+  --line: rgba(120, 160, 255, 0.18);
+  --ink: #e8eeff;
+  --dim: #8ea0c8;
+  --hot: #ff3d68;
+  --neon: #2ee6ff;
+  --gold: #ffd23f;
+  --go: #3ddc84;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  overscroll-behavior: none; touch-action: none; user-select: none;
+}
+
+#game {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  display: block; background: #070b14; z-index: 0;
+}
+
+.screen {
+  position: fixed; inset: 0; z-index: 10;
+  display: none; align-items: center; justify-content: center;
+  padding: calc(16px + var(--safe-t)) calc(14px + var(--safe-r)) calc(16px + var(--safe-b)) calc(14px + var(--safe-l));
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(46, 230, 255, 0.10), transparent 60%),
+    radial-gradient(90% 60% at 20% 100%, rgba(255, 61, 104, 0.10), transparent 60%),
+    #070b14;
+  overflow-y: auto;
+}
+.screen.active { display: flex; }
+.screen.race { background: none; pointer-events: none; }
+
+.panel {
+  width: min(520px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 20px 18px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.panel.wide { width: min(700px, 100%); }
+
+/* ---------------------------------------------------------- connect --- */
+.logo {
+  margin: 4px 0 2px; font-size: clamp(30px, 9vw, 46px); font-weight: 900;
+  letter-spacing: 2px; line-height: 0.95; text-align: center;
+  background: linear-gradient(100deg, var(--neon), #7dd3ff 30%, var(--hot) 75%, var(--gold));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.logo span { display: block; font-size: 0.62em; letter-spacing: 8px; }
+.tagline { text-align: center; color: var(--dim); margin: 6px 0 18px; font-size: 13px; }
+
+.field { display: block; margin: 0 0 14px; }
+.field > span { display: block; font-size: 12px; color: var(--dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+.field em { text-transform: none; letter-spacing: 0; opacity: 0.7; font-style: normal; }
+.field input {
+  width: 100%; padding: 14px 14px; font-size: 17px; font-weight: 700;
+  color: var(--ink); background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line); border-radius: 12px; outline: none;
+}
+.field input:focus { border-color: var(--neon); background: rgba(46, 230, 255, 0.08); }
+
+.btn {
+  appearance: none; border: 0; cursor: pointer;
+  padding: 15px 22px; border-radius: 14px;
+  font-size: 16px; font-weight: 900; letter-spacing: 1.5px;
+  color: #04121a; background: linear-gradient(180deg, #6ff0ff, var(--neon));
+  box-shadow: 0 6px 0 #0f7f96, 0 10px 24px rgba(46, 230, 255, 0.3);
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+}
+.btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #0f7f96; }
+.btn.big { width: 100%; font-size: 19px; padding: 17px; }
+.btn.go { background: linear-gradient(180deg, #7dffb4, var(--go)); box-shadow: 0 6px 0 #1c8f52, 0 10px 24px rgba(61, 220, 132, 0.3); }
+.btn.ghost { background: rgba(255,255,255,0.08); color: var(--ink); box-shadow: none; border: 1px solid var(--line); }
+.btn.on { background: linear-gradient(180deg, #ffe27d, var(--gold)); box-shadow: 0 6px 0 #a37c00; color: #201700; }
+.btn[disabled] { opacity: 0.45; pointer-events: none; }
+
+.status { text-align: center; color: var(--dim); font-size: 13px; margin: 12px 0 0; min-height: 18px; }
+.urls { margin-top: 10px; text-align: center; font-size: 12px; color: var(--dim); line-height: 1.7; word-break: break-all; }
+.urls b { color: var(--neon); font-family: ui-monospace, monospace; }
+
+/* ------------------------------------------------------------ lobby --- */
+.lobby-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.lobby-head h2 { margin: 0; font-size: 20px; letter-spacing: 2px; }
+.lobby-head span { color: var(--gold); }
+.pill { background: rgba(255,255,255,0.08); border: 1px solid var(--line); padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+
+.player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.pcard {
+  display: flex; align-items: center; gap: 8px; padding: 9px 10px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 12px;
+  font-size: 14px; font-weight: 700; min-width: 0;
+}
+.pcard .dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 10px currentColor; }
+.pcard .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcard .tag { font-size: 10px; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,0.1); color: var(--dim); font-weight: 800; letter-spacing: 0.5px; }
+.pcard.ready { border-color: rgba(61,220,132,0.6); background: rgba(61,220,132,0.10); }
+.pcard.ready .tag { background: rgba(61,220,132,0.25); color: #b8ffd8; }
+.pcard.me { outline: 2px solid var(--neon); outline-offset: -2px; }
+
+.host-controls { border-top: 1px solid var(--line); padding-top: 12px; margin-bottom: 12px; }
+.host-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.host-label { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; width: 44px; flex: 0 0 auto; }
+.seg { display: flex; gap: 4px; background: rgba(255,255,255,0.05); padding: 4px; border-radius: 12px; border: 1px solid var(--line); }
+.seg button {
+  appearance: none; border: 0; background: transparent; color: var(--dim);
+  padding: 8px 12px; border-radius: 9px; font-size: 13px; font-weight: 800; cursor: pointer;
+}
+.seg button.on { background: var(--neon); color: #04121a; }
+.seg.small button { padding: 6px 10px; font-size: 12px; }
+.stepper { display: flex; align-items: center; gap: 8px; }
+.stepper button {
+  width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line);
+  background: rgba(255,255,255,0.07); color: var(--ink); font-size: 20px; font-weight: 900; cursor: pointer;
+}
+.stepper b { min-width: 24px; text-align: center; font-size: 17px; }
+
+.lobby-actions { display: flex; gap: 10px; }
+.lobby-actions .btn { flex: 1; }
+.hidden { display: none !important; }
+
+.howto { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.howto summary { cursor: pointer; font-size: 13px; color: var(--neon); font-weight: 700; }
+.howto ul { margin: 10px 0 0; padding-left: 18px; color: var(--dim); font-size: 13px; line-height: 1.7; }
+.howto b { color: var(--ink); }
+
+/* ------------------------------------------------------------- race --- */
+.hud {
+  position: absolute; inset: 0;
+  padding: calc(8px + var(--safe-t)) calc(10px + var(--safe-r)) calc(10px + var(--safe-b)) calc(10px + var(--safe-l));
+  display: flex; flex-direction: column; pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.hud-top { display: flex; align-items: flex-start; gap: 8px; }
+
+.place-box {
+  background: rgba(7, 11, 20, 0.6); border: 1px solid var(--line); border-radius: 14px;
+  padding: 4px 10px 6px; display: flex; align-items: baseline; gap: 1px; backdrop-filter: blur(4px);
+}
+.place-box b { font-size: 30px; font-weight: 900; line-height: 1; color: var(--gold); }
+.place-box span { font-size: 13px; font-weight: 800; color: var(--gold); }
+.place-box em { font-size: 12px; color: var(--dim); font-style: normal; margin-left: 3px; }
+
+.progress { flex: 1; padding-top: 6px; }
+.track-bar {
+  position: relative; height: 8px; border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0.22));
+  border: 1px solid var(--line);
+}
+.track-bar::after {
+  content: ''; position: absolute; right: -1px; top: -3px; bottom: -3px; width: 4px;
+  background: repeating-linear-gradient(180deg, #fff 0 3px, #000 3px 6px); border-radius: 2px;
+}
+#progress-dots { position: absolute; inset: 0; }
+#progress-dots i { position: absolute; top: 50%; width: 9px; height: 9px; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 6px currentColor; }
+#progress-dots i.self { width: 13px; height: 13px; border: 2px solid #fff; }
+.dist { text-align: center; font-size: 11px; color: var(--dim); margin-top: 5px; letter-spacing: 0.5px; }
+
+.stats { text-align: right; }
+.coins { color: var(--gold); font-weight: 900; font-size: 17px; display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+.coins i { font-style: normal; font-size: 13px; }
+.speed { font-size: 12px; color: var(--dim); font-weight: 700; }
+.speed span { color: var(--ink); font-size: 15px; }
+.speed em { font-style: normal; margin-left: 2px; }
+
+.leaderboard {
+  position: absolute; right: calc(10px + var(--safe-r)); top: 84px;
+  display: flex; flex-direction: column; gap: 3px; align-items: flex-end;
+}
+.lb-row {
+  display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800;
+  background: rgba(7, 11, 20, 0.55); border-radius: 8px; padding: 3px 7px; max-width: 44vw;
+}
+.lb-row .n { color: var(--dim); width: 14px; text-align: right; }
+.lb-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 26vw; }
+.lb-row.self { background: rgba(46, 230, 255, 0.22); }
+.lb-row .gap { color: var(--dim); font-size: 10px; }
+
+.countdown {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: clamp(70px, 26vw, 190px); font-weight: 900; color: #fff;
+  text-shadow: 0 0 40px var(--neon), 0 8px 0 rgba(0,0,0,0.35);
+  animation: pop 0.4s ease-out;
+}
+@keyframes pop { from { transform: scale(1.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.toasts { position: absolute; left: 0; right: 0; top: 30%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.toast {
+  padding: 7px 16px; border-radius: 999px; font-weight: 900; font-size: 15px;
+  background: rgba(7, 11, 20, 0.8); border: 1px solid var(--line);
+  animation: toast 1.6s ease-out forwards; letter-spacing: 0.5px;
+}
+@keyframes toast {
+  0% { transform: translateY(14px) scale(0.9); opacity: 0; }
+  15% { transform: translateY(0) scale(1); opacity: 1; }
+  75% { opacity: 1; }
+  100% { transform: translateY(-22px); opacity: 0; }
+}
+
+.hud-bottom { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; }
+.item-slot {
+  pointer-events: auto; width: 88px; height: 88px; border-radius: 22px;
+  border: 2px solid var(--line); background: rgba(7, 11, 20, 0.6);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px); transition: transform 0.08s ease;
+}
+.item-slot span { font-size: 34px; line-height: 1; }
+.item-slot em { font-style: normal; font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+.item-slot.empty { opacity: 0.45; }
+.item-slot.armed { border-color: currentColor; box-shadow: 0 0 24px currentColor, inset 0 0 20px rgba(255,255,255,0.08); animation: bob 1.1s ease-in-out infinite; }
+.item-slot.armed em { color: inherit; }
+.item-slot:active { transform: scale(0.92); }
+@keyframes bob { 50% { transform: translateY(-4px); } }
+
+.spectating {
+  position: absolute; top: 50%; left: 0; right: 0; text-align: center;
+  font-size: 13px; font-weight: 800; letter-spacing: 2px; color: rgba(255,255,255,0.55);
+  text-transform: uppercase;
+}
+.ctrl-hints { color: rgba(255,255,255,0.28); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; padding-bottom: 8px; }
+
+.fx-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 60%, rgba(255,61,104,0.5), transparent 65%); }
+.fx-flash.on { animation: flash 0.42s ease-out; }
+@keyframes flash { from { opacity: 1; } to { opacity: 0; } }
+
+/* ---------------------------------------------------------- results --- */
+.results-title { text-align: center; margin: 0 0 14px; letter-spacing: 6px; font-size: 22px; color: var(--gold); }
+.results { display: flex; flex-direction: column; gap: 6px; max-height: 52vh; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-bottom: 12px; }
+.rrow {
+  display: grid; grid-template-columns: 30px 12px 1fr auto; gap: 8px; align-items: center;
+  padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--line);
+}
+.rrow .pl { font-size: 18px; font-weight: 900; color: var(--dim); text-align: center; }
+.rrow.p1 { background: linear-gradient(90deg, rgba(255,210,63,0.22), rgba(255,255,255,0.04)); border-color: rgba(255,210,63,0.5); }
+.rrow.p1 .pl { color: var(--gold); }
+.rrow.p2 .pl { color: #d8e3ff; }
+.rrow.p3 .pl { color: #ffab6b; }
+.rrow.self { outline: 2px solid var(--neon); outline-offset: -2px; }
+.rrow .dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
+.rrow .who { min-width: 0; }
+.rrow .nm { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rrow .sub { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rrow .tm { font-weight: 900; font-variant-numeric: tabular-nums; }
+.rrow .tm em { display: block; font-style: normal; font-size: 10px; color: var(--dim); font-weight: 700; text-align: right; }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+  background: rgba(3, 6, 12, 0.85); padding: 20px;
+}
+.overlay h2 { margin: 0 0 8px; text-align: center; }
+.overlay .btn { width: 100%; margin-top: 12px; }
+
+@media (min-width: 820px) and (orientation: landscape) {
+  .item-slot { width: 104px; height: 104px; }
+  .leaderboard { top: 96px; }
+}
+@media (max-height: 480px) {
+  .item-slot { width: 68px; height: 68px; border-radius: 18px; }
+  .item-slot span { font-size: 26px; }
+  .place-box b { font-size: 24px; }
+}
+
+</style>
+<canvas id="game"></canvas>
+
+<section id="screen-setup" class="screen active">
+  <div class="panel">
+    <h1 class="logo">TURBO<span>SURFERS</span></h1>
+    <p class="tagline">Practice run — you against the bots.</p>
+
+    <div class="host-controls" style="border-top:0;padding-top:0">
+      <div class="host-row">
+        <span class="host-label">Track</span>
+        <div class="seg" id="seg-distance">
+          <button data-v="sprint" class="on">Sprint</button>
+          <button data-v="classic">Classic</button>
+          <button data-v="marathon">Marathon</button>
+        </div>
+      </div>
+      <div class="host-row">
+        <span class="host-label">Rivals</span>
+        <div class="stepper">
+          <button id="bots-minus">−</button>
+          <b id="bots-count">7</b>
+          <button id="bots-plus">+</button>
+        </div>
+        <div class="seg small" id="seg-skill">
+          <button data-v="0.45">Easy</button>
+          <button data-v="0.72" class="on">Normal</button>
+          <button data-v="0.95">Rude</button>
+        </div>
+      </div>
+      <div class="host-row">
+        <span class="host-label">Items</span>
+        <div class="seg small" id="seg-items">
+          <button data-v="1" class="on">On</button>
+          <button data-v="0">Off</button>
+        </div>
+      </div>
+    </div>
+
+    <button id="btn-start" class="btn big go">START RACE</button>
+
+    <details class="howto" open>
+      <summary>How to play</summary>
+      <ul>
+        <li><b>Swipe ←/→</b> switch lane · <b>Swipe ↑</b> jump · <b>Swipe ↓</b> slide</li>
+        <li><b>Tap</b> (or the item button) fires whatever you picked up</li>
+        <li>Hit something and you get <b>knocked back</b>, not eliminated — keep going</li>
+        <li>Grab <b>coins</b> for top speed, <b>? boxes</b> for items</li>
+        <li>Ramps on the outer lanes launch you onto <b>shortcuts</b>: shorter, nastier</li>
+        <li>Tuck in behind a rival for a <b>slipstream</b></li>
+        <li>Desktop: arrow keys / WASD, space to jump, E to fire</li>
+      </ul>
+    </details>
+    <p class="status" id="lan-note"></p>
+  </div>
+</section>
+
+<section id="screen-race" class="screen race">
+  <div class="hud">
+    <div class="hud-top">
+      <div class="place-box">
+        <b id="hud-place">1</b><span id="hud-place-sfx">st</span>
+        <em id="hud-total">/ 1</em>
+      </div>
+      <div class="progress">
+        <div class="track-bar"><div id="progress-dots"></div></div>
+        <div class="dist"><span id="hud-dist">0</span>m to go</div>
+      </div>
+      <div class="stats">
+        <div class="coins"><i>●</i><span id="hud-coins">0</span></div>
+        <div class="speed"><span id="hud-speed">0</span><em>km/h</em></div>
+      </div>
+    </div>
+    <div id="leaderboard" class="leaderboard"></div>
+    <div id="countdown" class="countdown hidden"></div>
+    <div id="toasts" class="toasts"></div>
+    <div class="hud-bottom">
+      <div id="item-slot" class="item-slot empty">
+        <span id="item-icon">·</span>
+        <em id="item-name">no item</em>
+      </div>
+      <div class="ctrl-hints"><span>swipe to move</span></div>
+    </div>
+    <div id="fx-flash" class="fx-flash"></div>
+  </div>
+</section>
+
+<section id="screen-results" class="screen">
+  <div class="panel wide">
+    <h2 class="results-title">FINISH</h2>
+    <div id="results-rows" class="results"></div>
+    <div class="lobby-actions">
+      <button id="btn-again" class="btn go">RACE AGAIN</button>
+      <button id="btn-setup" class="btn ghost">CHANGE SETUP</button>
+    </div>
+  </div>
+</section>
+<script type="module">
+(function () {
+"use strict";
+window.TS_STANDALONE = true;
+// Shared tuning constants. Imported by both the Node server and the browser
+// client so that prediction and authority agree on the numbers.
+
+const PROTOCOL_VERSION = 1;
+
+const TICK_RATE = 60;              // server simulation steps per second
+const SNAPSHOT_RATE = 20;          // state broadcasts per second
+const MAX_PLAYERS = 12;
+const MIN_PLAYERS_TO_START = 1;
+
+// ---- track geometry -------------------------------------------------------
+const LANE_W = 2.4;                // metres between lane centres
+const MAIN_LANES = 5;
+const SHORTCUT_LANES = 3;
+const CHUNK = 40;                  // metres of track generated per chunk
+const RACE_DISTANCE = 1800;        // metres from start line to finish
+const START_PAD = 60;              // clear run-up before obstacles start
+const SHORTCUT_OFFSET = 11.5;      // lateral offset of a shortcut branch
+const SHORTCUT_HEIGHT = 3.2;       // shortcut rails sit above the main road
+
+// ---- runner physics -------------------------------------------------------
+const BASE_SPEED = 18;             // speed you settle at with no help
+const MIN_SPEED = 6;
+const MAX_SPEED = 31;
+const ACCEL = 6.0;                 // m/s^2 toward the target speed
+const BRAKE = 14.0;                // m/s^2 when above the target speed
+const KNOCK_SPEED = 7.5;           // speed you drop to after a wipeout
+const KNOCK_BACK = 4.5;            // metres shoved backwards on a wipeout
+const STUN_TIME = 0.5;             // no steering while stunned
+const INVULN_TIME = 1.2;           // grace period after a wipeout
+const SPIN_TIME = 0.9;             // shell / banana spinout is worse
+const JUMP_V = 10.4;
+const GRAVITY = 30;
+const RAMP_V = 13.5;
+const SLIDE_TIME = 0.62;
+const STRAFE_SPEED = 13.0;         // lateral m/s while changing lanes
+const PLAYER_W = 1.25;
+const PLAYER_LEN = 1.1;
+
+// ---- economy / boosts -----------------------------------------------------
+const COIN_TOP_SPEED = 0.055;      // extra top speed per coin
+const COIN_CAP = 40;               // coins beyond this stop helping
+const BOOST_SPEED = 40;
+const BOOST_TIME = 1.9;
+const PAD_BOOST_TIME = 1.1;
+const STAR_SPEED = 36;
+const STAR_TIME = 6.5;
+const ROCKET_SPEED = 46;
+const ROCKET_TIME = 4.0;
+const BOLT_TIME = 3.2;
+const BOLT_FACTOR = 0.55;          // speed multiplier while zapped
+const SHIELD_TIME = 14;
+const MAGNET_TIME = 7;
+const MAGNET_RANGE = 6.5;
+const DRAFT_RANGE = 14;            // slipstream distance behind a rival
+const DRAFT_BONUS = 2.6;
+const SHORTCUT_FACTOR = 1.34;      // shortcuts cover ground faster
+
+// ---- projectiles ----------------------------------------------------------
+const SHELL_SPEED = 46;
+const SHELL_LIFE = 6.0;
+const SHELL_HOME = 6.5;            // lateral homing m/s
+const BANANA_LIFE = 45;
+
+// ---- misc -----------------------------------------------------------------
+const COUNTDOWN = 4.0;             // seconds of 3..2..1..GO
+const FINISH_GRACE = 20;           // seconds others get after 1st place
+const RESULTS_TIME = 14;
+
+const COLORS = [
+  '#ff4d5a', '#ffb020', '#3ddc84', '#33b0ff', '#b06bff', '#ff6fd8',
+  '#00e5c9', '#ffe14d', '#ff8a3d', '#7dff5a', '#5a7bff', '#ff5ab0'
+];
+
+const OB = {
+  BARRIER: 'barrier',   // low wall - jump it
+  HIGHBAR: 'highbar',   // overhead bar - slide under it
+  BLOCK: 'block',       // train / container - steer around it
+  CONE: 'cone',         // small - clips you
+  RAMP: 'ramp',         // launches you
+  PAD: 'pad'            // boost strip
+};
+
+const PICK = { COIN: 'coin', BOX: 'box' };
+
+const C = { PROTOCOL_VERSION, TICK_RATE, SNAPSHOT_RATE, MAX_PLAYERS, MIN_PLAYERS_TO_START, LANE_W, MAIN_LANES, SHORTCUT_LANES, CHUNK, RACE_DISTANCE, START_PAD, SHORTCUT_OFFSET, SHORTCUT_HEIGHT, BASE_SPEED, MIN_SPEED, MAX_SPEED, ACCEL, BRAKE, KNOCK_SPEED, KNOCK_BACK, STUN_TIME, INVULN_TIME, SPIN_TIME, JUMP_V, GRAVITY, RAMP_V, SLIDE_TIME, STRAFE_SPEED, PLAYER_W, PLAYER_LEN, COIN_TOP_SPEED, COIN_CAP, BOOST_SPEED, BOOST_TIME, PAD_BOOST_TIME, STAR_SPEED, STAR_TIME, ROCKET_SPEED, ROCKET_TIME, BOLT_TIME, BOLT_FACTOR, SHIELD_TIME, MAGNET_TIME, MAGNET_RANGE, DRAFT_RANGE, DRAFT_BONUS, SHORTCUT_FACTOR, SHELL_SPEED, SHELL_LIFE, SHELL_HOME, BANANA_LIFE, COUNTDOWN, FINISH_GRACE, RESULTS_TIME, COLORS, OB, PICK };
+
+/* ===== shared/rng.js ===== */
+// Deterministic RNG so every device generates a byte-identical track.
+
+function mulberry32(a) {
+  a = a >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hash2(a, b) {
+  let h = (a >>> 0) ^ Math.imul(b >>> 0, 0x9E3779B1);
+  h = Math.imul(h ^ (h >>> 16), 0x85EBCA6B);
+  h = Math.imul(h ^ (h >>> 13), 0xC2B2AE35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+const pick = (rng, arr) => arr[Math.floor(rng() * arr.length) % arr.length];
+const range = (rng, lo, hi) => lo + rng() * (hi - lo);
+const irange = (rng, lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+
+
+/* ===== shared/track.js ===== */
+// Deterministic procedural track. The server sends only a seed; every client
+// rebuilds exactly the same obstacle course from it.
+
+
+const laneX = (path, lane, side) =>
+  path === 0
+    ? (lane - (MAIN_LANES - 1) / 2) * LANE_W
+    : side * SHORTCUT_OFFSET + (lane - (SHORTCUT_LANES - 1) / 2) * LANE_W;
+
+const laneCount = (path) => (path === 0 ? MAIN_LANES : SHORTCUT_LANES);
+
+const OB_SPEC = {
+  [OB.BARRIER]: { w: 2.1, len: 0.9, lo: 0.0, hi: 1.15, solid: true },
+  [OB.HIGHBAR]: { w: 2.3, len: 0.8, lo: 1.25, hi: 3.4, solid: true },
+  [OB.BLOCK]:   { w: 2.2, len: 14,  lo: 0.0, hi: 4.0, solid: true },
+  [OB.CONE]:    { w: 1.0, len: 0.8, lo: 0.0, hi: 0.8, solid: true },
+  [OB.RAMP]:    { w: 2.2, len: 4.0, lo: 0.0, hi: 0.6, solid: false },
+  [OB.PAD]:     { w: 2.2, len: 5.0, lo: 0.0, hi: 0.05, solid: false }
+};
+
+const obSpec = (type) => OB_SPEC[type];
+
+class Track {
+  constructor(seed, length = RACE_DISTANCE) {
+    this.seed = seed >>> 0;
+    this.length = length;
+    this.shortcuts = [];
+    this.entities = [];
+    this.chunks = [new Map(), new Map()];
+    this._generate();
+  }
+
+  _add(e) {
+    e.id = this.entities.length;
+    const spec = e.kind === 'obstacle' ? OB_SPEC[e.type] : null;
+    if (spec) {
+      e.w = spec.w; e.len = spec.len ?? 1; e.lo = spec.lo; e.hi = spec.hi; e.solid = spec.solid;
+      if (e.type === OB.BLOCK && e.blockLen) e.len = e.blockLen;
+    } else {
+      e.w = e.kind === PICK.COIN ? 1.0 : 1.6;
+      e.len = e.kind === PICK.COIN ? 1.0 : 1.6;
+      e.lo = 0.4; e.hi = e.kind === PICK.COIN ? 1.6 : 2.2;
+    }
+    e.x = laneX(e.path, e.lane, e.side || 0);
+    this.entities.push(e);
+    const c0 = Math.floor(e.z / CHUNK);
+    const c1 = Math.floor((e.z + e.len) / CHUNK);
+    for (let c = c0; c <= c1; c++) {
+      const m = this.chunks[e.path];
+      if (!m.has(c)) m.set(c, []);
+      m.get(c).push(e);
+    }
+    return e;
+  }
+
+  // Everything (both paths) inside a z window - used by the renderer.
+  near(z0, z1, path = 0) {
+    const out = [];
+    const m = this.chunks[path];
+    for (let c = Math.floor(z0 / CHUNK) - 1; c <= Math.floor(z1 / CHUNK); c++) {
+      const list = m.get(c);
+      if (!list) continue;
+      for (const e of list) {
+        if (e.z + e.len >= z0 && e.z <= z1 && !out.includes(e)) out.push(e);
+      }
+    }
+    return out;
+  }
+
+  shortcutAt(z) {
+    for (const s of this.shortcuts) if (z >= s.entryZ && z <= s.exitZ) return s;
+    return null;
+  }
+
+  _generate() {
+    const chunks = Math.ceil((this.length + 200) / CHUNK);
+    let scEnd = -1;
+    for (let i = 0; i < chunks; i++) {
+      const z0 = i * CHUNK;
+      const rng = mulberry32(hash2(this.seed, i * 2654435761));
+
+      if (z0 < START_PAD) { this._coinRun(rng, z0 + 14, 0, irange(rng, 0, MAIN_LANES - 1), 0); continue; }
+      if (z0 > this.length - 30) continue;   // clean approach to the finish line
+
+      // Start a shortcut branch every few chunks, never overlapping another.
+      if (i > 2 && i % 7 === 3 && z0 > scEnd && z0 < this.length - 220) {
+        const side = rng() < 0.5 ? -1 : 1;
+        const sc = {
+          id: this.shortcuts.length,
+          side,
+          entryLane: side < 0 ? 0 : MAIN_LANES - 1,
+          entryZ: z0 + 6,
+          exitZ: z0 + CHUNK * 3 - 6
+        };
+        this.shortcuts.push(sc);
+        scEnd = sc.exitZ + CHUNK;
+        this._add({ kind: 'obstacle', type: OB.RAMP, path: 0, lane: sc.entryLane, z: sc.entryZ - 5, gate: sc.id });
+        this._buildShortcut(sc);
+      }
+
+      this._mainChunk(rng, i, z0);
+    }
+    this.entities.sort((a, b) => a.z - b.z);
+  }
+
+  _mainChunk(rng, i, z0) {
+    const difficulty = Math.min(1, z0 / (this.length * 0.75));
+    const rows = irange(rng, 2, 3 + Math.round(difficulty));
+    let z = z0 + range(rng, 3, 8);
+    for (let r = 0; r < rows && z < z0 + CHUNK - 6; r++) {
+      this._row(rng, z, 0, 0, MAIN_LANES, difficulty, false);
+      z += range(rng, 11 - difficulty * 2.5, 17 - difficulty * 3);
+    }
+    // Coins and item boxes fill the gaps.
+    if (rng() < 0.85) this._coinRun(rng, z0 + range(rng, 6, 24), 0, irange(rng, 0, MAIN_LANES - 1), 0);
+    if (i % 2 === 0) this._boxRow(rng, z0 + range(rng, 10, 30), 0, 0, MAIN_LANES);
+    if (rng() < 0.28) {
+      this._add({ kind: 'obstacle', type: OB.PAD, path: 0, lane: irange(rng, 0, MAIN_LANES - 1), z: z0 + range(rng, 5, 32) });
+    }
+  }
+
+  _buildShortcut(sc) {
+    const span = sc.exitZ - sc.entryZ;
+    const rows = Math.round(span / 7);
+    for (let r = 0; r < rows; r++) {
+      const z = sc.entryZ + 10 + r * (span - 16) / Math.max(1, rows - 1);
+      const rng = mulberry32(hash2(this.seed ^ 0x5bf03635, sc.id * 977 + r));
+      this._row(rng, z, 1, sc.side, SHORTCUT_LANES, 1, true);
+      if (rng() < 0.5) this._coinRun(rng, z + 3, 1, irange(rng, 0, SHORTCUT_LANES - 1), sc.side, 4);
+    }
+    // Reward for surviving it.
+    this._boxRow(mulberry32(hash2(this.seed, sc.id * 31)), sc.exitZ - 14, 1, sc.side, SHORTCUT_LANES);
+    this._add({ kind: 'obstacle', type: OB.PAD, path: 1, lane: 1, z: sc.exitZ - 8, side: sc.side });
+  }
+
+  // One row of obstacles. Always leaves at least one clear lane.
+  _row(rng, z, path, side, lanes, difficulty, dense) {
+    const maxBlocked = Math.min(lanes - 1, dense ? lanes - 1 : 1 + Math.round(difficulty * 2));
+    const blocked = irange(rng, dense ? Math.max(1, lanes - 2) : 1, maxBlocked);
+    const order = [];
+    for (let l = 0; l < lanes; l++) order.push(l);
+    for (let k = order.length - 1; k > 0; k--) {
+      const j = Math.floor(rng() * (k + 1));
+      [order[k], order[j]] = [order[j], order[k]];
+    }
+    for (let b = 0; b < blocked; b++) {
+      const lane = order[b];
+      const roll = rng();
+      let type = OB.BARRIER;
+      if (roll < 0.3) type = OB.BARRIER;
+      else if (roll < 0.55) type = OB.HIGHBAR;
+      else if (roll < 0.8) type = OB.CONE;
+      else type = OB.BLOCK;
+      const e = { kind: 'obstacle', type, path, lane, z, side };
+      if (type === OB.BLOCK) e.blockLen = range(rng, 9, 20);
+      this._add(e);
+    }
+  }
+
+  _coinRun(rng, z, path, lane, side, count = irange(rng, 5, 9)) {
+    for (let c = 0; c < count; c++) {
+      this._add({ kind: PICK.COIN, path, lane, z: z + c * 2.2, side });
+    }
+  }
+
+  _boxRow(rng, z, path, side, lanes) {
+    const wide = rng() < 0.45;
+    if (wide) {
+      for (let l = 0; l < lanes; l += lanes > 3 ? 2 : 1) {
+        this._add({ kind: PICK.BOX, path, lane: l, z, side });
+      }
+    } else {
+      this._add({ kind: PICK.BOX, path, lane: irange(rng, 0, lanes - 1), z, side });
+    }
+  }
+}
+
+
+/* ===== shared/physics.js ===== */
+// The one true movement model. Runs on the server (authoritative) and on each
+// client (prediction) so both agree without arguing.
+
+
+
+function createPlayer(id, name, colorIndex, isBot = false) {
+  return {
+    id, name, isBot,
+    color: C.COLORS[colorIndex % C.COLORS.length],
+    ready: false, connected: true,
+    // motion
+    z: 0, x: 0, y: 0, vy: 0, speed: 0,
+    lane: 2, targetLane: 2, path: 0, scSide: 0, scId: -1,
+    grounded: true, sliding: false, slideT: 0,
+    // status timers
+    stunT: 0, invulnT: 0, boostT: 0, starT: 0, rocketT: 0, boltT: 0,
+    shieldT: 0, magnetT: 0, spinT: 0, drafting: false,
+    // race
+    coins: 0, item: null, place: 0, finished: false, finishTime: 0,
+    hits: 0, shortcuts: 0, topSpeed: 0, speedBias: 0,
+    taken: new Set(),
+    input: { lane: 2, jump: false, slide: false, use: false }
+  };
+}
+
+function resetForRace(p) {
+  Object.assign(p, {
+    z: 0, x: laneX(0, p.startLane ?? 2, 0), y: 0, vy: 0, speed: 0,
+    lane: p.startLane ?? 2, targetLane: p.startLane ?? 2, path: 0, scSide: 0, scId: -1,
+    grounded: true, sliding: false, slideT: 0,
+    stunT: 0, invulnT: 0, boostT: 0, starT: 0, rocketT: 0, boltT: 0,
+    shieldT: 0, magnetT: 0, spinT: 0, drafting: false,
+    coins: 0, item: null, place: 0, finished: false, finishTime: 0,
+    hits: 0, shortcuts: 0, topSpeed: 0
+  });
+  p.taken = new Set();
+  p.input = { lane: p.startLane ?? 2, jump: false, slide: false, use: false };
+}
+
+const dec = (v, dt) => (v > 0 ? Math.max(0, v - dt) : 0);
+
+function coinTopSpeed(p) {
+  return Math.min(p.coins, C.COIN_CAP) * C.COIN_TOP_SPEED;
+}
+
+function targetSpeed(p) {
+  let t = C.BASE_SPEED + coinTopSpeed(p) + (p.speedBias || 0);
+  if (p.drafting) t += C.DRAFT_BONUS;
+  if (p.boostT > 0) t = Math.max(t, C.BOOST_SPEED);
+  if (p.starT > 0) t = Math.max(t, C.STAR_SPEED);
+  if (p.rocketT > 0) t = C.ROCKET_SPEED;
+  if (p.boltT > 0 && p.rocketT <= 0 && p.starT <= 0) t *= C.BOLT_FACTOR;
+  if (p.stunT > 0) t = Math.min(t, C.KNOCK_SPEED);
+  return Math.max(C.MIN_SPEED, Math.min(C.MAX_SPEED + coinTopSpeed(p) + 16, t));
+}
+
+function wipeout(p, ev, cause, hard = false) {
+  if (p.invulnT > 0 || p.starT > 0 || p.rocketT > 0) return false;
+  if (p.shieldT > 0) {
+    p.shieldT = 0;
+    p.invulnT = 0.5;
+    ev && ev.push({ t: 'shield', id: p.id });
+    return false;
+  }
+  p.speed = C.KNOCK_SPEED;
+  p.z -= C.KNOCK_BACK;
+  p.stunT = hard ? C.SPIN_TIME : C.STUN_TIME;
+  p.spinT = hard ? C.SPIN_TIME : 0.35;
+  p.invulnT = C.INVULN_TIME;
+  p.boostT = 0;
+  p.sliding = false;
+  p.slideT = 0;
+  p.vy = 0;
+  p.y = 0;
+  p.grounded = true;
+  p.hits++;
+  const lost = Math.min(p.coins, hard ? 5 : 3);
+  p.coins -= lost;
+  ev && ev.push({ t: 'hit', id: p.id, cause, hard, coins: lost });
+  return true;
+}
+
+// One fixed simulation step for a single runner.
+function stepPlayer(p, dt, track, ev, opts = {}) {
+  const inp = p.input;
+  const racing = opts.racing !== false;
+
+  p.stunT = dec(p.stunT, dt);
+  p.invulnT = dec(p.invulnT, dt);
+  p.boostT = dec(p.boostT, dt);
+  p.starT = dec(p.starT, dt);
+  p.rocketT = dec(p.rocketT, dt);
+  p.boltT = dec(p.boltT, dt);
+  p.shieldT = dec(p.shieldT, dt);
+  p.magnetT = dec(p.magnetT, dt);
+  p.spinT = dec(p.spinT, dt);
+
+  const lanes = laneCount(p.path);
+  const frozen = p.stunT > 0 || p.finished;
+
+  // --- steering ------------------------------------------------------------
+  if (!frozen) {
+    let want = Math.max(0, Math.min(lanes - 1, inp.lane | 0));
+    if (p.rocketT > 0) want = Math.round((lanes - 1) / 2);   // rocket drives itself
+    p.targetLane = want;
+  }
+  const tx = laneX(p.path, p.targetLane, p.scSide);
+  const dx = tx - p.x;
+  const strafe = C.STRAFE_SPEED * (p.grounded ? 1 : 0.82) * dt;
+  p.x += Math.abs(dx) <= strafe ? dx : Math.sign(dx) * strafe;
+  p.lane = p.targetLane;
+
+  // --- jump / slide --------------------------------------------------------
+  if (inp.jump) {
+    inp.jump = false;
+    if (!frozen && p.grounded) {
+      p.vy = C.JUMP_V;
+      p.grounded = false;
+      p.sliding = false;
+      p.slideT = 0;
+      ev && ev.push({ t: 'jump', id: p.id });
+    }
+  }
+  if (inp.slide) {
+    inp.slide = false;
+    if (!frozen) {
+      if (p.grounded) { p.sliding = true; p.slideT = C.SLIDE_TIME; ev && ev.push({ t: 'slide', id: p.id }); }
+      else { p.vy = Math.min(p.vy - 9, -8); }                              // fast-fall / dive
+    }
+  }
+  if (p.sliding) {
+    p.slideT -= dt;
+    if (p.slideT <= 0) { p.sliding = false; p.slideT = 0; }
+  }
+
+  // --- vertical ------------------------------------------------------------
+  p.y += p.vy * dt;
+  p.vy -= C.GRAVITY * dt;
+  if (p.y <= 0) { p.y = 0; p.vy = 0; p.grounded = true; } else { p.grounded = false; }
+
+  // --- speed ---------------------------------------------------------------
+  const want = racing ? targetSpeed(p) : 0;
+  const rate = p.speed > want ? C.BRAKE : C.ACCEL;
+  const ds = want - p.speed;
+  p.speed += Math.abs(ds) <= rate * dt ? ds : Math.sign(ds) * rate * dt;
+  if (p.speed > p.topSpeed) p.topSpeed = p.speed;
+
+  const gain = p.path === 1 ? C.SHORTCUT_FACTOR : 1;
+  p.z += p.speed * gain * dt;
+
+  // --- shortcut branch handling -------------------------------------------
+  if (racing) handleShortcut(p, track, ev);
+
+  // --- world collisions ----------------------------------------------------
+  if (racing && !p.finished) collide(p, track, ev);
+
+  return p;
+}
+
+function handleShortcut(p, track, ev) {
+  if (p.path === 0) {
+    const sc = track.shortcutAt(p.z);
+    if (sc && p.z >= sc.entryZ && p.z <= sc.entryZ + 10 && p.y > 0.9 &&
+        p.targetLane === sc.entryLane && p.stunT <= 0) {
+      p.path = 1;
+      p.scSide = sc.side;
+      p.scId = sc.id;
+      p.targetLane = 1;
+      p.lane = 1;
+      p.x = laneX(1, 1, sc.side);
+      p.shortcuts++;
+      ev && ev.push({ t: 'shortcut', id: p.id, sc: sc.id });
+    }
+  } else {
+    const sc = track.shortcuts[p.scId];
+    if (!sc || p.z >= sc.exitZ) {
+      const lane = sc ? sc.entryLane : 2;
+      p.path = 0;
+      p.scSide = 0;
+      p.scId = -1;
+      p.targetLane = lane;
+      p.lane = lane;
+      p.x = laneX(0, lane, 0);
+      p.y = Math.max(p.y, 0.2);
+      p.boostT = Math.max(p.boostT, 0.5);
+      ev && ev.push({ t: 'merge', id: p.id });
+    }
+  }
+}
+
+function collide(p, track, ev) {
+  const lo = p.y;
+  const hi = p.y + (p.sliding ? 0.78 : 1.9);
+  const list = track.near(p.z - 3, p.z + 3, p.path);
+  for (const e of list) {
+    if (p.taken.has(e.id)) continue;
+    const zHit = p.z + C.PLAYER_LEN / 2 > e.z && p.z - C.PLAYER_LEN / 2 < e.z + e.len;
+
+    if (e.kind === PICK.COIN) {
+      const pull = p.magnetT > 0 ? C.MAGNET_RANGE : (e.w + C.PLAYER_W) / 2;
+      const zPull = p.magnetT > 0 ? C.MAGNET_RANGE : C.PLAYER_LEN;
+      if (Math.abs(p.x - e.x) < pull && Math.abs(p.z - e.z) < zPull && Math.abs(p.y - 0.9) < (p.magnetT > 0 ? 6 : 1.6)) {
+        p.taken.add(e.id);
+        p.coins++;
+        ev && ev.push({ t: 'coin', id: p.id, e: e.id });
+      }
+      continue;
+    }
+    if (!zHit) continue;
+    const xHit = Math.abs(p.x - e.x) < (e.w + C.PLAYER_W) / 2;
+    if (!xHit) continue;
+
+    if (e.kind === PICK.BOX) {
+      p.taken.add(e.id);
+      ev && ev.push({ t: 'box', id: p.id, e: e.id });
+      continue;
+    }
+    // obstacles
+    if (e.type === OB.RAMP) {
+      if (p.grounded) { p.vy = C.RAMP_V; p.grounded = false; p.sliding = false; ev && ev.push({ t: 'ramp', id: p.id }); }
+      continue;
+    }
+    if (e.type === OB.PAD) {
+      if (p.grounded) { p.boostT = Math.max(p.boostT, C.PAD_BOOST_TIME); ev && ev.push({ t: 'pad', id: p.id }); }
+      continue;
+    }
+    const vHit = hi > e.lo && lo < e.hi;
+    if (!vHit) continue;
+    p.taken.add(e.id);
+    if (p.starT > 0 || p.rocketT > 0) {
+      ev && ev.push({ t: 'smash', id: p.id, e: e.id });
+      continue;
+    }
+    wipeout(p, ev, e.type, e.type === OB.BLOCK);
+  }
+}
+
+
+/* ===== shared/items.js ===== */
+// Mario-Kart-style item roulette. What you get depends on where you are in
+// the pack: leaders get defensive junk, stragglers get the good stuff.
+
+const ITEM = {
+  BOOST: 'boost',
+  SHELL: 'shell',
+  BANANA: 'banana',
+  SHIELD: 'shield',
+  BOLT: 'bolt',
+  STAR: 'star',
+  ROCKET: 'rocket',
+  MAGNET: 'magnet',
+  COINS: 'coins'
+};
+
+const ITEM_META = {
+  [ITEM.BOOST]:  { name: 'Turbo',   icon: '»', color: '#ffd23f', desc: 'Instant speed burst' },
+  [ITEM.SHELL]:  { name: 'Homer',   icon: '◎', color: '#3ddc84', desc: 'Homes on the runner ahead' },
+  [ITEM.BANANA]: { name: 'Grease',  icon: '~', color: '#ffe14d', desc: 'Drops behind you' },
+  [ITEM.SHIELD]: { name: 'Bubble',  icon: '◯', color: '#33b0ff', desc: 'Soaks one wipeout' },
+  [ITEM.BOLT]:   { name: 'Zap',     icon: '⚡', color: '#b06bff', desc: 'Slows everyone ahead' },
+  [ITEM.STAR]:   { name: 'Blaze',   icon: '★', color: '#ff8a3d', desc: 'Invincible, smash everything' },
+  [ITEM.ROCKET]: { name: 'Rocket',  icon: '▲', color: '#ff4d5a', desc: 'Auto-pilot rocket ride' },
+  [ITEM.MAGNET]: { name: 'Magnet',  icon: '∪', color: '#00e5c9', desc: 'Vacuums up coins' },
+  [ITEM.COINS]:  { name: 'Coins',   icon: '●', color: '#ffe14d', desc: 'Ten coins, more top speed' }
+};
+
+// weights for [leading, midfield, trailing]
+const TABLE = [
+  [ITEM.BANANA, [34, 20, 8]],
+  [ITEM.COINS,  [26, 16, 8]],
+  [ITEM.SHIELD, [18, 16, 10]],
+  [ITEM.MAGNET, [10, 12, 8]],
+  [ITEM.BOOST,  [10, 20, 22]],
+  [ITEM.SHELL,  [2,  14, 18]],
+  [ITEM.BOLT,   [0,  2,  12]],
+  [ITEM.STAR,   [0,  0,  10]],
+  [ITEM.ROCKET, [0,  0,  4]]
+];
+
+// rank 0 = leader, 1 = last place.
+function rollItem(rng, rank) {
+  const t = Math.max(0, Math.min(1, rank));
+  const seg = t < 0.5 ? t * 2 : (t - 0.5) * 2;
+  const a = t < 0.5 ? 0 : 1;
+  const b = a + 1;
+  let total = 0;
+  const w = TABLE.map(([item, ws]) => {
+    const v = ws[a] + (ws[b] - ws[a]) * seg;
+    total += v;
+    return v;
+  });
+  let r = rng() * total;
+  for (let i = 0; i < TABLE.length; i++) {
+    r -= w[i];
+    if (r <= 0) return TABLE[i][0];
+  }
+  return ITEM.BOOST;
+}
+
+
+/* ===== shared/bots.js ===== */
+// Bot runners. They fill empty slots so a race always feels like a race, and
+// they drive with the exact same inputs a phone sends.
+
+
+
+
+const BOT_NAMES = [
+  'Rusty', 'Blip', 'Nova', 'Zigzag', 'Turbo Ted', 'Mika', 'Cinder', 'Pip',
+  'Gravel', 'Wisp', 'Bolty', 'Dash', 'Juno', 'Kip', 'Ember', 'Static'
+];
+
+function botName(i) {
+  return BOT_NAMES[i % BOT_NAMES.length] + (i >= BOT_NAMES.length ? ' ' + (1 + Math.floor(i / BOT_NAMES.length)) : '');
+}
+
+function initBot(p, skill = 0.75) {
+  p.ai = {
+    skill,
+    react: 0.55 + skill * 0.45,          // fraction of the ideal reaction window
+    laneCooldown: 0,
+    itemDelay: 0.4 + Math.random() * 1.6,
+    daring: skill * 0.9 + Math.random() * 0.2,   // willingness to take shortcuts
+    jitter: (1 - skill) * 0.5
+  };
+  p.speedBias = (skill - 0.72) * 4.0;
+}
+
+function driveBot(p, track, world, dt) {
+  const ai = p.ai;
+  if (!ai || p.finished) return;
+  ai.laneCooldown = Math.max(0, ai.laneCooldown - dt);
+  ai.itemDelay = Math.max(0, ai.itemDelay - dt);
+
+  const lanes = laneCount(p.path);
+  const look = 9 + p.speed * 1.15;
+  const ents = track.near(p.z - 1, p.z + look, p.path);
+
+  // --- pick the safest lane ------------------------------------------------
+  const score = new Array(lanes).fill(0);
+  for (let l = 0; l < lanes; l++) {
+    score[l] = Math.abs(l - p.lane) * 0.9;                 // moving costs something
+    if (l === p.lane) score[l] -= 0.6;
+  }
+  for (const e of ents) {
+    if (e.lane < 0 || e.lane >= lanes) continue;
+    const dz = e.z - p.z;
+    if (dz < -e.len) continue;
+    const near = 1 - Math.min(1, dz / look);
+    if (e.kind === PICK.COIN) { if (!p.taken.has(e.id)) score[e.lane] -= 0.30 * near; continue; }
+    if (e.kind === PICK.BOX) { if (!p.taken.has(e.id) && !p.item) score[e.lane] -= 2.4 * near; continue; }
+    if (e.type === OB.PAD) { score[e.lane] -= 1.6 * near; continue; }
+    if (e.type === OB.RAMP) continue;
+    if (e.type === OB.BLOCK) score[e.lane] += 14 * near;
+    else if (e.type === OB.HIGHBAR) score[e.lane] += 4.5 * near;
+    else score[e.lane] += 3.5 * near;                       // barrier / cone: jumpable
+  }
+  // Neighbouring blocked lanes are risky to squeeze past.
+  let best = p.lane;
+  for (let l = 0; l < lanes; l++) {
+    const s = score[l] + (Math.random() - 0.5) * ai.jitter * 2;
+    if (s < score[best] - 0.15) best = l;
+  }
+  if (ai.laneCooldown <= 0 && best !== p.targetLane) {
+    p.input.lane = best;
+    ai.laneCooldown = 0.12 + (1 - ai.skill) * 0.3;
+  }
+
+  // --- shortcut temptation -------------------------------------------------
+  const sc = track.shortcutAt(p.z + 30);
+  if (p.path === 0 && sc && ai.daring > 0.55 && p.z > sc.entryZ - 34 && p.z < sc.entryZ + 8) {
+    p.input.lane = sc.entryLane;
+  }
+
+  // --- jump / slide --------------------------------------------------------
+  const lane = p.input.lane ?? p.targetLane;
+  let threat = null;
+  for (const e of ents) {
+    if (e.kind !== 'obstacle' || e.lane !== lane) continue;
+    if (e.type === OB.PAD) continue;
+    const dz = e.z - p.z;
+    if (dz < 0) continue;
+    if (!threat || dz < threat.dz) threat = { e, dz };
+  }
+  if (threat) {
+    const ttc = threat.dz / Math.max(6, p.speed * (p.path === 1 ? C.SHORTCUT_FACTOR : 1));
+    const t = threat.e.type;
+    if (t === OB.RAMP && p.path === 0 && sc && p.targetLane === sc.entryLane && ai.daring > 0.55) {
+      // let the ramp do the work
+    } else if ((t === OB.BARRIER || t === OB.CONE) && p.grounded && ttc < 0.33 * ai.react + 0.12 && ttc > 0.05) {
+      p.input.jump = true;
+    } else if (t === OB.HIGHBAR && p.grounded && ttc < 0.35 * ai.react + 0.1) {
+      p.input.slide = true;
+    }
+  }
+
+  // --- items ---------------------------------------------------------------
+  if (p.item && ai.itemDelay <= 0) {
+    const ahead = world.players.filter(o => o !== p && !o.finished && o.z > p.z);
+    const behind = world.players.filter(o => o !== p && !o.finished && o.z < p.z && p.z - o.z < 30);
+    let fire = false;
+    switch (p.item) {
+      case ITEM.SHELL: fire = ahead.some(o => o.z - p.z < 90); break;
+      case ITEM.BANANA: fire = behind.length > 0 || Math.random() < 0.02; break;
+      case ITEM.BOLT: fire = ahead.length > 0; break;
+      case ITEM.SHIELD: fire = true; break;
+      default: fire = true;
+    }
+    if (fire) {
+      p.input.use = true;
+      ai.itemDelay = 0.6 + Math.random() * 1.4;
+    }
+  }
+}
+
+
+/* ===== shared/room.js ===== */
+// A race room: lobby, countdown, authoritative simulation, results.
+// The server owns the truth; phones send intent and render predictions.
+
+
+
+
+
+
+const STATE = { LOBBY: 'lobby', COUNTDOWN: 'countdown', RACING: 'racing', RESULTS: 'results' };
+
+const DISTANCES = { sprint: 1100, classic: 1800, marathon: 2800 };
+
+let projSeq = 1;
+
+class Room {
+  constructor(code, opts = {}) {
+    this.code = code;
+    this.players = [];
+    this.hostId = null;
+    this.state = STATE.LOBBY;
+    this.settings = {
+      distance: 'classic',
+      bots: 0,
+      botSkill: 0.72,
+      items: true
+    };
+    this.seed = (Math.random() * 0xffffffff) >>> 0;
+    this.track = null;
+    this.raceTime = 0;
+    this.countdown = 0;
+    this.tick = 0;
+    this.events = [];
+    this.projectiles = [];
+    this.finishOrder = [];
+    this.graceLeft = 0;
+    this.resultsLeft = 0;
+    this.rng = mulberry32(this.seed ^ 0x9e3779b9);
+    this.onBroadcast = opts.onBroadcast || (() => {});
+    this.lastActivity = Date.now();
+  }
+
+  get distance() { return DISTANCES[this.settings.distance] ?? DISTANCES.classic; }
+  get humans() { return this.players.filter(p => !p.isBot); }
+  // Anyone who joined after the lights went out watches this one out.
+  get racers() { return this.players.filter(p => !p.spectator); }
+  get isFull() { return this.players.length >= C.MAX_PLAYERS; }
+
+  // ---- membership ---------------------------------------------------------
+  addPlayer(id, name, conn) {
+    if (this.isFull) return null;
+    const used = new Set(this.players.map(p => C.COLORS.indexOf(p.color)));
+    let ci = 0;
+    while (used.has(ci) && ci < C.COLORS.length) ci++;
+    const p = createPlayer(id, sanitizeName(name), ci, false);
+    p.spectator = this.state !== STATE.LOBBY;
+    p.conn = conn;
+    p.joinedAt = Date.now();
+    this.players.push(p);
+    if (!this.hostId || !this.players.some(x => x.id === this.hostId && !x.isBot)) this.hostId = id;
+    this.lastActivity = Date.now();
+    return p;
+  }
+
+  removePlayer(id) {
+    const p = this.players.find(x => x.id === id);
+    if (!p) return;
+    if (this.state === STATE.RACING || this.state === STATE.COUNTDOWN) {
+      // Hand the runner to the AI so the race keeps its shape.
+      p.connected = false;
+      p.conn = null;
+      if (!p.isBot) { p.isBot = true; p.wasHuman = true; p.name = p.name + ' (afk)'; initBot(p, 0.6); }
+    } else {
+      this.players = this.players.filter(x => x.id !== id);
+    }
+    if (this.hostId === id) {
+      const next = this.players.find(x => !x.isBot && x.connected);
+      this.hostId = next ? next.id : null;
+    }
+    this.lastActivity = Date.now();
+  }
+
+  setBots(n) {
+    const target = Math.max(0, Math.min(C.MAX_PLAYERS - this.humans.length, n | 0));
+    this.settings.bots = target;
+    const bots = this.players.filter(p => p.isBot && !p.wasHuman);
+    while (bots.length > target) { const b = bots.pop(); this.players = this.players.filter(p => p !== b); }
+    let i = bots.length;
+    while (bots.length < target && this.players.length < C.MAX_PLAYERS) {
+      const used = new Set(this.players.map(p => C.COLORS.indexOf(p.color)));
+      let ci = 0;
+      while (used.has(ci) && ci < C.COLORS.length) ci++;
+      const b = createPlayer('bot' + (i + 1) + '-' + Math.floor(Math.random() * 1e6).toString(36), botName(i), ci, true);
+      b.ready = true;
+      const spread = (Math.random() - 0.5) * 0.34;
+      initBot(b, Math.max(0.25, Math.min(0.98, this.settings.botSkill + spread)));
+      this.players.push(b);
+      bots.push(b);
+      i++;
+    }
+  }
+
+  // ---- race lifecycle -----------------------------------------------------
+  canStart() {
+    const humans = this.humans.filter(p => p.connected);
+    if (humans.length === 0) return false;
+    return humans.every(p => p.ready) || humans.length === 1;
+  }
+
+  startRace() {
+    this.seed = (Math.random() * 0xffffffff) >>> 0;
+    this.rng = mulberry32(this.seed ^ 0x9e3779b9);
+    this.track = new Track(this.seed, this.distance + 200);
+    this.state = STATE.COUNTDOWN;
+    this.countdown = C.COUNTDOWN;
+    this.raceTime = 0;
+    this.tick = 0;
+    this.projectiles = [];
+    this.finishOrder = [];
+    this.graceLeft = 0;
+    this.events = [];
+
+    // Starting grid: five across, rows staggered backwards.
+    for (const p of this.players) p.spectator = false;
+    const order = shuffled(this.players.slice(), this.rng);
+    order.forEach((p, i) => {
+      const lane = i % C.MAIN_LANES;
+      const row = Math.floor(i / C.MAIN_LANES);
+      p.startLane = lane;
+      resetForRace(p);
+      p.startZ = -row * 4.5;
+      p.z = p.startZ;
+      p.x = laneX(0, lane, 0);
+      p.place = i + 1;
+      if (p.isBot) initBot(p, p.ai ? p.ai.skill : this.settings.botSkill);
+    });
+    return {
+      seed: this.seed,
+      distance: this.distance,
+      players: this.players.map(p => this.pubPlayer(p))
+    };
+  }
+
+  toLobby() {
+    this.state = STATE.LOBBY;
+    this.projectiles = [];
+    this.events = [];
+    for (const p of this.players) { if (!p.isBot) p.ready = false; p.spectator = false; }
+    // Runners abandoned mid-race by their humans go away between races.
+    this.players = this.players.filter(p => !(p.wasHuman && !p.connected));
+    this.lastActivity = Date.now();
+  }
+
+  progress(p) { return p.z - (p.startZ || 0); }
+
+  // ---- the simulation -----------------------------------------------------
+  step(dt) {
+    if (this.state === STATE.COUNTDOWN) {
+      this.countdown -= dt;
+      // Runners roll forward on the grid but obstacles do not bite yet.
+      for (const p of this.racers) stepPlayer(p, dt, this.track, this.events, { racing: false });
+      if (this.countdown <= 0) { this.state = STATE.RACING; this.countdown = 0; }
+      this.tick++;
+      return;
+    }
+    if (this.state === STATE.RESULTS) {
+      this.resultsLeft -= dt;
+      return;
+    }
+    if (this.state !== STATE.RACING) return;
+
+    this.raceTime += dt;
+    this.tick++;
+
+    const racers = this.racers;
+    const world = { players: racers, room: this };
+    for (const p of racers) {
+      if (p.finished) { p.input.use = false; continue; }
+      if (p.isBot) driveBot(p, this.track, world, dt);
+      p.drafting = this.isDrafting(p);
+      if (p.input.use) { p.input.use = false; this.useItem(p); }
+      stepPlayer(p, dt, this.track, this.events);
+    }
+
+    this.consumeEvents();
+    this.stepProjectiles(dt);
+    this.playerContacts();
+    this.updatePlaces();
+    this.checkFinish(dt);
+  }
+
+  isDrafting(p) {
+    for (const o of this.racers) {
+      if (o === p || o.finished || o.path !== p.path) continue;
+      const dz = o.z - p.z;
+      if (dz > 2.5 && dz < C.DRAFT_RANGE && Math.abs(o.x - p.x) < 2.0) return true;
+    }
+    return false;
+  }
+
+  // Turn physics events that need authority (item boxes) into game state.
+  consumeEvents() {
+    for (const ev of this.events) {
+      if (ev.t !== 'box') continue;
+      const p = this.byId(ev.id);
+      if (!p || p.item) continue;
+      const rank = this.players.length > 1 ? (p.place - 1) / (this.players.length - 1) : 0.5;
+      p.item = this.settings.items ? rollItem(this.rng, rank) : ITEM.BOOST;
+      ev.item = p.item;
+    }
+  }
+
+  useItem(p) {
+    if (!p.item || p.finished) return;
+    const item = p.item;
+    p.item = null;
+    switch (item) {
+      case ITEM.BOOST:
+        p.boostT = Math.max(p.boostT, C.BOOST_TIME);
+        break;
+      case ITEM.SHIELD:
+        p.shieldT = C.SHIELD_TIME;
+        break;
+      case ITEM.MAGNET:
+        p.magnetT = C.MAGNET_TIME;
+        break;
+      case ITEM.COINS:
+        p.coins += 10;
+        p.boostT = Math.max(p.boostT, 0.5);
+        break;
+      case ITEM.STAR:
+        p.starT = C.STAR_TIME;
+        p.invulnT = Math.max(p.invulnT, C.STAR_TIME);
+        break;
+      case ITEM.ROCKET:
+        p.rocketT = C.ROCKET_TIME;
+        p.invulnT = Math.max(p.invulnT, C.ROCKET_TIME);
+        p.stunT = 0;
+        break;
+      case ITEM.BOLT: {
+        let zapped = 0;
+        for (const o of this.racers) {
+          if (o === p || o.finished) continue;
+          if (this.progress(o) > this.progress(p)) {
+            o.boltT = C.BOLT_TIME;
+            o.boostT = 0;
+            zapped++;
+          }
+        }
+        this.events.push({ t: 'bolt', id: p.id, n: zapped });
+        break;
+      }
+      case ITEM.BANANA:
+        this.projectiles.push({
+          id: projSeq++, kind: 'banana', owner: p.id,
+          z: p.z - 2.5, x: p.x, y: 0.25, path: p.path, life: C.BANANA_LIFE, arm: 0.4
+        });
+        break;
+      case ITEM.SHELL:
+        this.projectiles.push({
+          id: projSeq++, kind: 'shell', owner: p.id,
+          z: p.z + 2.5, x: p.x, y: 0.6, path: p.path, life: C.SHELL_LIFE, arm: 0.15, target: null
+        });
+        break;
+      default:
+        break;
+    }
+    this.events.push({ t: 'use', id: p.id, item });
+  }
+
+  stepProjectiles(dt) {
+    for (const pr of this.projectiles) {
+      pr.life -= dt;
+      pr.arm = Math.max(0, pr.arm - dt);
+      if (pr.kind === 'shell') {
+        pr.z += C.SHELL_SPEED * dt;
+        // Home on the nearest runner still in front of it.
+        let best = null;
+        for (const o of this.racers) {
+          if (o.id === pr.owner && pr.arm > 0) continue;
+          if (o.finished) continue;
+          const dz = o.z - pr.z;
+          if (dz < 0 || dz > 70) continue;
+          if (!best || dz < best.z - pr.z) best = o;
+        }
+        pr.target = best ? best.id : null;
+        if (best) {
+          const dx = best.x - pr.x;
+          const step = C.SHELL_HOME * dt;
+          pr.x += Math.abs(dx) <= step ? dx : Math.sign(dx) * step;
+          pr.path = best.path;
+          pr.y = 0.6 + (best.path === 1 ? 0 : 0);
+        }
+      }
+      // Contact check.
+      for (const o of this.racers) {
+        if (o.finished) continue;
+        if (o.id === pr.owner && pr.arm > 0) continue;
+        if (Math.abs(o.z - pr.z) > 1.6) continue;
+        if (Math.abs(o.x - pr.x) > 1.5) continue;
+        if (o.y > 1.6 && pr.kind === 'banana') continue;    // jump the grease
+        if (o.starT > 0 || o.rocketT > 0) { pr.life = 0; this.events.push({ t: 'smashproj', id: o.id }); continue; }
+        const hit = wipeout(o, this.events, pr.kind, true);
+        this.events.push({ t: 'projhit', id: o.id, by: pr.owner, kind: pr.kind, blocked: !hit });
+        pr.life = 0;
+      }
+    }
+    this.projectiles = this.projectiles.filter(pr => pr.life > 0);
+  }
+
+  playerContacts() {
+    const rs = this.racers;
+    for (let i = 0; i < rs.length; i++) {
+      for (let j = i + 1; j < rs.length; j++) {
+        const a = rs[i], b = rs[j];
+        if (a.finished || b.finished || a.path !== b.path) continue;
+        if (Math.abs(a.z - b.z) > 1.5) continue;
+        if (Math.abs(a.x - b.x) > 1.35) continue;
+        if (Math.abs(a.y - b.y) > 1.4) continue;
+        const aStrong = a.starT > 0 || a.rocketT > 0;
+        const bStrong = b.starT > 0 || b.rocketT > 0;
+        if (aStrong && !bStrong) { wipeout(b, this.events, 'body', true); continue; }
+        if (bStrong && !aStrong) { wipeout(a, this.events, 'body', true); continue; }
+        if (aStrong && bStrong) continue;
+        // Ordinary shoulder barge: shove apart, the faster one wins the line.
+        const dir = Math.sign(a.x - b.x) || (a.id < b.id ? 1 : -1);
+        a.x += dir * 0.28;
+        b.x -= dir * 0.28;
+        const slow = a.speed > b.speed ? b : a;
+        slow.speed = Math.max(C.MIN_SPEED, slow.speed - 3.2);
+        this.events.push({ t: 'bump', id: slow.id });
+      }
+    }
+  }
+
+  updatePlaces() {
+    const order = this.racers.sort((a, b) => {
+      if (a.finished && b.finished) return a.finishTime - b.finishTime;
+      if (a.finished) return -1;
+      if (b.finished) return 1;
+      return this.progress(b) - this.progress(a);
+    });
+    order.forEach((p, i) => { p.place = i + 1; });
+  }
+
+  checkFinish(dt) {
+    const dist = this.distance;
+    const racers = this.racers;
+    for (const p of racers) {
+      if (p.finished) continue;
+      if (this.progress(p) >= dist) {
+        p.finished = true;
+        p.finishTime = this.raceTime;
+        this.finishOrder.push(p.id);
+        this.events.push({ t: 'finish', id: p.id, place: this.finishOrder.length, time: p.finishTime });
+        if (this.finishOrder.length === 1) this.graceLeft = C.FINISH_GRACE;
+      }
+    }
+    if (this.graceLeft > 0) {
+      this.graceLeft -= dt;
+      if (this.graceLeft <= 0) {
+        for (const p of racers) {
+          if (p.finished) continue;
+          p.finished = true;
+          p.dnf = true;
+          p.finishTime = this.raceTime + (dist - this.progress(p)) / 12;
+          this.finishOrder.push(p.id);
+        }
+      }
+    }
+    if (racers.length && racers.every(p => p.finished)) this.endRace();
+  }
+
+  endRace() {
+    this.state = STATE.RESULTS;
+    this.resultsLeft = C.RESULTS_TIME;
+    this.updatePlaces();
+  }
+
+  results() {
+    return this.racers.sort((a, b) => a.place - b.place).map(p => ({
+      id: p.id, name: p.name, color: p.color, bot: p.isBot, place: p.place,
+      time: +(p.finishTime || 0).toFixed(2), dnf: !!p.dnf,
+      coins: p.coins, hits: p.hits, shortcuts: p.shortcuts, top: +p.topSpeed.toFixed(1)
+    }));
+  }
+
+  byId(id) { return this.players.find(p => p.id === id); }
+
+  pubPlayer(p) {
+    return {
+      id: p.id, name: p.name, color: p.color, bot: p.isBot, ready: p.ready,
+      host: p.id === this.hostId, startLane: p.startLane ?? 2, startZ: p.startZ ?? 0,
+      connected: p.connected, spectator: !!p.spectator
+    };
+  }
+
+  lobbyState() {
+    return {
+      code: this.code,
+      state: this.state,
+      host: this.hostId,
+      settings: this.settings,
+      max: C.MAX_PLAYERS,
+      players: this.players.map(p => this.pubPlayer(p))
+    };
+  }
+
+  // Extra authoritative detail sent only to the player it belongs to, so the
+  // phone can predict its own runner accurately.
+  meBlock(p) {
+    return {
+      z: r2(p.z), x: r2(p.x), y: r2(p.y), vy: r2(p.vy), sp: r2(p.speed),
+      tl: p.targetLane, pa: p.path, sd: p.scSide, sc: p.scId,
+      stun: r2(p.stunT), inv: r2(p.invulnT), bst: r2(p.boostT), star: r2(p.starT),
+      rkt: r2(p.rocketT), blt: r2(p.boltT), shd: r2(p.shieldT), mag: r2(p.magnetT),
+      spn: r2(p.spinT), sld: p.sliding ? 1 : 0, sldT: r2(p.slideT),
+      drf: p.drafting ? 1 : 0, c: p.coins, it: p.item || 0, pl: p.place, fin: p.finished ? 1 : 0
+    };
+  }
+
+  snapshot() {
+    const ps = this.racers.map(p => ({
+      i: p.id,
+      z: r2(p.z), x: r2(p.x), y: r2(p.y), s: r1(p.speed),
+      l: p.lane, pa: p.path, sd: p.scSide,
+      f: flags(p), it: p.item || 0, c: p.coins, pl: p.place
+    }));
+    const pr = this.projectiles.map(o => ({ i: o.id, k: o.kind === 'shell' ? 1 : 2, z: r2(o.z), x: r2(o.x), y: r2(o.y) }));
+    const snap = {
+      t: 'snap', tk: this.tick, tm: r2(this.raceTime), st: this.state,
+      cd: this.state === STATE.COUNTDOWN ? r2(this.countdown) : 0,
+      gr: r1(this.graceLeft), ps, pr, ev: this.events
+    };
+    this.events = [];
+    return snap;
+  }
+}
+
+function flags(p) {
+  let f = 0;
+  if (p.grounded) f |= 1;
+  if (p.sliding) f |= 2;
+  if (p.stunT > 0) f |= 4;
+  if (p.invulnT > 0) f |= 8;
+  if (p.shieldT > 0) f |= 16;
+  if (p.starT > 0) f |= 32;
+  if (p.boostT > 0) f |= 64;
+  if (p.rocketT > 0) f |= 128;
+  if (p.boltT > 0) f |= 256;
+  if (p.magnetT > 0) f |= 512;
+  if (p.finished) f |= 1024;
+  if (p.spinT > 0) f |= 2048;
+  if (p.drafting) f |= 4096;
+  return f;
+}
+
+const r1 = (v) => Math.round(v * 10) / 10;
+const r2 = (v) => Math.round(v * 100) / 100;
+
+function sanitizeName(name) {
+  const s = String(name || '').replace(/[^\w \-!?.']/g, '').trim().slice(0, 14);
+  return s || 'Runner';
+}
+
+function shuffled(arr, rng) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+
+
+/* ===== client/js/render.js ===== */
+// Pseudo-3D track renderer on a 2D canvas. Everything is projected from the
+// runner's chase camera; objects are painted far-to-near.
+
+
+
+const DRAW_DIST = 190;
+const HORIZON = 0.42;
+const FADE_NEAR = 5.2;     // runners closer than this to the camera fade out
+const CLIP_NEAR = 2.6;
+const PICKUP_CLIP = 3.0;   // coins level with the camera just smear the screen
+const pickupFade = (dz) => Math.min(1, (dz - PICKUP_CLIP) / 1.8);
+
+class Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d', { alpha: false });
+    this.cam = { x: 0, y: 5.0, z: -12, yBase: 0 };
+    this.shake = 0;
+    this.particles = [];
+    this.time = 0;
+    this.dpr = 1;
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 250));
+  }
+
+  resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = dpr;
+    this.W = Math.floor(window.innerWidth);
+    this.H = Math.floor(window.innerHeight);
+    this.canvas.width = Math.floor(this.W * dpr);
+    this.canvas.height = Math.floor(this.H * dpr);
+    this.canvas.style.width = this.W + 'px';
+    this.canvas.style.height = this.H + 'px';
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.cx = this.W / 2;
+    this.cy = this.H * HORIZON;
+    // Scale to the screen: portrait keys off width, landscape off height so a
+    // short viewport does not fill up with two giant runners.
+    this.pscale = Math.min(Math.max(this.W, this.H * 0.62), this.H * 1.15) * 0.5;
+    this.depth = 1.7;
+  }
+
+  project(x, y, z) {
+    const dz = z - this.cam.z;
+    if (dz <= 0.5) return null;
+    const s = this.depth / dz;
+    return {
+      x: this.cx + s * (x - this.cam.x) * this.pscale,
+      y: this.cy - s * (y - this.cam.y) * this.pscale,
+      s: s * this.pscale,
+      dz
+    };
+  }
+
+  addShake(v) { this.shake = Math.min(1.4, this.shake + v); }
+
+  burst(x, y, z, color, n = 12, spread = 6, up = 5) {
+    for (let i = 0; i < n; i++) {
+      this.particles.push({
+        x, y, z, color,
+        vx: (Math.random() - 0.5) * spread,
+        vy: Math.random() * up,
+        vz: (Math.random() - 0.5) * spread,
+        life: 0.5 + Math.random() * 0.5,
+        max: 1, size: 0.12 + Math.random() * 0.22
+      });
+    }
+  }
+
+  trail(x, y, z, color) {
+    this.particles.push({
+      x: x + (Math.random() - 0.5), y: y + Math.random() * 0.5, z,
+      color, vx: (Math.random() - 0.5) * 1.2, vy: Math.random() * 1.4, vz: -6 - Math.random() * 5,
+      life: 0.35, max: 0.35, size: 0.2 + Math.random() * 0.3
+    });
+  }
+
+  // ------------------------------------------------------------------ draw --
+  draw(world, dt) {
+    const ctx = this.ctx;
+    this.time += dt;
+    const me = world.me;
+
+    // --- camera -------------------------------------------------------------
+    const yBase = me.path === 1 ? C.SHORTCUT_HEIGHT : 0;
+    this.cam.yBase += (yBase - this.cam.yBase) * Math.min(1, dt * 5);
+    const back = 6.0 + Math.min(2.8, me.speed * 0.095);
+    const camXTarget = me.rx * 0.82;
+    this.cam.x += (camXTarget - this.cam.x) * Math.min(1, dt * 7);
+    this.cam.y += ((3.15 + this.cam.yBase + me.y * 0.45) - this.cam.y) * Math.min(1, dt * 6);
+    this.cam.z = me.z - back;
+
+    this.shake = Math.max(0, this.shake - dt * 2.6);
+    let shx = 0, shy = 0;
+    if (this.shake > 0) {
+      shx = (Math.random() - 0.5) * this.shake * 22;
+      shy = (Math.random() - 0.5) * this.shake * 18;
+    }
+    ctx.save();
+    ctx.translate(shx, shy);
+
+    this.labels = [];
+    this.drawSky(world);
+    this.drawGround(world);
+    this.drawObjects(world, dt);
+    this.drawSpeedFx(world);
+
+    ctx.restore();
+  }
+
+  drawSky(world) {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    const g = ctx.createLinearGradient(0, 0, 0, this.cy + 40);
+    g.addColorStop(0, '#060a16');
+    g.addColorStop(0.45, '#141d3d');
+    g.addColorStop(0.8, '#3a2a5c');
+    g.addColorStop(1, '#ff6b5a');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, this.cy + 60);
+
+    // sun
+    const sunX = this.cx - this.cam.x * 3;
+    ctx.globalAlpha = 0.85;
+    const sg = ctx.createRadialGradient(sunX, this.cy - 6, 4, sunX, this.cy - 6, 120);
+    sg.addColorStop(0, 'rgba(255,220,120,0.95)');
+    sg.addColorStop(0.5, 'rgba(255,110,90,0.35)');
+    sg.addColorStop(1, 'rgba(255,110,90,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(sunX - 130, this.cy - 130, 260, 200);
+    ctx.globalAlpha = 1;
+
+    // parallax skyline
+    for (let layer = 0; layer < 2; layer++) {
+      const depth = layer === 0 ? 0.055 : 0.13;
+      const h = layer === 0 ? 46 : 82;
+      ctx.fillStyle = layer === 0 ? 'rgba(12,16,34,0.85)' : 'rgba(8,11,24,0.95)';
+      const off = -(this.cam.x * depth * 30) - (this.cam.z * depth * 1.6);
+      const step = layer === 0 ? 46 : 66;
+      const start = Math.floor((off - W) / step);
+      for (let i = start; i < start + Math.ceil((W * 2) / step) + 2; i++) {
+        const hh = h * (0.45 + 0.55 * fract(Math.sin(i * 12.9898 + layer * 4.1) * 43758.5453));
+        const x = i * step - off;
+        ctx.fillRect(x, this.cy - hh, step - 6, hh + 8);
+      }
+    }
+
+    // ground haze below the horizon
+    const gg = ctx.createLinearGradient(0, this.cy, 0, H);
+    gg.addColorStop(0, '#1a1230');
+    gg.addColorStop(1, '#080a14');
+    ctx.fillStyle = gg;
+    ctx.fillRect(0, this.cy, W, H - this.cy);
+  }
+
+  // Road surface for the main track and any shortcut rails in view.
+  drawGround(world) {
+    const ctx = this.ctx;
+    const track = world.track;
+    const z0 = this.cam.z + 1;
+    const z1 = this.cam.z + DRAW_DIST;
+
+    // Main road, drawn far to near in variable-size slabs.
+    const half = (C.MAIN_LANES * C.LANE_W) / 2;
+    const slabs = [];
+    let z = z1;
+    while (z > z0) {
+      const d = z - this.cam.z;
+      const step = d > 110 ? 12 : d > 60 ? 7 : d > 25 ? 4 : 2.5;
+      slabs.push([Math.max(z0, z - step), z]);
+      z -= step;
+    }
+    for (const [a, b] of slabs) {
+      this.roadSlab(a, b, half, 0, 0, Math.floor(a / 7) % 2 === 0 ? '#22283e' : '#1d2337');
+    }
+
+    // Lane divider dashes.
+    ctx.strokeStyle = 'rgba(220,235,255,0.35)';
+    for (let l = 1; l < C.MAIN_LANES; l++) {
+      const x = (l - C.MAIN_LANES / 2) * C.LANE_W;
+      let zz = Math.floor(z0 / 6) * 6;
+      while (zz < z1) {
+        this.groundLine(x, zz + 1, zz + 3.4, 0, 0.16, 'rgba(220,235,255,0.32)');
+        zz += 6;
+      }
+    }
+    // Edge rails (started a few metres out so they do not smear across the screen).
+    const railZ = this.cam.z + 7;
+    this.groundLine(-half - 0.3, railZ, z1, 0, 0.4, 'rgba(46,230,255,0.55)');
+    this.groundLine(half + 0.3, railZ, z1, 0, 0.4, 'rgba(255,61,104,0.55)');
+    this.sideWalls(z0, z1, half);
+
+    // Shortcut rails.
+    for (const sc of track.shortcuts) {
+      if (sc.exitZ < z0 - 20 || sc.entryZ > z1) continue;
+      this.drawShortcut(sc, Math.max(z0, sc.entryZ - 6), Math.min(z1, sc.exitZ + 8));
+    }
+
+    // Finish line.
+    const fz = world.finishZ;
+    if (fz > z0 - 10 && fz < z1) this.finishLine(fz, half);
+  }
+
+  roadSlab(zNear, zFar, half, offX, y, color) {
+    const ctx = this.ctx;
+    const a = this.project(offX - half, y, zNear);
+    const b = this.project(offX + half, y, zNear);
+    const c = this.project(offX + half, y, zFar);
+    const d = this.project(offX - half, y, zFar);
+    if (!a || !b || !c || !d) return;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  groundLine(x, zA, zB, y, w, color) {
+    const ctx = this.ctx;
+    const a = this.project(x - w / 2, y + 0.02, zA);
+    const b = this.project(x + w / 2, y + 0.02, zA);
+    const c = this.project(x + w / 2, y + 0.02, zB);
+    const d = this.project(x - w / 2, y + 0.02, zB);
+    if (!a || !b || !c || !d) return;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  sideWalls(z0, z1, half) {
+    const ctx = this.ctx;
+    for (const side of [-1, 1]) {
+      const x = side * (half + 0.4);
+      let zz = Math.floor(z0 / 14) * 14;
+      while (zz < z1) {
+        const p0 = this.project(x, 0, zz);
+        const p1 = this.project(x, 2.6, zz);
+        if (p0 && p1 && p0.dz > 2) {
+          ctx.strokeStyle = side < 0 ? 'rgba(46,230,255,0.30)' : 'rgba(255,61,104,0.30)';
+          ctx.lineWidth = Math.min(6, Math.max(1, p0.s * 0.05));
+          ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+        }
+        zz += 14;
+      }
+    }
+  }
+
+  drawShortcut(sc, z0, z1) {
+    const ctx = this.ctx;
+    const half = (C.SHORTCUT_LANES * C.LANE_W) / 2;
+    const ox = sc.side * C.SHORTCUT_OFFSET;
+    const y = C.SHORTCUT_HEIGHT;
+
+    let z = Math.min(z1, this.cam.z + DRAW_DIST);
+    while (z > z0) {
+      const step = (z - this.cam.z) > 60 ? 10 : 4;
+      const a = Math.max(z0, z - step);
+      this.roadSlab(a, z, half, ox, y, Math.floor(a / 7) % 2 === 0 ? '#3c2c60' : '#332552');
+      z -= step;
+    }
+    for (let l = 1; l < C.SHORTCUT_LANES; l++) {
+      const lx = ox + (l - C.SHORTCUT_LANES / 2) * C.LANE_W;
+      for (let zz = Math.floor(z0 / 6) * 6; zz < z1; zz += 6) {
+        this.groundLine(lx, zz + 1, zz + 3.4, y, 0.14, 'rgba(255,225,150,0.30)');
+      }
+    }
+    // glowing edges
+    this.railEdge(ox - half, ox - half, y, z0, z1, 'rgba(255,210,63,0.55)');
+    this.railEdge(ox + half, ox + half, y, z0, z1, 'rgba(255,210,63,0.55)');
+
+    // support pillars
+    ctx.fillStyle = 'rgba(38,30,62,0.95)';
+    for (let pz = Math.ceil(z0 / 16) * 16; pz < z1; pz += 16) {
+      const top = this.project(ox, y, pz);
+      const bot = this.project(ox, 0, pz);
+      if (!top || !bot || top.dz < 4) continue;
+      const w = Math.min(26, Math.max(1.5, top.s * 0.5));
+      ctx.fillRect(top.x - w / 2, top.y, w, bot.y - top.y);
+    }
+
+    // entry arch so players can see where the shortcut starts
+    const arch = this.project(laneX(0, sc.entryLane, 0), 0, sc.entryZ - 4);
+    if (arch && sc.entryZ - 4 > this.cam.z + 2) {
+      const s = arch.s;
+      ctx.strokeStyle = 'rgba(255,210,63,0.9)';
+      ctx.lineWidth = Math.min(9, Math.max(1.5, s * 0.09));
+      ctx.beginPath();
+      ctx.moveTo(arch.x - s * 1.4, arch.y);
+      ctx.lineTo(arch.x - s * 1.4, arch.y - s * 3.4);
+      ctx.lineTo(arch.x + s * 1.4, arch.y - s * 3.4);
+      ctx.lineTo(arch.x + s * 1.4, arch.y);
+      ctx.stroke();
+      this.labels.push({
+        text: 'SHORTCUT', color: 'rgba(255,210,63,0.95)',
+        fs: Math.min(22, Math.max(9, s * 0.9)),
+        x: arch.x, y: arch.y - s * 3.75
+      });
+    }
+  }
+
+  railEdge(x0, x1, y, z0, z1, color) {
+    const ctx = this.ctx;
+    const a = this.project(x0, y, z0);
+    const b = this.project(x1, y, z1);
+    const c = this.project(x1, y + 0.9, z1);
+    const d = this.project(x0, y + 0.9, z0);
+    if (!a || !b || !c || !d) return;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y);
+    ctx.closePath(); ctx.fill();
+  }
+
+  finishLine(fz, half) {
+    const ctx = this.ctx;
+    for (let i = 0; i < 10; i++) {
+      const x = -half + (i * (half * 2)) / 10;
+      this.groundLine(x + half / 10, fz, fz + 3, 0, half / 5, i % 2 ? '#ffffff' : '#101422');
+    }
+    const p = this.project(0, 7, fz);
+    const l = this.project(-half - 1, 0, fz);
+    const r = this.project(half + 1, 0, fz);
+    if (p && l && r) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = Math.max(2, p.s * 0.14);
+      ctx.beginPath();
+      ctx.moveTo(l.x, l.y); ctx.lineTo(l.x, p.y); ctx.lineTo(r.x, p.y); ctx.lineTo(r.x, r.y);
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = `900 ${Math.max(9, p.s * 1.1)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('FINISH', p.x, p.y - p.s * 0.5);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  // Everything that sits on the road, sorted back to front.
+  drawObjects(world, dt) {
+    const z0 = this.cam.z - 6;
+    const z1 = this.cam.z + DRAW_DIST;
+    const items = [];
+
+    for (const path of [0, 1]) {
+      for (const e of world.track.near(z0, z1, path)) {
+        if (world.taken && world.taken.has(e.id) && e.kind !== 'obstacle') continue;
+        items.push({ z: e.z, kind: 'e', e });
+      }
+    }
+    for (const p of world.players) items.push({ z: p.z, kind: 'p', p });
+    for (const pr of world.projectiles) items.push({ z: pr.z, kind: 'r', pr });
+
+    // particles
+    for (const pt of this.particles) {
+      pt.life -= dt;
+      pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.z += pt.vz * dt;
+      pt.vy -= 14 * dt;
+      if (pt.y < 0) { pt.y = 0; pt.vy *= -0.35; pt.vx *= 0.7; pt.vz *= 0.7; }
+    }
+    this.particles = this.particles.filter(p => p.life > 0 && p.z > z0 - 10);
+    for (const pt of this.particles) items.push({ z: pt.z, kind: 't', pt });
+
+    items.sort((a, b) => b.z - a.z);
+    this.tags = [];
+    for (const it of items) {
+      if (it.kind === 'e') this.drawEntity(it.e);
+      else if (it.kind === 'p') this.drawRunner(it.p, world);
+      else if (it.kind === 'r') this.drawProjectile(it.pr);
+      else this.drawParticle(it.pt);
+    }
+    this.drawTags();
+    this.drawLabels();
+  }
+
+  drawLabels() {
+    const ctx = this.ctx;
+    for (const l of this.labels || []) {
+      ctx.font = `900 ${l.fs}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      const w = ctx.measureText(l.text).width;
+      const x = Math.max(w / 2 + 6, Math.min(this.W - w / 2 - 6, l.x));
+      const y = Math.max(l.fs + 4, l.y);
+      ctx.fillStyle = 'rgba(6,9,18,0.55)';
+      roundRect(ctx, x - w / 2 - 6, y - l.fs, w + 12, l.fs + 6, 5);
+      ctx.fill();
+      ctx.fillStyle = l.color;
+      ctx.fillText(l.text, x, y);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  // Name tags are drawn last, nearest first, and any tag that would land on
+  // top of one already drawn is dropped - a bunched pack stays readable.
+  drawTags() {
+    const ctx = this.ctx;
+    const placed = [];
+    this.tags.sort((a, b) => a.dz - b.dz);
+    let drawn = 0;
+    for (const t of this.tags) {
+      if (drawn >= 6) break;
+      ctx.font = `800 ${t.fs}px system-ui, sans-serif`;
+      const w = ctx.measureText(t.label).width + 10;
+      const h = t.fs + 5;
+      const x = Math.max(w / 2 + 8, Math.min(this.W - w / 2 - 8, t.x));
+      const y = Math.max(h + 2, t.y);
+      const box = { l: x - w / 2, r: x + w / 2, t: y - h, b: y + 4 };
+      if (placed.some(p => box.l < p.r && box.r > p.l && box.t < p.b && box.b > p.t)) continue;
+      placed.push(box);
+      drawn++;
+      ctx.globalAlpha = t.alpha;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(6,9,18,0.72)';
+      roundRect(ctx, box.l, y - h, w, h, 6);
+      ctx.fill();
+      ctx.fillStyle = t.color;
+      ctx.fillText(t.label, x, y);
+      ctx.globalAlpha = 1;
+      ctx.textAlign = 'left';
+    }
+  }
+
+  yOff(path) { return path === 1 ? C.SHORTCUT_HEIGHT : 0; }
+
+  drawEntity(e) {
+    const ctx = this.ctx;
+    // Anything already behind the runner just smears across the camera.
+    if (e.z + (e.len || 1) < this.cam.z + 3.4) return;
+    const yb = this.yOff(e.path);
+    if (e.kind === PICK.COIN) {
+      const bob = Math.sin(this.time * 4 + e.z) * 0.18;
+      const p = this.project(e.x, yb + 1.0 + bob, e.z);
+      if (!p || p.dz < PICKUP_CLIP) return;
+      const r = Math.max(1, p.s * 0.42);
+      ctx.save();
+      ctx.globalAlpha = pickupFade(p.dz);
+      ctx.translate(p.x, p.y);
+      ctx.scale(Math.abs(Math.cos(this.time * 3 + e.z * 0.4)) * 0.75 + 0.25, 1);
+      ctx.fillStyle = '#ffd23f';
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff3b0';
+      ctx.beginPath(); ctx.arc(-r * 0.25, -r * 0.25, r * 0.42, 0, 7); ctx.fill();
+      ctx.restore();
+      return;
+    }
+    if (e.kind === PICK.BOX) {
+      const probe = this.project(e.x, yb + 1.1, e.z);
+      if (!probe || probe.dz < PICKUP_CLIP) return;
+      ctx.globalAlpha = pickupFade(probe.dz);
+      const bob = Math.sin(this.time * 3 + e.z * 0.3) * 0.2;
+      const y = yb + 1.1 + bob;
+      const s = 0.85;
+      const spin = this.time * 1.6 + e.z;
+      this.box3d(e.x, y - s / 2, y + s / 2, e.z, e.z + s, s * (0.7 + Math.abs(Math.cos(spin)) * 0.5),
+        '#3ddc84', '#2bb96b', '#69f7a8');
+      const p = this.project(e.x, y, e.z);
+      if (p && p.s > 6) {
+        ctx.fillStyle = '#04240f';
+        ctx.font = `900 ${p.s * 0.7}px system-ui, sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('?', p.x, p.y);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    switch (e.type) {
+      case OB.BLOCK:
+        this.box3d(e.x, yb, yb + 3.6, e.z, e.z + e.len, e.w, '#4a5270', '#333a52', '#5d6688');
+        this.stripes(e.x, yb + 0.1, e.z, e.w);
+        break;
+      case OB.BARRIER:
+        this.box3d(e.x, yb, yb + 1.1, e.z, e.z + 0.9, e.w, '#ff8a3d', '#c9601f', '#ffb070');
+        this.stripes(e.x, yb + 1.12, e.z, e.w);
+        break;
+      case OB.CONE: {
+        const b = this.project(e.x, yb, e.z);
+        const t = this.project(e.x, yb + 0.8, e.z);
+        if (!b || !t) break;
+        const w = b.s * 0.45;
+        ctx.fillStyle = '#ff6a2b';
+        ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(b.x + w, b.y); ctx.lineTo(b.x - w, b.y); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(b.x - w * 0.6, b.y - (b.y - t.y) * 0.45, w * 1.2, Math.max(1, b.s * 0.08));
+        break;
+      }
+      case OB.HIGHBAR: {
+        this.box3d(e.x, yb + 1.25, yb + 1.95, e.z, e.z + 0.8, e.w, '#ff4d5a', '#b8323d', '#ff8890');
+        for (const sgn of [-1, 1]) {
+          const a = this.project(e.x + sgn * e.w / 2, yb, e.z + 0.4);
+          const b2 = this.project(e.x + sgn * e.w / 2, yb + 3.4, e.z + 0.4);
+          if (!a || !b2) continue;
+          ctx.strokeStyle = '#8d97b5';
+          ctx.lineWidth = Math.min(7, Math.max(1, a.s * 0.09));
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
+        }
+        break;
+      }
+      case OB.RAMP: {
+        const bl = this.project(e.x - e.w / 2, yb, e.z);
+        const br = this.project(e.x + e.w / 2, yb, e.z);
+        const tl = this.project(e.x - e.w / 2, yb + 1.5, e.z + e.len);
+        const tr = this.project(e.x + e.w / 2, yb + 1.5, e.z + e.len);
+        const fl = this.project(e.x - e.w / 2, yb, e.z + e.len);
+        const fr = this.project(e.x + e.w / 2, yb, e.z + e.len);
+        if (!bl || !br || !tl || !tr || !fl || !fr) break;
+        ctx.fillStyle = '#ffd23f';
+        ctx.beginPath(); ctx.moveTo(bl.x, bl.y); ctx.lineTo(br.x, br.y); ctx.lineTo(tr.x, tr.y); ctx.lineTo(tl.x, tl.y); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#c79c14';
+        ctx.beginPath(); ctx.moveTo(tl.x, tl.y); ctx.lineTo(tr.x, tr.y); ctx.lineTo(fr.x, fr.y); ctx.lineTo(fl.x, fl.y); ctx.closePath(); ctx.fill();
+        break;
+      }
+      case OB.PAD: {
+        const glow = 0.45 + Math.sin(this.time * 8 + e.z) * 0.25;
+        this.groundLine(e.x, e.z, e.z + e.len, yb, e.w, `rgba(46,230,255,${glow.toFixed(2)})`);
+        for (let i = 0; i < 3; i++) {
+          const cz = e.z + 0.6 + i * 1.4;
+          this.groundLine(e.x, cz, cz + 0.6, yb, e.w * 0.55, 'rgba(255,255,255,0.75)');
+        }
+        break;
+      }
+      default: break;
+    }
+  }
+
+  stripes(x, y, z, w) {
+    for (let i = 0; i < 4; i++) {
+      this.groundLine(x - w / 2 + w * (i + 0.5) / 4, z - 0.05, z + 0.05, y, w / 8, i % 2 ? '#ffe14d' : '#1b1b1b');
+    }
+  }
+
+  box3d(x, yLo, yHi, zNear, zFar, w, front, side, top) {
+    const ctx = this.ctx;
+    const P = (dx, y, z) => this.project(x + dx, y, z);
+    const hw = w / 2;
+    const nTL = P(-hw, yHi, zNear), nTR = P(hw, yHi, zNear), nBL = P(-hw, yLo, zNear), nBR = P(hw, yLo, zNear);
+    const fTL = P(-hw, yHi, zFar), fTR = P(hw, yHi, zFar), fBL = P(-hw, yLo, zFar), fBR = P(hw, yLo, zFar);
+    if (!nTL || !nTR || !nBL || !nBR) return;
+    const poly = (pts, fill) => {
+      if (pts.some(p => !p)) return;
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath(); ctx.fill();
+    };
+    // top face, then whichever side we can see, then the face toward the camera
+    poly([nTL, nTR, fTR, fTL], top);
+    if (x - hw > this.cam.x) poly([nTL, fTL, fBL, nBL], side);
+    else if (x + hw < this.cam.x) poly([nTR, fTR, fBR, nBR], side);
+    poly([nTL, nTR, nBR, nBL], front);
+  }
+
+  drawRunner(p, world) {
+    const ctx = this.ctx;
+    const yb = this.yOff(p.path);
+    const x = p.rx !== undefined ? p.rx : p.x;
+    const y = yb + p.y;
+    const ground = this.project(x, yb + 0.02, p.z);
+    const base = this.project(x, y, p.z);
+    if (!base || base.dz < 0.8) return;
+    const s = base.s;
+    if (s < 0.6) return;
+    if (base.dz < CLIP_NEAR) return;
+    const nearFade = base.dz < FADE_NEAR ? (base.dz - CLIP_NEAR) / (FADE_NEAR - CLIP_NEAR) : 1;
+
+    const sliding = !!(p.flags & 2);
+    const spin = !!(p.flags & 2048);
+    const star = !!(p.flags & 32);
+    const shield = !!(p.flags & 16);
+    const boost = !!(p.flags & 64);
+    const rocket = !!(p.flags & 128);
+    const bolt = !!(p.flags & 256);
+    const invuln = !!(p.flags & 8);
+
+    // shadow
+    if (ground) {
+      ctx.fillStyle = `rgba(0,0,0,${Math.max(0.12, 0.42 - p.y * 0.08)})`;
+      ctx.beginPath();
+      ctx.ellipse(ground.x, ground.y, s * 0.55, s * 0.2, 0, 0, 7);
+      ctx.fill();
+    }
+
+    ctx.save();
+    ctx.translate(base.x, base.y);
+    if (spin) ctx.rotate(Math.sin(this.time * 26) * 0.5);
+    ctx.globalAlpha = nearFade;
+    if (invuln && !star && Math.floor(this.time * 14) % 2 === 0) ctx.globalAlpha = nearFade * 0.45;
+
+    const h = sliding ? 1.05 : 1.85;
+    const w = sliding ? 1.25 : 0.92;
+    const bodyH = s * h;
+    const bodyW = s * w;
+    const bob = sliding ? 0 : Math.sin(this.time * 16 + p.z) * s * 0.06;
+
+    // board
+    ctx.fillStyle = '#20263c';
+    roundRect(ctx, -bodyW * 0.62, -s * 0.12, bodyW * 1.24, s * 0.22, s * 0.1);
+    ctx.fill();
+
+    // body
+    const grad = ctx.createLinearGradient(0, -bodyH, 0, 0);
+    grad.addColorStop(0, lighten(p.color, 0.35));
+    grad.addColorStop(1, p.color);
+    ctx.fillStyle = grad;
+    roundRect(ctx, -bodyW / 2, -bodyH + bob, bodyW, bodyH - s * 0.1, s * 0.28);
+    ctx.fill();
+
+    // head
+    ctx.fillStyle = '#f2d7bd';
+    ctx.beginPath();
+    ctx.arc(0, -bodyH - s * 0.22 + bob, s * 0.33, 0, 7);
+    ctx.fill();
+    ctx.fillStyle = darken(p.color, 0.3);
+    ctx.beginPath();
+    ctx.arc(0, -bodyH - s * 0.3 + bob, s * 0.35, Math.PI, 0);
+    ctx.fill();
+
+    // arms / motion streaks
+    ctx.strokeStyle = `rgba(255,255,255,0.25)`;
+    ctx.lineWidth = Math.max(1, s * 0.09);
+    ctx.beginPath();
+    ctx.moveTo(-bodyW * 0.6, -bodyH * 0.55);
+    ctx.lineTo(-bodyW * 1.0 - (boost ? s * 0.4 : 0), -bodyH * 0.35);
+    ctx.moveTo(bodyW * 0.6, -bodyH * 0.55);
+    ctx.lineTo(bodyW * 1.0 + (boost ? s * 0.4 : 0), -bodyH * 0.35);
+    ctx.stroke();
+
+    if (shield) {
+      ctx.strokeStyle = 'rgba(51,176,255,0.85)';
+      ctx.fillStyle = 'rgba(51,176,255,0.15)';
+      ctx.lineWidth = Math.max(1, s * 0.07);
+      ctx.beginPath(); ctx.arc(0, -bodyH * 0.55, s * 1.25, 0, 7); ctx.fill(); ctx.stroke();
+    }
+    if (star) {
+      ctx.globalCompositeOperation = 'lighter';
+      const hue = (this.time * 420) % 360;
+      ctx.fillStyle = `hsla(${hue},100%,60%,0.4)`;
+      ctx.beginPath(); ctx.arc(0, -bodyH * 0.55, s * 1.45, 0, 7); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    if (bolt) {
+      ctx.strokeStyle = 'rgba(176,107,255,0.9)';
+      ctx.lineWidth = Math.max(1, s * 0.08);
+      for (let i = 0; i < 3; i++) {
+        const yy = -bodyH * (0.25 + i * 0.3);
+        ctx.beginPath();
+        ctx.moveTo(-bodyW, yy);
+        ctx.lineTo(-bodyW * 0.2, yy + s * 0.18);
+        ctx.lineTo(bodyW * 0.3, yy - s * 0.16);
+        ctx.lineTo(bodyW, yy + s * 0.06);
+        ctx.stroke();
+      }
+    }
+    if (rocket) {
+      ctx.fillStyle = 'rgba(255,138,61,0.9)';
+      ctx.beginPath();
+      ctx.moveTo(-bodyW * 0.4, 0);
+      ctx.lineTo(bodyW * 0.4, 0);
+      ctx.lineTo(0, s * (1.2 + Math.random() * 0.8));
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+
+    // Name tag, kept just above the head in screen space so close runners do
+    // not fling their labels off the top of the phone.
+    if (!p.self && s > 3.5 && nearFade > 0.5) {
+      this.tags.push({
+        label: `${p.place ? p.place + '· ' : ''}${p.name}`,
+        color: p.color, alpha: nearFade, dz: base.dz,
+        fs: Math.min(15, Math.max(8, s * 0.5)),
+        x: base.x,
+        y: base.y - Math.min(s * (h + 0.7), this.H * 0.13)
+      });
+    }
+
+    // A marker over your own runner so you never lose yourself in a pack.
+    if (p.self && s > 2) {
+      const ms = Math.min(s, 46);
+      const cy2 = base.y - s * (h + 0.55) - Math.abs(Math.sin(this.time * 4)) * ms * 0.18;
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(base.x, cy2 + ms * 0.34);
+      ctx.lineTo(base.x - ms * 0.26, cy2);
+      ctx.lineTo(base.x + ms * 0.26, cy2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  drawProjectile(pr) {
+    const ctx = this.ctx;
+    const p = this.project(pr.x, pr.y + (pr.pa === 1 ? C.SHORTCUT_HEIGHT : 0), pr.z);
+    if (!p || p.dz < 1) return;
+    const s = p.s;
+    if (pr.k === 1) {   // homing shell
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(61,220,132,0.35)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, s * 1.1, 0, 7); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#3ddc84';
+      ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.5, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#eafff2';
+      ctx.lineWidth = Math.max(1, s * 0.12);
+      ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.5, this.time * 9, this.time * 9 + 2.2); ctx.stroke();
+    } else {            // grease slick
+      ctx.fillStyle = '#ffe14d';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, s * 0.62, s * 0.26, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(120,90,0,0.6)';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, s * 0.32, s * 0.13, 0, 0, 7); ctx.fill();
+    }
+  }
+
+  drawParticle(pt) {
+    const p = this.project(pt.x, pt.y, pt.z);
+    if (!p || p.dz < 0.8) return;
+    const ctx = this.ctx;
+    ctx.globalAlpha = Math.max(0, pt.life / pt.max);
+    ctx.fillStyle = pt.color;
+    const r = Math.max(0.6, p.s * pt.size);
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  drawSpeedFx(world) {
+    const me = world.me;
+    const over = me.speed - C.BASE_SPEED - 4;
+    if (over <= 0) return;
+    const ctx = this.ctx;
+    const a = Math.min(0.4, over / 40);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(160,220,255,${a.toFixed(3)})`;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 16; i++) {
+      const ang = (i / 16) * Math.PI * 2 + this.time * 0.6;
+      const r0 = this.W * 0.28;
+      const r1 = r0 + this.W * (0.16 + a);
+      ctx.beginPath();
+      ctx.moveTo(this.cx + Math.cos(ang) * r0, this.cy + this.H * 0.16 + Math.sin(ang) * r0);
+      ctx.lineTo(this.cx + Math.cos(ang) * r1, this.cy + this.H * 0.16 + Math.sin(ang) * r1);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+// ------------------------------------------------------------- helpers ----
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+const fract = (v) => v - Math.floor(v);
+
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function lighten(hex, amt) {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgb(${Math.min(255, r + 255 * amt) | 0},${Math.min(255, g + 255 * amt) | 0},${Math.min(255, b + 255 * amt) | 0})`;
+}
+function darken(hex, amt) {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgb(${(r * (1 - amt)) | 0},${(g * (1 - amt)) | 0},${(b * (1 - amt)) | 0})`;
+}
+
+
+/* ===== client/js/input.js ===== */
+// Touch gestures + keyboard. Emits discrete actions; the game loop turns
+// those into the lane / jump / slide / item intents sent to the server.
+
+const SWIPE = 26;           // px before a drag counts as a swipe
+const TAP_MS = 260;
+const TAP_SLOP = 14;
+
+class Input extends EventTarget {
+  constructor(target, itemButton) {
+    super();
+    this.enabled = false;
+    this.keys = new Set();
+    this._touches = new Map();
+
+    const emit = (a) => { if (this.enabled) this.dispatchEvent(new CustomEvent(a)); };
+    this.emitAction = emit;
+
+    // ---- touch ----
+    const start = (e) => {
+      if (!this.enabled) return;
+      for (const t of e.changedTouches) {
+        this._touches.set(t.identifier, { x: t.clientX, y: t.clientY, ox: t.clientX, oy: t.clientY, t: performance.now(), moved: false });
+      }
+    };
+    const move = (e) => {
+      if (!this.enabled) return;
+      for (const t of e.changedTouches) {
+        const s = this._touches.get(t.identifier);
+        if (!s) continue;
+        const dx = t.clientX - s.x;
+        const dy = t.clientY - s.y;
+        if (Math.abs(dx) < SWIPE && Math.abs(dy) < SWIPE) continue;
+        if (Math.abs(dx) > Math.abs(dy)) emit(dx > 0 ? 'right' : 'left');
+        else emit(dy > 0 ? 'slide' : 'jump');
+        // Re-anchor so a long drag can chain several swipes.
+        s.x = t.clientX; s.y = t.clientY; s.moved = true;
+      }
+      e.preventDefault();
+    };
+    const end = (e) => {
+      for (const t of e.changedTouches) {
+        const s = this._touches.get(t.identifier);
+        this._touches.delete(t.identifier);
+        if (!s || s.moved) continue;
+        const dt = performance.now() - s.t;
+        const dist = Math.hypot(t.clientX - s.ox, t.clientY - s.oy);
+        if (dt < TAP_MS && dist < TAP_SLOP) emit('item');
+      }
+    };
+
+    target.addEventListener('touchstart', start, { passive: true });
+    target.addEventListener('touchmove', move, { passive: false });
+    target.addEventListener('touchend', end, { passive: true });
+    target.addEventListener('touchcancel', end, { passive: true });
+
+    // Mouse drag mirrors touch, so the game is testable on a laptop.
+    let mouse = null;
+    target.addEventListener('mousedown', (e) => {
+      if (!this.enabled) return;
+      mouse = { x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY, t: performance.now(), moved: false };
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!mouse) return;
+      const dx = e.clientX - mouse.x, dy = e.clientY - mouse.y;
+      if (Math.abs(dx) < SWIPE && Math.abs(dy) < SWIPE) return;
+      if (Math.abs(dx) > Math.abs(dy)) emit(dx > 0 ? 'right' : 'left');
+      else emit(dy > 0 ? 'slide' : 'jump');
+      mouse.x = e.clientX; mouse.y = e.clientY; mouse.moved = true;
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (mouse && !mouse.moved && performance.now() - mouse.t < TAP_MS) emit('item');
+      mouse = null;
+    });
+
+    if (itemButton) {
+      const fire = (e) => { e.preventDefault(); e.stopPropagation(); emit('item'); };
+      itemButton.addEventListener('touchstart', fire, { passive: false });
+      itemButton.addEventListener('mousedown', fire);
+    }
+
+    // ---- keyboard ----
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      const k = e.key.toLowerCase();
+      if (['arrowleft', 'a'].includes(k)) emit('left');
+      else if (['arrowright', 'd'].includes(k)) emit('right');
+      else if (['arrowup', 'w', ' '].includes(k)) emit('jump');
+      else if (['arrowdown', 's'].includes(k)) emit('slide');
+      else if (['e', 'shift', 'enter', 'f'].includes(k)) emit('item');
+      else return;
+      e.preventDefault();
+    });
+  }
+
+  on(type, fn) { this.addEventListener(type, fn); return this; }
+}
+
+
+/* ===== client/js/audio.js ===== */
+// Tiny WebAudio kit - every sound is synthesised, so there are no assets to
+// download over the LAN.
+
+class Sfx {
+  constructor() {
+    this.ctx = null;
+    this.muted = false;
+    this.master = null;
+  }
+
+  resume() {
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.35;
+      this.master.connect(this.ctx.destination);
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+
+  tone(freq, dur = 0.1, type = 'square', vol = 0.5, slide = 0) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+
+  noise(dur = 0.2, vol = 0.4, filter = 900) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime;
+    const n = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'lowpass';
+    bp.frequency.value = filter;
+    const g = this.ctx.createGain();
+    g.gain.value = vol;
+    src.connect(bp).connect(g).connect(this.master);
+    src.start();
+  }
+
+  coin()      { this.tone(1180, 0.06, 'square', 0.25); setTimeout(() => this.tone(1560, 0.08, 'square', 0.22), 45); }
+  box()       { this.tone(520, 0.07, 'triangle', 0.3); setTimeout(() => this.tone(880, 0.12, 'triangle', 0.3), 60); }
+  jump()      { this.tone(420, 0.12, 'sine', 0.3, 420); }
+  slide()     { this.noise(0.18, 0.25, 1600); }
+  hit()       { this.noise(0.35, 0.7, 500); this.tone(120, 0.3, 'sawtooth', 0.4, -70); }
+  shield()    { this.tone(700, 0.18, 'sine', 0.35, 500); }
+  boost()     { this.tone(260, 0.32, 'sawtooth', 0.32, 900); }
+  shell()     { this.tone(880, 0.2, 'square', 0.28, -500); }
+  bolt()      { this.noise(0.4, 0.5, 2600); this.tone(1400, 0.3, 'sawtooth', 0.25, -1100); }
+  star()      { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, 0.12, 'square', 0.3), i * 70)); }
+  count(n)    { this.tone(n > 0 ? 560 : 900, n > 0 ? 0.14 : 0.4, 'square', 0.4); }
+  finish()    { [784, 988, 1318].forEach((f, i) => setTimeout(() => this.tone(f, 0.22, 'triangle', 0.4), i * 110)); }
+  smash()     { this.noise(0.2, 0.5, 1800); }
+}
+
+
+/* ===== client/js/solo.js ===== */
+// Offline practice mode. Runs the exact same Room the LAN server runs, only
+// in the browser tab, so the physics, track, bots and items are identical to
+// a real race - there is just nobody else on the wire.
+
+
+
+
+
+
+
+const $ = (s) => document.querySelector(s);
+const SUFFIX = ['th', 'st', 'nd', 'rd'];
+const ord = (n) => { const v = n % 100; return SUFFIX[(v - 20) % 10] || SUFFIX[v] || SUFFIX[0]; };
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } }
+};
+
+const renderer = new Renderer($('#game'));
+const sfx = new Sfx();
+const input = new Input(document.body, $('#item-slot'));
+
+const S = {
+  room: null,
+  me: null,
+  bots: parseInt(store.get('ts.solo.bots', '7'), 10),
+  distance: store.get('ts.solo.dist', 'sprint'),
+  skill: parseFloat(store.get('ts.solo.skill', '0.72')),
+  items: store.get('ts.solo.items', '1') === '1',
+  views: new Map(),
+  lastCount: -1
+};
+
+function show(id) {
+  for (const s of document.querySelectorAll('.screen')) s.classList.toggle('active', s.id === id);
+  input.enabled = (id === 'screen-race');
+}
+
+// ------------------------------------------------------------- setup UI ---
+function mark(sel, v) { for (const b of $(sel).children) b.classList.toggle('on', b.dataset.v === v); }
+function syncSetup() {
+  $('#bots-count').textContent = S.bots;
+  mark('#seg-distance', S.distance);
+  mark('#seg-skill', String(S.skill));
+  mark('#seg-items', S.items ? '1' : '0');
+}
+$('#seg-distance').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.distance = b.dataset.v; store.set('ts.solo.dist', S.distance); syncSetup();
+});
+$('#seg-skill').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.skill = parseFloat(b.dataset.v); store.set('ts.solo.skill', String(S.skill)); syncSetup();
+});
+$('#seg-items').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.items = b.dataset.v === '1'; store.set('ts.solo.items', S.items ? '1' : '0'); syncSetup();
+});
+$('#bots-minus').addEventListener('click', () => { S.bots = Math.max(0, S.bots - 1); store.set('ts.solo.bots', String(S.bots)); syncSetup(); });
+$('#bots-plus').addEventListener('click', () => { S.bots = Math.min(C.MAX_PLAYERS - 1, S.bots + 1); store.set('ts.solo.bots', String(S.bots)); syncSetup(); });
+$('#btn-start').addEventListener('click', () => { sfx.resume(); startRace(); });
+$('#btn-again').addEventListener('click', () => { sfx.resume(); startRace(); });
+$('#btn-setup').addEventListener('click', () => show('screen-setup'));
+syncSetup();
+
+// ----------------------------------------------------------- race setup ---
+function startRace() {
+  const room = new Room('SOLO');
+  room.settings.distance = S.distance;
+  room.settings.items = S.items;
+  room.settings.botSkill = S.skill;
+  const me = room.addPlayer('you', store.get('ts.name', 'You'), null);
+  me.ready = true;
+  room.setBots(S.bots);
+  room.startRace();
+
+  S.room = room;
+  S.me = me;
+  S.views.clear();
+  for (const p of room.racers) S.views.set(p.id, { rx: p.x });
+  S.lastCount = -1;
+
+  buildProgressDots();
+  renderer.particles.length = 0;
+  $('#countdown').classList.remove('hidden');
+  show('screen-race');
+  last = performance.now();
+}
+
+// -------------------------------------------------------------- controls ---
+input.on('left', () => { const m = S.me; if (!m) return; m.input.lane = Math.max(0, m.input.lane - 1); });
+input.on('right', () => { const m = S.me; if (!m) return; m.input.lane = Math.min(laneCount(m.path) - 1, m.input.lane + 1); });
+input.on('jump', () => { const m = S.me; if (!m) return; m.input.jump = true; sfx.jump(); });
+input.on('slide', () => { const m = S.me; if (!m) return; m.input.slide = true; sfx.slide(); });
+input.on('item', () => { const m = S.me; if (!m || !m.item) return; m.input.use = true; });
+
+// ------------------------------------------------------------- game loop ---
+let last = performance.now();
+let acc = 0;
+let hudAcc = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.25) dt = 0.25;
+  const room = S.room;
+  if (!room || !room.track) return;
+
+  if (room.state !== STATE.RESULTS) {
+    acc += dt;
+    let steps = 0;
+    while (acc >= 1 / 60 && steps < 6) { acc -= 1 / 60; steps++; room.step(1 / 60); }
+    drainEvents(room);
+  }
+
+  renderer.draw(buildWorld(dt), dt);
+  countdownFx(room);
+
+  hudAcc += dt;
+  if (hudAcc > 0.06) { hudAcc = 0; updateHud(); }
+
+  if (room.state === STATE.RESULTS && !room.shown) { room.shown = true; showResults(room); }
+}
+requestAnimationFrame(frame);
+
+function buildWorld(dt) {
+  const room = S.room;
+  const list = [];
+  let self = null;
+  for (const p of room.racers) {
+    let v = S.views.get(p.id);
+    if (!v) { v = { rx: p.x }; S.views.set(p.id, v); }
+    v.rx += (p.x - v.rx) * Math.min(1, dt * 16);
+    const view = {
+      id: p.id, name: p.name, color: p.color, place: p.place, self: p === S.me,
+      x: p.x, rx: v.rx, y: p.y, z: p.z, path: p.path, scSide: p.scSide,
+      speed: p.speed, flags: flags(p)
+    };
+    list.push(view);
+    if (view.self) self = view;
+  }
+  return {
+    track: room.track,
+    players: list,
+    projectiles: room.projectiles.map(o => ({ k: o.kind === 'shell' ? 1 : 2, z: o.z, x: o.x, y: o.y, pa: o.path })),
+    me: self || list[0],
+    finishZ: (S.me.startZ || 0) + room.distance,
+    taken: S.me.taken
+  };
+}
+
+function drainEvents(room) {
+  for (const ev of room.events) {
+    const mine = ev.id === 'you';
+    const who = room.byId(ev.id);
+    switch (ev.t) {
+      case 'coin': if (mine) { sfx.coin(); renderer.burst(S.me.x, 1.1, S.me.z + 1, '#ffd23f', 4, 2.5, 3); } break;
+      case 'box': if (mine) { sfx.box(); if (ev.item) toast(`${ITEM_META[ev.item].icon} ${ITEM_META[ev.item].name.toUpperCase()}`, ITEM_META[ev.item].color); } break;
+      case 'hit':
+        if (mine) { sfx.hit(); renderer.addShake(0.9); flash(); toast(ev.hard ? 'WIPEOUT!' : 'BUMP!', '#ff4d5a'); renderer.burst(S.me.x, 1, S.me.z, '#ff8a3d', 16, 8, 6); }
+        else if (who) renderer.burst(who.x, 1 + renderer.yOff(who.path), who.z, '#ff8a3d', 8, 6, 4);
+        break;
+      case 'shield': if (mine) { sfx.shield(); toast('SHIELD SAVED YOU', '#33b0ff'); } break;
+      case 'ramp': if (mine) sfx.jump(); break;
+      case 'pad': if (mine) sfx.boost(); break;
+      case 'shortcut': if (mine) { sfx.boost(); toast('SHORTCUT!', '#ffd23f'); } break;
+      case 'use': {
+        const meta = ITEM_META[ev.item];
+        if (mine) {
+          if (ev.item === 'star' || ev.item === 'rocket') sfx.star();
+          else if (ev.item === 'boost' || ev.item === 'coins') sfx.boost();
+          else if (ev.item === 'shell') sfx.shell();
+          else if (ev.item === 'bolt') sfx.bolt();
+          else sfx.box();
+        } else if (who && meta && (ev.item === 'bolt' || ev.item === 'star' || ev.item === 'rocket')) {
+          toast(`${who.name} used ${meta.name}`, meta.color);
+        }
+        break;
+      }
+      case 'bolt': if (!mine && S.me.boltT > 0) { sfx.bolt(); toast('ZAPPED!', '#b06bff'); renderer.addShake(0.4); } break;
+      case 'projhit':
+        if (mine && !ev.blocked) { sfx.hit(); renderer.addShake(1.1); flash(); toast(ev.kind === 'shell' ? 'HOMER HIT!' : 'GREASED!', '#ff4d5a'); }
+        else if (ev.by === 'you') toast('DIRECT HIT!', '#3ddc84');
+        break;
+      case 'smash': case 'smashproj': if (mine) { sfx.smash(); renderer.addShake(0.3); } break;
+      case 'finish':
+        if (mine) { sfx.finish(); toast(`${ev.place}${ord(ev.place)} PLACE!`, '#ffd23f'); }
+        else if (who) toast(`${who.name} finished ${ev.place}${ord(ev.place)}`, who.color);
+        break;
+      default: break;
+    }
+  }
+  room.events.length = 0;
+}
+
+// -------------------------------------------------------------------- HUD ---
+function countdownFx(room) {
+  const el = $('#countdown');
+  if (room.state === STATE.COUNTDOWN) {
+    el.classList.remove('hidden');
+    const n = Math.max(1, Math.ceil(room.countdown));
+    if (n !== S.lastCount) {
+      S.lastCount = n;
+      el.textContent = String(n);
+      el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+      sfx.count(n);
+    }
+  } else if (S.lastCount !== 0 && !el.classList.contains('hidden')) {
+    S.lastCount = 0;
+    el.textContent = 'GO!';
+    sfx.count(0);
+    setTimeout(() => el.classList.add('hidden'), 700);
+  }
+}
+
+function buildProgressDots() {
+  const wrap = $('#progress-dots');
+  wrap.innerHTML = '';
+  for (const p of S.room.racers) {
+    const i = document.createElement('i');
+    i.style.color = p.color;
+    i.style.background = p.color;
+    if (p === S.me) i.classList.add('self');
+    i.dataset.id = p.id;
+    wrap.appendChild(i);
+  }
+}
+
+function updateHud() {
+  const room = S.room, me = S.me;
+  if (!room || !me) return;
+  const racers = room.racers;
+  $('#hud-place').textContent = me.place;
+  $('#hud-place-sfx').textContent = ord(me.place);
+  $('#hud-total').textContent = '/ ' + racers.length;
+  $('#hud-coins').textContent = me.coins;
+  $('#hud-speed').textContent = Math.round(me.speed * 3.6);
+  $('#hud-dist').textContent = Math.max(0, Math.round(room.distance - room.progress(me)));
+
+  for (const dot of $('#progress-dots').children) {
+    const p = room.byId(dot.dataset.id);
+    if (!p) continue;
+    dot.style.left = (Math.max(0, Math.min(1, room.progress(p) / room.distance)) * 100).toFixed(2) + '%';
+  }
+
+  const rows = racers.slice().sort((a, b) => a.place - b.place);
+  const shown = rows.slice(0, 4);
+  if (!shown.includes(me)) shown.push(me);
+  const leadProg = rows.length ? room.progress(rows[0]) : 0;
+  const lb = $('#leaderboard');
+  lb.innerHTML = '';
+  for (const p of shown) {
+    const gap = Math.round(leadProg - room.progress(p));
+    const d = document.createElement('div');
+    d.className = 'lb-row' + (p === me ? ' self' : '');
+    d.innerHTML = `<span class="n">${p.place}</span>
+      <span class="dot" style="width:7px;height:7px;border-radius:50%;background:${p.color}"></span>
+      <span class="nm"></span><span class="gap">${gap > 0 ? '-' + gap + 'm' : '—'}</span>`;
+    d.querySelector('.nm').textContent = p.name;
+    lb.appendChild(d);
+  }
+
+  const slot = $('#item-slot');
+  const meta = me.item ? ITEM_META[me.item] : null;
+  slot.classList.toggle('empty', !me.item);
+  slot.classList.toggle('armed', !!me.item);
+  slot.style.color = meta ? meta.color : '';
+  $('#item-icon').textContent = meta ? meta.icon : '·';
+  $('#item-name').textContent = meta ? meta.name : 'no item';
+}
+
+function toast(text, color) {
+  const host = $('#toasts');
+  if ([...host.children].some(c => c.textContent === text)) return;
+  while (host.children.length >= 3) host.firstChild.remove();
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = text;
+  if (color) { t.style.color = color; t.style.borderColor = color; }
+  host.appendChild(t);
+  setTimeout(() => t.remove(), 1700);
+}
+function flash() {
+  const f = $('#fx-flash');
+  f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
+}
+
+function showResults(room) {
+  const wrap = $('#results-rows');
+  wrap.innerHTML = '';
+  for (const r of room.results()) {
+    const d = document.createElement('div');
+    d.className = `rrow p${r.place}` + (r.id === 'you' ? ' self' : '');
+    d.innerHTML = `<span class="pl">${r.place}</span>
+      <span class="dot" style="color:${r.color};background:${r.color}"></span>
+      <span class="who"><div class="nm"></div>
+        <div class="sub">${r.coins}c · ${r.hits} wipeouts · ${r.shortcuts} cuts · ${Math.round(r.top * 3.6)} km/h</div></span>
+      <span class="tm">${r.dnf ? 'DNF' : r.time.toFixed(2) + 's'}<em>${r.bot ? 'bot' : ''}</em></span>`;
+    d.querySelector('.nm').textContent = r.name;
+    wrap.appendChild(d);
+  }
+  show('screen-results');
+  wrap.querySelector('.rrow.self')?.scrollIntoView({ block: 'center' });
+  sfx.finish();
+}
+
+// --------------------------------------------------------------- startup ---
+// The standalone single-file build has no server to link back to.
+$('#lan-note').innerHTML = window.TS_STANDALONE
+  ? 'Solo build. For 12-player races on your wifi, run <b>node server/index.js</b> from the repo.'
+  : 'Racing friends on your wifi? <a href="/" style="color:var(--neon)">Go to multiplayer →</a>';
+window.__TS = { S, renderer, sfx };
+show('screen-setup');
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sfx.resume(); });
+window.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+})();
+</script>

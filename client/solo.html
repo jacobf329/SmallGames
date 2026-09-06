@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Turbo Surfers</title>
+<title>Turbo Surfers — Practice</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a0e1a">
 <meta name="mobile-web-app-capable" content="yes">
@@ -15,53 +15,25 @@
 
 <canvas id="game"></canvas>
 
-<!-- ============================ CONNECT ============================ -->
-<section id="screen-connect" class="screen active">
+<section id="screen-setup" class="screen active">
   <div class="panel">
     <h1 class="logo">TURBO<span>SURFERS</span></h1>
-    <p class="tagline">Endless-runner kart racing. Up to 12 on your wifi.</p>
+    <p class="tagline">Practice run — you against the bots.</p>
 
-    <label class="field">
-      <span>Your name</span>
-      <input id="in-name" maxlength="14" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Runner">
-    </label>
-
-    <label class="field">
-      <span>Race code <em>(share it, or leave as MAIN)</em></span>
-      <input id="in-room" maxlength="6" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="MAIN">
-    </label>
-
-    <button id="btn-join" class="btn big">JOIN RACE</button>
-    <p id="connect-status" class="status">connecting…</p>
-    <p class="status"><a href="/solo.html" style="color:var(--neon);font-weight:700">Practice offline against bots →</a></p>
-    <div id="join-urls" class="urls"></div>
-  </div>
-</section>
-
-<!-- ============================= LOBBY ============================= -->
-<section id="screen-lobby" class="screen">
-  <div class="panel wide">
-    <div class="lobby-head">
-      <h2>RACE <span id="lobby-code">MAIN</span></h2>
-      <div id="lobby-count" class="pill">0 / 12</div>
-    </div>
-
-    <div id="player-grid" class="player-grid"></div>
-
-    <div id="host-controls" class="host-controls hidden">
+    <div class="host-controls" style="border-top:0;padding-top:0">
       <div class="host-row">
         <span class="host-label">Track</span>
         <div class="seg" id="seg-distance">
-          <button data-v="sprint">Sprint</button>
-          <button data-v="classic" class="on">Classic</button>
+          <button data-v="sprint" class="on">Sprint</button>
+          <button data-v="classic">Classic</button>
           <button data-v="marathon">Marathon</button>
         </div>
       </div>
       <div class="host-row">
-        <span class="host-label">Bots</span>
+        <span class="host-label">Rivals</span>
         <div class="stepper">
           <button id="bots-minus">−</button>
-          <b id="bots-count">0</b>
+          <b id="bots-count">7</b>
           <button id="bots-plus">+</button>
         </div>
         <div class="seg small" id="seg-skill">
@@ -79,28 +51,24 @@
       </div>
     </div>
 
-    <div class="lobby-actions">
-      <button id="btn-ready" class="btn">READY</button>
-      <button id="btn-start" class="btn go hidden">START RACE</button>
-    </div>
-    <p id="lobby-hint" class="status">Waiting for the host to start…</p>
-    <div id="lobby-urls" class="urls"></div>
+    <button id="btn-start" class="btn big go">START RACE</button>
 
-    <details class="howto">
+    <details class="howto" open>
       <summary>How to play</summary>
       <ul>
         <li><b>Swipe ←/→</b> switch lane · <b>Swipe ↑</b> jump · <b>Swipe ↓</b> slide</li>
-        <li><b>ITEM button</b> fires whatever you picked up</li>
+        <li><b>Tap</b> (or the item button) fires whatever you picked up</li>
         <li>Hit something and you get <b>knocked back</b>, not eliminated — keep going</li>
         <li>Grab <b>coins</b> for top speed, <b>? boxes</b> for items</li>
         <li>Ramps on the outer lanes launch you onto <b>shortcuts</b>: shorter, nastier</li>
         <li>Tuck in behind a rival for a <b>slipstream</b></li>
+        <li>Desktop: arrow keys / WASD, space to jump, E to fire</li>
       </ul>
     </details>
+    <p class="status" id="lan-note"></p>
   </div>
 </section>
 
-<!-- ============================== RACE ============================= -->
 <section id="screen-race" class="screen race">
   <div class="hud">
     <div class="hud-top">
@@ -117,46 +85,31 @@
         <div class="speed"><span id="hud-speed">0</span><em>km/h</em></div>
       </div>
     </div>
-
     <div id="leaderboard" class="leaderboard"></div>
-
     <div id="countdown" class="countdown hidden"></div>
     <div id="toasts" class="toasts"></div>
-    <div id="spectating" class="spectating hidden">spectating — you race next round</div>
-
     <div class="hud-bottom">
       <div id="item-slot" class="item-slot empty">
         <span id="item-icon">·</span>
         <em id="item-name">no item</em>
       </div>
-      <div class="ctrl-hints">
-        <span>swipe to move</span>
-      </div>
+      <div class="ctrl-hints"><span>swipe to move</span></div>
     </div>
     <div id="fx-flash" class="fx-flash"></div>
   </div>
 </section>
 
-<!-- ============================ RESULTS ============================ -->
 <section id="screen-results" class="screen">
   <div class="panel wide">
     <h2 class="results-title">FINISH</h2>
     <div id="results-rows" class="results"></div>
     <div class="lobby-actions">
-      <button id="btn-again" class="btn go hidden">BACK TO LOBBY</button>
-      <span id="results-timer" class="status"></span>
+      <button id="btn-again" class="btn go">RACE AGAIN</button>
+      <button id="btn-setup" class="btn ghost">CHANGE SETUP</button>
     </div>
   </div>
 </section>
 
-<div id="disconnected" class="overlay hidden">
-  <div class="panel">
-    <h2>Lost the server</h2>
-    <p class="status" id="disc-msg">Trying to reconnect…</p>
-    <button id="btn-retry" class="btn">RETRY NOW</button>
-  </div>
-</div>
-
-<script type="module" src="/js/main.js"></script>
+<script type="module" src="/js/solo.js"></script>
 </body>
 </html>

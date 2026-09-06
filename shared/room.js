@@ -1,11 +1,11 @@
 // A race room: lobby, countdown, authoritative simulation, results.
 // The server owns the truth; phones send intent and render predictions.
 
-import * as C from '../shared/constants.js';
-import { Track, laneX } from '../shared/track.js';
-import { createPlayer, resetForRace, stepPlayer, wipeout } from '../shared/physics.js';
-import { ITEM, rollItem } from '../shared/items.js';
-import { mulberry32 } from '../shared/rng.js';
+import * as C from './constants.js';
+import { Track, laneX } from './track.js';
+import { createPlayer, resetForRace, stepPlayer, wipeout } from './physics.js';
+import { ITEM, rollItem } from './items.js';
+import { mulberry32 } from './rng.js';
 import { initBot, driveBot, botName } from './bots.js';
 
 export const STATE = { LOBBY: 'lobby', COUNTDOWN: 'countdown', RACING: 'racing', RESULTS: 'results' };
@@ -438,7 +438,7 @@ export class Room {
   }
 }
 
-function flags(p) {
+export function flags(p) {
   let f = 0;
   if (p.grounded) f |= 1;
   if (p.sliding) f |= 2;

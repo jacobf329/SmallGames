@@ -43,6 +43,23 @@ PORT=3000 node server/index.js
 npm start
 ```
 
+## Play solo first
+
+Want to try the feel before rounding up twelve people?
+
+```bash
+node server/index.js     # then open http://localhost:8080/solo.html
+```
+
+Practice mode runs the **same** race the server runs — same physics, track
+generation, bots and items — entirely in the browser tab, with no networking.
+It is also what `tools/bundle.mjs` inlines into a single self-contained HTML
+file you can open straight off a phone or host anywhere:
+
+```bash
+node tools/bundle.mjs    # -> dist/turbo-surfers-solo.html (~105 KB, no assets)
+```
+
 ## How to play
 
 | Action | Phone | Keyboard |
@@ -91,18 +108,22 @@ A race ends when everyone finishes, or 20 s after the winner crosses the line.
 server/
   index.js    HTTP static server + room manager + 60 Hz simulation loop
   ws.js       RFC-6455 WebSocket server written from scratch (no deps)
-  room.js     lobby, countdown, authoritative race, items, projectiles, results
-  bots.js     AI runners; they send the same inputs a phone does
 shared/       imported by BOTH the server and the browser
   constants.js  every tuning number
   rng.js        seeded RNG (mulberry32)
   track.js      deterministic procedural track: obstacles, coins, shortcuts
   physics.js    the single movement/collision model
   items.js      item table, weighted by race position
+  room.js       lobby, countdown, race, items, projectiles, results
+  bots.js       AI runners; they send the same inputs a phone does
+tools/
+  bundle.mjs    inlines practice mode into one standalone HTML file
 client/
   index.html  connect / lobby / race / results screens
+  solo.html   offline practice mode against bots
   style.css   phone-first UI, safe-area aware
   js/main.js  prediction, reconciliation, interpolation, HUD
+  js/solo.js  drives a Room locally for offline practice
   js/render.js pseudo-3D canvas renderer
   js/input.js  swipe + keyboard
   js/net.js    WebSocket with auto-reconnect and latency estimate
