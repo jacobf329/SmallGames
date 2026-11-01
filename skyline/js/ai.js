@@ -9,13 +9,15 @@
 // to complete a colour set. At auctions it bids up to what the lot is worth
 // to it: more if it completes a set or blocks a rival's.
 
-import { BUSINESSES, BIZ, DISTRICTS, DIFFICULTY, MAX_STAFF, STATION_FARE, UTILITY_CUT,
-  OVERHEAD_BASE, OVERHEAD_RATE, APT_RESIDENTS, LOAN_STEP, PRICE_MIN, PRICE_MAX } from './data.js';
+import { BUSINESSES, BIZ, DISTRICTS, DIFFICULTY, STATION_FARE, UTILITY_CUT,
+  OVERHEAD_BASE, OVERHEAD_RATE, APT_RESIDENTS, LOAN_STEP, PRICE_MIN, PRICE_MAX, PARKS, PROMOS } from './data.js';
 import {
   MAP, rand, techOf, estimate, landValue, rentFor, ownsSet, setCount, netWorth, build, setPrice, setStaff,
   setHours, sellBusiness, upgradeFit, fitCost, aptCheck, buildApt, aptRentFor, askingPrice, transfer, sellLand,
-  loanLimit, takeLoan, repayLoan, money, news, newBizConfig,
+  loanLimit, takeLoan, repayLoan, money, news, newBizConfig, yearOf, aptRentFor as aptRent, canLandscape, parkSlots,
+  buildPark, buyoutPrice, buyout, startPromo, promoCost, hireStaff, setRole, raiseStaff, trainStaff, trainCost,
 } from './sim.js';
+import { maxStaff, clerks, manager, avgMorale } from './staff.js';
 
 const STYLE = {
   baron:   { build: 0.85, land: 1.35, apt: 1.5, set: 1.6, price: [0.9, 1.25],  start: 1.0,  fit: 0.5, prefer: [] },
@@ -92,6 +94,40 @@ function think1(s, p) {
     if (gain > 0) moves.push({ roi: gain / c, cost: c, run: () => upgradeFit(s, p.id, lot.id) });
   }
 
+  // Landscape a block it controls: lifts rents, land values and custom.
+  for (let d = 0; d < DISTRICTS.length; d++) {
+    if (!canLandscape(s, p.id, d)) continue;
+    const used = (s.parks || []).filter(x => x.d === d).length;
+    if (used >= parkSlots(s, d).length) continue;
+    const pk = [...PARKS].reverse().find(x => yearOf(s) >= x.year && x.cost < p.cash * 0.3);
+    if (!pk) continue;
+    let income = 0;
+    for (const id of MAP.districtLots[d]) { const l = s.lots[id]; if (l.owner === p.id) income += aptRent(s, l) + (l.business && l.business.owner !== p.id ? rentFor(s, l) : 0) + landValue(s, l) * 0.004; }
+    moves.push({ roi: pk.stars * income * 0.09 / pk.cost * st.land, cost: pk.cost, run: () => buildPark(s, p.id, d, pk.id) });
+  }
+  // Buy out a rival's shop on its own land.
+  for (const lot of s.lots) {
+    const b = lot.business;
+    if (!b || lot.owner !== p.id || b.owner === p.id || s.players[b.owner].bankrupt) continue;
+    const price = buyoutPrice(s, lot);
+    const e = estimate(s, lot.id, b.type, p.id, {});
+    const lostRent = rentFor(s, lot);
+    if (e.profit - lostRent > 0) moves.push({ roi: (e.profit - lostRent) / price * (st.set > 1.2 ? 1.2 : 1), cost: price, run: () => buyout(s, p.id, lot.id) });
+  }
+  // Advertise a shop that has room for more customers.
+  for (const lot of s.lots) {
+    const b = lot.business;
+    if (!b || b.owner !== p.id || b.promo || !b.yesterday || b.yesterday.peak > 0.85) continue;
+    const pr = [...PROMOS].reverse().find(x => yearOf(s) >= x.year);
+    const cost = promoCost(b, pr);
+    const e0 = estimate(s, lot.id, b.type, p.id, {});
+    b.promo = { boost: pr.boost };
+    const e1 = estimate(s, lot.id, b.type, p.id, {});
+    b.promo = null;
+    const gain = (e1.profit - e0.profit) * pr.days;
+    if (gain > cost * 1.2) moves.push({ roi: (gain / cost - 1) / pr.days * (p.style === 'premium' ? 1.3 : 1), cost, run: () => startPromo(s, p.id, lot.id, pr.id) });
+  }
+
   const diff = DIFFICULTY[s.difficulty];
   moves.sort((a, b) => b.roi - a.roi);
   for (const m of moves.slice(0, 6)) {
@@ -114,12 +150,13 @@ function tune(s, p) {
   for (const lot of s.lots) {
     const b = lot.business;
     if (!b || b.owner !== p.id || !b.yesterday) continue;
-    let best = { staff: b.staff, price: b.price, len: b.len, profit: estimate(s, lot.id, b.type, p.id, {}).profit };
+    // Compare like with like: head-count forecasts on both sides.
+    let best = { staff: b.staff, price: b.price, len: b.len, profit: estimate(s, lot.id, b.type, p.id, { staff: b.staff }).profit };
     const tryCfg = cfg => {
       const e = estimate(s, lot.id, b.type, p.id, { staff: best.staff, price: best.price, len: best.len, ...cfg });
       if (e.profit > best.profit + 5) best = { staff: best.staff, price: best.price, len: best.len, ...cfg, profit: e.profit };
     };
-    for (const ds of [-1, 1]) if (b.staff + ds >= 1 && b.staff + ds <= MAX_STAFF) tryCfg({ staff: b.staff + ds });
+    for (const ds of [-1, 1]) if (b.staff + ds >= 1 && b.staff + ds <= maxStaff(b)) tryCfg({ staff: b.staff + ds });
     for (const dp of [-0.1, 0.1]) {
       const price = Math.round((b.price + dp) * 100) / 100;
       if (price >= st.price[0] && price <= st.price[1] && price >= PRICE_MIN && price <= PRICE_MAX) tryCfg({ price });
@@ -127,8 +164,20 @@ function tune(s, p) {
     for (const dl of [-2, 2]) if (b.len + dl >= 4 && b.len + dl <= 24) tryCfg({ len: b.len + dl });
     // Queues out of the door trump the spreadsheet: hire.
     const y = b.yesterday;
-    if (y.turned > 0.1 * (y.cust + y.turned) && best.staff <= b.staff && b.staff < MAX_STAFF) best.staff = b.staff + 1;
+    if (y.turned > 0.1 * (y.cust + y.turned) && best.staff <= b.staff && b.team.length < maxStaff(b)) best.staff = b.staff + 1;
     setStaff(s, p.id, lot.id, best.staff);
+    // People: a clerk when shelves run dry, a manager for bigger teams,
+    // raises when morale sags, training for the best (premium style).
+    if (y.outHours > 2 && !clerks(b) && b.team.length < maxStaff(b) && b.cands?.length) hireStaff(s, p.id, lot.id, b.cands[0].id, 'clerk');
+    if (!manager(b) && b.team.length >= 4 && (b.hist.at(-1) || 0) > 300) {
+      const star = [...b.team].sort((x, z) => z.skill - x.skill)[0];
+      setRole(s, p.id, lot.id, star.id, 'manager');
+    }
+    if (avgMorale(b) < 0.45) for (const m of b.team) if (m.morale < 0.45) raiseStaff(s, p.id, lot.id, m.id);
+    if (p.style === 'premium' && p.cash > 20000) {
+      const pupil = b.team.find(m => !m.train && m.skill < 1.1);
+      if (pupil && trainCost(b, pupil) < p.cash * 0.02) trainStaff(s, p.id, lot.id, pupil.id);
+    }
     setPrice(s, p.id, lot.id, best.price);
     setHours(s, p.id, lot.id, b.from, best.len);
     const h = b.hist;

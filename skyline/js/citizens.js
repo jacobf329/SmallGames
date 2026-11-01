@@ -19,7 +19,8 @@ import {
   OUTSIDE_WEIGHT, DEMAND_SCALE, APT_RESIDENTS, FIRST_NAMES, LAST_NAMES, bizName,
 } from './data.js';
 import { MAP, rand, tileDist, BLOCK_TILES, STATION_TILES } from './map.js';
-import { NAT, bizOpen, modFor, capacity, appeal, techOf, yearOf } from './demand.js';
+import { NAT, bizOpen, modFor, capacity, appeal, techOf, yearOf, blockStars, starFactor } from './demand.js';
+import { avgMorale, avgSkill, manager } from './staff.js';
 
 const K = PEOPLE_PER_CITIZEN;
 const NEED_IDX = Object.fromEntries(NEEDS.map((n, i) => [n.id, i]));
@@ -156,6 +157,21 @@ export function thoughtText(s, reason, type) {
     happy: `Lovely ${n}. I'll be back.`,
   })[reason];
 }
+// Comments about one particular shop (its Customers tab).
+function say(b, key) {
+  const fb = b.today.fb;
+  if (fb) fb[key] = (fb[key] || 0) + K;
+}
+export const SHOP_COMMENTS = {
+  great:    { icon: '🤩', good: true,  text: n => `Wonderful service at this ${n}.` },
+  happy:    { icon: '😊', good: true,  text: n => `Nice ${n}. I'll be back.` },
+  slow:     { icon: '🐢', good: false, text: () => 'The staff are slow. Took ages.' },
+  grumpy:   { icon: '😒', good: false, text: () => 'The staff were rude and miserable.' },
+  pricey:   { icon: '💸', good: false, text: () => 'Too expensive for what you get.' },
+  queue:    { icon: '⏳', good: false, text: () => 'The queue was out the door. Gave up.' },
+  stockout: { icon: '📦', good: false, text: () => 'They had sold out.' },
+  closed:   { icon: '🔒', good: false, text: () => 'It was shut when I wanted it.' },
+};
 export const CHATTER_ICON = { none: '🤷', closed: '🔒', pricey: '💸', queue: '⏳', stockout: '📦', happy: '😊' };
 
 // ------------------------------------------------------------- hour ----
@@ -172,7 +188,7 @@ export function citizensHour(s, h) {
     if (!b) continue;
     const def = BIZ[b.type];
     const ni = NEED_IDX[def.need];
-    const entry = { l, b, def, a: appeal(b), queue: [] };
+    const entry = { l, b, def, a: appeal(b), stars: blockStars(s, l.district), mood: avgMorale(b), skill: avgSkill(b), mgr: !!manager(b), queue: [] };
     allShops[ni].push(entry);
     if (bizOpen(b, h)) shops[ni].push(entry);
   }
@@ -202,7 +218,7 @@ export function citizensHour(s, h) {
     for (const sh of shops[bi]) {
       const dist = tileDist(c.hx, c.hy, sh.l.tx, sh.l.ty);
       if (dist > WALK_RANGE) continue;
-      let w = (sh.def.id === want ? 1 : 0.35) * sh.a * Math.pow(1 / sh.b.price, el) * Math.min(1, Math.exp(-(dist - 2) / DISTANCE_FALLOFF));
+      let w = (sh.def.id === want ? 1 : 0.35) * sh.a * starFactor(sh.stars, c.seg) * Math.pow(1 / sh.b.price, el) * Math.min(1, Math.exp(-(dist - 2) / DISTANCE_FALLOFF));
       if (c.fav === sh.l.id) w *= 1.5;
       if ((c.grudge[sh.l.id] || 0) > day) w *= 0.4;
       cand.push([sh, w, dist]);
@@ -214,10 +230,12 @@ export function citizensHour(s, h) {
     if (r < out || !cand.length) {
       // Stayed home. Why?
       if (!cand.length) {
-        const shut = allShops[bi].some(sh => sh.def.id === want && tileDist(c.hx, c.hy, sh.l.tx, sh.l.ty) <= WALK_RANGE);
+        const shutShop = allShops[bi].find(sh => sh.def.id === want && tileDist(c.hx, c.hy, sh.l.tx, sh.l.ty) <= WALK_RANGE);
+        const shut = !!shutShop;
+        if (shutShop) say(shutShop.b, 'closed');
         grumble(s, c.d, shut ? 'closed' : 'none', want, c);
         if (shut && bv < 3) continue;           // wait for opening time
-      } else if (best && best.b.price > 1.15) grumble(s, c.d, 'pricey', best.def.id, c);
+      } else if (best && best.b.price > 1.15) { grumble(s, c.d, 'pricey', best.def.id, c); say(best.b, 'pricey'); }
       c.needs[bi] = 0;
       continue;
     }
@@ -242,6 +260,15 @@ export function citizensHour(s, h) {
         cust += n; capLeft -= n; sh.b.stock -= n;
         c.needs[ni] = 0;
         c.visits++;
+        const t = sh.b.today;
+        if (t.seg) { t.seg[c.seg] += n; t.from[c.d] = (t.from[c.d] || 0) + n; }
+        // What they say on the way out.
+        const r = rand(s);
+        if (sh.mood < 0.4 && r < 0.45) say(sh.b, 'grumpy');
+        else if (sh.skill < 0.8 && r < 0.35) say(sh.b, 'slow');
+        else if (sh.b.price > 1.25 && c.seg < 2 && r < 0.35) say(sh.b, 'pricey');
+        else if (sh.mood > 0.7 && (sh.b.fit >= 2 || sh.mgr) && r < 0.35) say(sh.b, 'great');
+        else if (r < 0.2) say(sh.b, 'happy');
         if (rand(s) < 0.25) c.fav = sh.l.id;
         if (c.fav === sh.l.id && rand(s) < 0.3) c.thought = thoughtText(s, 'happy', sh.def.id);
       } else {
@@ -250,6 +277,7 @@ export function citizensHour(s, h) {
         // A sold-out shop is remembered for two days; a queue only today.
         c.grudge[sh.l.id] = queue ? day + 1 : day + 2;
         grumble(s, c.d, queue ? 'queue' : 'stockout', sh.def.id, c);
+        say(sh.b, queue ? 'queue' : 'stockout');
       }
       c.busyUntil = now + 1;
       // Animate the trip during the next hour of play.

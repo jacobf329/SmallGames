@@ -7,11 +7,11 @@
 // real customer walking from home to a real shop and back (see citizens.js).
 
 import * as THREE from '../vendor/three.module.min.js';
-import { MAP_W, MAP_H, DISTRICTS, BIZ, MAX_APT, SEGMENTS } from './data.js';
+import { MAP_W, MAP_H, DISTRICTS, BIZ, MAX_APT, SEGMENTS, PARKS, BUSINESSES } from './data.js';
 import { MAP, BLOCK_TILES } from './map.js';
 import { roadPath } from './map.js';
 import { tripPhase } from './citizens.js';
-import { ownsSet, bizOpen } from './sim.js';
+import { ownsSet, bizOpen, blockStars, landValue, money } from './sim.js';
 
 const OX = MAP_W / 2, OZ = MAP_H / 2;
 export const wx = tx => tx + 0.5 - OX;           // tile -> world
@@ -219,7 +219,7 @@ export class Renderer3D {
     for (const t of tiles) {
       if (t.kind !== 'plaza' && t.kind !== 'park') continue;
       const n = t.kind === 'park' ? 3 : 1 + (noise(t.x, t.y) < 0.4 ? 1 : 0);
-      for (let i = 0; i < n; i++) trees.push([wx(t.x) - 0.3 + noise(t.x, t.y, i + 1) * 0.6, wz(t.y) - 0.3 + noise(t.x, t.y, i + 9) * 0.6, 0.8 + noise(t.x, t.y, i + 3) * 0.5]);
+      for (let i = 0; i < n; i++) trees.push([wx(t.x) - 0.3 + noise(t.x, t.y, i + 1) * 0.6, wz(t.y) - 0.3 + noise(t.x, t.y, i + 9) * 0.6, 0.8 + noise(t.x, t.y, i + 3) * 0.5, t.x + ',' + t.y]);
     }
     const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.04, 0.22, 6), new THREE.MeshStandardMaterial({ color: '#6b4a2b' }), trees.length);
     const crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.17, 0), new THREE.MeshStandardMaterial({ color: '#3f8f3a', flatShading: true }), trees.length);
@@ -230,6 +230,7 @@ export class Renderer3D {
     });
     trunk.castShadow = crown.castShadow = true;
     S.add(trunk, crown);
+    this.trees = { trunk, crown, list: trees };
 
     // Park pond and fountain.
     const park = MAP.blocks.find(b => b.kind === 'park');
@@ -262,6 +263,14 @@ export class Renderer3D {
     this.setBorders = new THREE.Group();
     S.add(this.setBorders);
     this.setSig = '';
+    this.parkGroup = new THREE.Group();
+    S.add(this.parkGroup);
+    this.parkSig = null;
+    this.overlay = 'off';
+    this.overlayGroup = new THREE.Group();
+    S.add(this.overlayGroup);
+    this.overlayAt = 0;
+    this.buildRain();
   }
 
   // Box border around a 2x2 block.
@@ -289,7 +298,7 @@ export class Renderer3D {
   lotSig(s, lot) {
     const b = lot.business;
     const auction = s.auction && s.auction.lotId === lot.id ? 'A' : '';
-    return `${lot.owner}|${lot.apt}|${b ? b.type + b.owner + b.fit : ''}|${auction}`;
+    return `${lot.owner}|${lot.apt}|${b ? b.type + b.owner + b.fit + 'f' + (b.floors || 1) + (b.promo ? 'P' : '') : ''}|${auction}`;
   }
 
   syncLot(s, lot) {
@@ -348,10 +357,12 @@ export class Renderer3D {
     } else if (b || lot.apt) {
       const def = b ? BIZ[b.type] : null;
       const wall = def ? def.wall : '#8d8f99';
-      add(new THREE.BoxGeometry(0.76, FLOOR_H, 0.76), std(wall), 0, GROUND + FLOOR_H / 2, 0);
-      // Glass shopfront.
-      add(new THREE.BoxGeometry(0.78, FLOOR_H * 0.55, 0.78), this.litMaterial(this.tex.shop, '#ffffff', 2, 1), 0, GROUND + FLOOR_H * 0.38, 0, false);
-      height = GROUND + FLOOR_H;
+      const shopH = FLOOR_H * (b ? b.floors || 1 : 1);
+      add(new THREE.BoxGeometry(0.76, shopH, 0.76), std(wall), 0, GROUND + shopH / 2, 0);
+      // Glass shopfront, one band per shop floor.
+      for (let f = 0; f < (b ? b.floors || 1 : 1); f++)
+        add(new THREE.BoxGeometry(0.78, FLOOR_H * 0.55, 0.78), this.litMaterial(this.tex.shop, '#ffffff', 2, 1), 0, GROUND + FLOOR_H * (f + 0.38), 0, false);
+      height = GROUND + shopH;
       if (b) {
         const ac = s.players[b.owner].color;
         add(new THREE.BoxGeometry(0.86, 0.05, 0.86), std(ac), 0, height - 0.02, 0);
@@ -413,6 +424,14 @@ export class Renderer3D {
       g.add(moon);
       g.userData.moon = moon;
     }
+    if (b && b.promo) {
+      const mega = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture('📣', '#ffd23f'), depthTest: false, sizeAttenuation: false }));
+      mega.position.set(0, height + 0.22, 0);
+      mega.center.set(1.25, -0.3);
+      mega.scale.set(0.022, 0.022, 1);
+      mega.renderOrder = 11;
+      g.add(mega);
+    }
     // Invisible pick volume for taps.
     const pick = new THREE.Mesh(new THREE.BoxGeometry(0.95, Math.max(0.3, height + 0.35), 0.95), new THREE.MeshBasicMaterial({ visible: false }));
     pick.position.y = Math.max(0.3, height + 0.35) / 2;
@@ -422,6 +441,142 @@ export class Renderer3D {
     const obj = { sig, group: g, pick, height };
     this.lotObjs.set(lot.id, obj);
     return obj;
+  }
+
+  // -------------------------------------------------------- parks ----
+  syncParks(s) {
+    const parks = s.parks || [];
+    const sig = parks.map(p => `${p.x},${p.y},${p.type}`).join('|');
+    if (sig === this.parkSig) return;
+    this.parkSig = sig;
+    this.parkGroup.clear();
+    const used = new Set(parks.map(p => p.x + ',' + p.y));
+    // Clear the default trees off landscaped tiles.
+    const m = new THREE.Matrix4(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    this.trees.list.forEach(([x, z, sc, key], i) => {
+      if (used.has(key)) { this.trees.trunk.setMatrixAt(i, zero); this.trees.crown.setMatrixAt(i, zero); return; }
+      m.makeScale(sc, sc, sc).setPosition(x, 0.09 + 0.11 * sc, z); this.trees.trunk.setMatrixAt(i, m);
+      m.makeScale(sc, sc * 1.15, sc).setPosition(x, 0.09 + 0.33 * sc, z); this.trees.crown.setMatrixAt(i, m);
+    });
+    this.trees.trunk.instanceMatrix.needsUpdate = this.trees.crown.instanceMatrix.needsUpdate = true;
+    const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...extra });
+    for (const p of parks) {
+      const g = new THREE.Group();
+      g.position.set(wx(p.x), 0.1, wz(p.y));
+      const add = (geo, mat, x, y, z) => { const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true; g.add(mesh); return mesh; };
+      add(new THREE.BoxGeometry(0.92, 0.03, 0.92), std(p.type === 'garden' ? '#6cbf4f' : '#d8d2c4'), 0, 0.015, 0);
+      if (p.type === 'garden') {
+        for (const [x, z] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]]) add(new THREE.BoxGeometry(0.22, 0.09, 0.22), std('#2f7a3a'), x, 0.07, z);
+        const cols = ['#ff6b8a', '#ffd23f', '#c77dff', '#ffffff'];
+        for (let i = 0; i < 14; i++) add(new THREE.SphereGeometry(0.025, 6, 4), std(cols[i % 4]), -0.35 + noise(p.x, i) * 0.7, 0.06, -0.35 + noise(p.y, i + 7) * 0.7);
+        add(new THREE.CylinderGeometry(0.04, 0.05, 0.18, 6), std('#6b4a2b'), 0, 0.1, 0);
+        add(new THREE.IcosahedronGeometry(0.2, 0), std('#4fa646', { flatShading: true }), 0, 0.3, 0);
+      } else if (p.type === 'fountain') {
+        add(new THREE.CylinderGeometry(0.34, 0.36, 0.08, 20), std('#bfb6a6'), 0, 0.06, 0);
+        add(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 20), std('#5ab3e0', { roughness: 0.15 }), 0, 0.1, 0);
+        add(new THREE.CylinderGeometry(0.04, 0.06, 0.26, 8), std('#bfb6a6'), 0, 0.2, 0);
+        const spray = add(new THREE.SphereGeometry(0.08, 10, 8), new THREE.MeshBasicMaterial({ color: '#cfefff', transparent: true, opacity: 0.6 }), 0, 0.36, 0);
+        g.userData.spray = spray;
+      } else if (p.type === 'statue') {
+        add(new THREE.BoxGeometry(0.26, 0.18, 0.26), std('#bfb6a6'), 0, 0.12, 0);
+        add(new THREE.CylinderGeometry(0.05, 0.07, 0.32, 8), std('#7d6a3a', { metalness: 0.6, roughness: 0.4 }), 0, 0.37, 0);
+        add(new THREE.SphereGeometry(0.06, 8, 6), std('#7d6a3a', { metalness: 0.6, roughness: 0.4 }), 0, 0.58, 0);
+        add(new THREE.BoxGeometry(0.03, 0.18, 0.03), std('#7d6a3a', { metalness: 0.6 }), 0.07, 0.62, 0);
+      } else {
+        const knot = add(new THREE.TorusKnotGeometry(0.13, 0.035, 64, 8), new THREE.MeshStandardMaterial({ color: '#9fe6ff', emissive: '#4fc3ff', emissiveIntensity: 0.8, metalness: 0.5, roughness: 0.2 }), 0, 0.36, 0);
+        g.userData.spin = knot;
+      }
+      this.parkGroup.add(g);
+    }
+  }
+
+  // ------------------------------------------------------ overlays ----
+  // Colour each block by a city statistic, with a label floating over it.
+  setOverlay(mode) { this.overlay = mode; this.overlayAt = 0; }
+  overlayData(s) {
+    const mode = this.overlay;
+    return DISTRICTS.map((D, d) => {
+      const ids = MAP.districtLots[d];
+      if (mode === 'demand') {
+        // What locals can't get: the most-missed kind of business.
+        const tally = {};
+        for (const [k, v] of Object.entries(s.chatter[d] || {})) {
+          const [why, type] = k.split('|');
+          if (why === 'none' || why === 'closed' || why === 'queue' || why === 'stockout') tally[type] = (tally[type] || 0) + v;
+        }
+        const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+        const total = Object.values(tally).reduce((a, b) => a + b, 0);
+        return { v: total, label: top ? `${BIZ[top[0]].icon} ${Math.round(total)}` : '😊' };
+      }
+      if (mode === 'traffic') {
+        let c = 0;
+        for (const l of s.lots) if (l.business && l.district === d) c += l.business.yesterday ? l.business.yesterday.cust : l.business.today.cust;
+        return { v: c, label: `👣 ${Math.round(c)}` };
+      }
+      if (mode === 'wealth') {
+        const st = blockStars(s, d);
+        return { v: st, label: `${'★'.repeat(Math.floor(st))}${st % 1 >= 0.5 ? '½' : ''} ${Math.round(D.mix[2] * 100)}%💎` };
+      }
+      const v = ids.reduce((a, id) => a + landValue(s, s.lots[id]), 0) / ids.length;
+      return { v, label: money(v) };
+    });
+  }
+  updateOverlay(s) {
+    if (this.overlay === 'off') { if (this.overlayGroup.children.length) this.overlayGroup.clear(); return; }
+    if (this.clock < this.overlayAt) return;
+    this.overlayAt = this.clock + 1.2;
+    this.overlayGroup.clear();
+    const data = this.overlayData(s);
+    const max = Math.max(1e-6, ...data.map(x => x.v));
+    data.forEach((x, d) => {
+      const b = MAP.distBlock[d];
+      const k = x.v / max;
+      // Cool blue (low) through yellow to hot red (high).
+      const col = new THREE.Color().setHSL(0.62 - 0.62 * k, 0.85, 0.5);
+      const plane = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.02 + k * 0.5, 2.05), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.45, depthWrite: false }));
+      plane.position.set(wx(b.bx) + 0.5, 0.15 + (0.02 + k * 0.5) / 2, wz(b.by) + 0.5);
+      this.overlayGroup.add(plane);
+      const tex = canvasTex(256, 72, (g) => {
+        g.fillStyle = 'rgba(10,14,30,0.85)';
+        g.beginPath(); g.roundRect(4, 4, 248, 64, 18); g.fill();
+        g.fillStyle = '#fff'; g.font = 'bold 34px system-ui,"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(x.label, 128, 38);
+      });
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, sizeAttenuation: false }));
+      sp.scale.set(0.12, 0.034, 1);
+      sp.position.set(wx(b.bx) + 0.5, 0.9 + k * 0.5, wz(b.by) + 0.5);
+      sp.renderOrder = 20;
+      this.overlayGroup.add(sp);
+    });
+  }
+
+  // ---------------------------------------------------------- rain ----
+  buildRain() {
+    const n = 900;
+    const pos = new Float32Array(n * 6);
+    for (let i = 0; i < n; i++) {
+      const x = (Math.random() - 0.5) * 22, y = Math.random() * 9, z = (Math.random() - 0.5) * 18;
+      pos.set([x, y, z, x + 0.05, y - 0.35, z], i * 6);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.rain = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: '#cfe6ff', transparent: true, opacity: 0.45 }));
+    this.rain.visible = false;
+    this.rain.frustumCulled = false;
+    this.scene.add(this.rain);
+  }
+  updateRain(s, dt) {
+    const raining = s.events?.some(e => e.id === 'rain');
+    this.rain.visible = !!raining;
+    if (!raining) return;
+    const a = this.rain.geometry.attributes.position.array;
+    for (let i = 0; i < a.length; i += 6) {
+      a[i + 1] -= dt * 9; a[i + 4] -= dt * 9;
+      if (a[i + 4] < 0) { a[i + 1] += 9; a[i + 4] += 9; }
+    }
+    this.rain.geometry.attributes.position.needsUpdate = true;
+    this.rain.position.set(this.cam.x, 0, this.cam.z);
   }
 
   // ------------------------------------------------------- people ----
@@ -781,6 +936,16 @@ export class Renderer3D {
       this.selRing.material.opacity = 0.55 + 0.45 * Math.sin(this.clock * 5);
       if (lot.kind === 'prop') this.districtLine.add(this.blockBorder(MAP.distBlock[lot.district], DISTRICTS[lot.district].color, 0.04, 0.13));
     } else this.selRing.visible = false;
+
+    this.syncParks(s);
+    for (const g of this.parkGroup.children) {
+      if (g.userData.spray) g.userData.spray.scale.setScalar(0.85 + 0.25 * Math.sin(this.clock * 6 + g.position.x));
+      if (g.userData.spin) g.userData.spin.rotation.y += dt * 0.8;
+    }
+    this.updateOverlay(s);
+    this.updateRain(s, dt);
+    const raining = s.events?.some(e => e.id === 'rain');
+    if (raining) { this.scene.background.lerp(new THREE.Color('#5d6b7a'), 0.45); this.sun.intensity *= 0.55; }
 
     const T = s.day * 24 + hourF;
     this.updatePeople(s, T);

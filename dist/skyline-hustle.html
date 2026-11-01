@@ -356,6 +356,31 @@ h3 em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(
 
 body.voting #toasts { top: calc(186px + var(--safe-t)); }
 
+/* ------------------------------------------------- shops, staff, maps -- */
+.seg.tabs { margin: 8px 0 4px; }
+.seg.tabs button { font-size: 12px; padding: 6px 2px; min-height: 34px; }
+.chart { margin: 6px 0; }
+.chart small { color: var(--dim); font-size: 11px; }
+.chart svg { display: block; width: 100%; height: 46px; background: rgba(255,255,255,0.03); border-radius: 8px; }
+.card.staff { padding: 8px 10px; }
+.card.staff .grow { flex: 1; min-width: 0; }
+.card.staff .grow b { display: block; font-size: 14px; }
+.card.staff small { color: var(--dim); font-size: 11.5px; }
+.card.staff .btn.small { min-height: 30px; padding: 4px 7px; font-size: 11.5px; flex: 0 0 auto; }
+.card.staff .row { gap: 5px; }
+.skill { color: #ffd23f; font-size: 12px; letter-spacing: -1px; white-space: nowrap; }
+.meter.grow { flex: 1; margin: 0; }
+.chat small { font-style: normal; }
+#camctl button.on { background: var(--you); color: #032530; }
+#layers {
+  position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); top: calc(214px + var(--safe-t));
+  width: min(94vw, 420px); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 6px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+#layers .seg button { display: flex; flex-direction: column; align-items: center; font-size: 17px; line-height: 1.1; padding: 5px 1px; }
+#layers .seg button small { font-size: 9.5px; }
+@media (max-height: 500px) { #layers { top: auto; bottom: 60px; left: 8px; transform: none; width: min(60vw, 420px); } }
+
 </style>
 </head>
 <body>
@@ -393,7 +418,9 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
   <button data-cam="right" aria-label="Rotate right">⟳</button>
   <button data-cam="tilt" aria-label="Tilt">⛰</button>
   <button data-cam="home" aria-label="Whole city">⌂</button>
+  <button data-cam="layers" aria-label="Map layers">🗺️</button>
 </div>
+<div id="layers" class="hidden"></div>
 
 <section id="auction" class="hidden" aria-live="polite"></section>
 
@@ -474,7 +501,11 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
           (or the city) ground rent every night.</li>
         <li>Build <b>apartments</b> on any land you own. Residents become customers for every shop nearby.</li>
         <li>The city has <b>8 colour districts</b>. Own <b>every lot of a colour</b> and its ground rent and apartment rent <b>double</b>.</li>
-        <li>Run each shop: <b>price</b>, <b>staff</b>, <b>opening hours</b> and <b>stock</b>. Food spoils overnight; empty shelves turn customers away.</li>
+        <li>Run each shop: <b>price</b>, <b>opening hours</b> and <b>stock</b>. Food spoils overnight; empty shelves turn customers away.</li>
+        <li>Your <b>staff</b> are people: hire from the job seekers, train them, give raises, make one the manager. Overworked or underpaid staff turn grumpy and quit.</li>
+        <li>Each shop's <b>Customers</b> tab shows what people say about it. <b>Promote</b> runs ad campaigns. Build extra <b>floors</b> for more room.</li>
+        <li>Own half a block to build <b>parks</b>: more stars, wealthier shoppers, higher rents. On your own land you can <b>buy out</b> a rival's shop.</li>
+        <li>Commission <b>market surveys</b>, or tap 🗺️ for map layers showing unmet demand, customers, appeal and land value.</li>
         <li>Every person walking the streets is a real <b>citizen</b> with needs, a budget and opinions, heading to a real shop.
           Tap one to see what they want. Each block's <b>word on the street</b> tells you what's missing.</li>
         <li>Time moves through the <b>eras</b>, from the 1930s onward: new kinds of business, smarter fit-outs and taller buildings unlock as the years pass.</li>
@@ -546,7 +577,14 @@ const UTILITY_NAMES = ['Volt Works', 'Clearwater Works'];
 // Daily fare per station, by how many stations the same owner holds.
 const STATION_FARE = [0, 300, 520, 800, 1150];
 // Utilities collect a cut of every business's daily overhead bill.
-const UTILITY_CUT = [0, 0.30, 0.45];   // per utility, owning 1 / 2
+const UTILITY_CUT = [0, 0.55, 0.8];   // share of its own kind of bill, owning 1 / 2 utilities
+// Each business's nightly bill: how heavy a user it is, and the split
+// between power (Volt Works) and water (Clearwater Works).
+const BIZ_UTIL = {
+  cafe: [1.0, 0.45], burger: [1.2, 0.4], smoothie: [0.9, 0.55], bistro: [1.1, 0.45], grocer: [1.1, 0.25],
+  pharmacy: [0.8, 0.2], boutique: [0.7, 0.1], gadget: [1.2, 0.05], gym: [1.4, 0.5], cinema: [1.6, 0.1],
+  arcade: [1.8, 0.05], club: [1.5, 0.25], hotel: [1.8, 0.6],
+};
 
 // Tourists a transit block / park sends into neighbouring districts.
 const TRANSIT_TOURISTS = 650;
@@ -633,7 +671,47 @@ const FIT_LEVELS = [
   { name: 'Smart',    appeal: 1.28, cap: 1.15, costMult: 0.35, year: 1936 },
   { name: 'Flagship', appeal: 1.60, cap: 1.30, costMult: 0.70, year: 1960 },
 ];
-const MAX_STAFF = 8;
+const MAX_STAFF = 8;            // per shop floor beyond the first: +3
+
+// ------------------------------------------------------------- staff ----
+// Servers serve customers, stock clerks re-stock shelves during the day,
+// a manager lifts everyone's morale and the shop's service. Each person has
+// a skill (0.5 - 1.6), an hourly wage and a morale (0 - 1).
+const STAFF_ROLES = {
+  server:  { name: 'Server',      icon: '🧑‍🍳', pay: 1.0 },
+  clerk:   { name: 'Stock clerk', icon: '📦', pay: 0.9 },
+  manager: { name: 'Manager',     icon: '👔', pay: 1.7 },
+};
+const TRAIN_DAYS = 2;
+const QUIT_MORALE = 0.22;
+const MAX_FLOORS = 3;            // shop floors (capacity, stock room, staff)
+const FLOOR_COST = 0.55;         // each extra floor x build cost
+
+// ----------------------------------------------------- block appeal ----
+// Landlords holding at least half a block can landscape its open spaces.
+// Appeal stars draw wealthy shoppers and visitors and lift rents.
+const PARKS = [
+  { id: 'garden',   name: 'Garden',         icon: '🌳', cost: 4000,  stars: 0.75, year: 1930 },
+  { id: 'fountain', name: 'Fountain plaza', icon: '⛲', cost: 11000, stars: 1.25, year: 1930 },
+  { id: 'statue',   name: 'Monument',       icon: '🗽', cost: 24000, stars: 2.0,  year: 1950 },
+  { id: 'sculpture',name: 'Light sculpture',icon: '✨', cost: 30000, stars: 2.4,  year: 1990 },
+];
+const MAX_STARS = 5;
+
+// --------------------------------------------------------- marketing ----
+const PROMOS = [
+  { id: 'flyers', name: 'Flyers',          icon: '📄', year: 1930, cost: 0.03, days: 3, boost: 1.15 },
+  { id: 'radio',  name: 'Radio spot',      icon: '📻', year: 1930, cost: 0.09, days: 5, boost: 1.3 },
+  { id: 'tv',     name: 'TV commercial',   icon: '📺', year: 1955, cost: 0.18, days: 6, boost: 1.5 },
+  { id: 'social', name: 'Social campaign', icon: '📱', year: 2005, cost: 0.12, days: 5, boost: 1.45 },
+];
+
+// --------------------------------------------------------- research ----
+const SURVEY_COST = 1500;        // per block; results last SURVEY_DAYS
+const SURVEY_DAYS = 5;
+// Landlords can force-buy a rival's shop standing on their land.
+const BUYOUT_MULT = 1.6;         // x the shop's value
+const BUYOUT_SET_MULT = 1.05;    // ... if the landlord owns the whole colour set
 
 // -------------------------------------------------------------- stock ----
 // Deliveries arrive at 06:00 and top shelves up to the target. Food spoils
@@ -792,7 +870,7 @@ const EVENTS = [
   { id: 'concert',   days: [1, 1], weight: 2, district: true, text: d => `Open-air concert near ${d}: late-night crowds expected.`, tourists: 1200, mods: { club: 1.5, bistro: 1.2, burger: 1.2 } },
 ];
 
-return { MAP_W, MAP_H, BLOCK_COLS, BLOCK_ROWS, BLOCK_LAYOUT, DISTRICTS, SEGMENTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE, STATION_NAMES, UTILITY_NAMES, STATION_FARE, UTILITY_CUT, TRANSIT_TOURISTS, PARK_TOURISTS, BUSINESSES, BIZ, bizName, eraDemand, NEEDS, PRICE_MIN, PRICE_MAX, PRICE_STEP, priceLabel, FIT_LEVELS, MAX_STAFF, DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, APT_NAMES, APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, YEAR_DAYS, TECH, techAt, ERAS, eraName, AUCTION_HOURS, AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, PEOPLE_PER_CITIZEN, WALK_RANGE, DISTANCE_FALLOFF, FIRST_NAMES, LAST_NAMES, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV, SECONDS_PER_HOUR, SPEEDS, DAY_NAMES, START_CASH, RIVALS, HUMAN_COLOR, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, GOAL_TEXT, DIFFICULTY, EVENTS };
+return { MAP_W, MAP_H, BLOCK_COLS, BLOCK_ROWS, BLOCK_LAYOUT, DISTRICTS, SEGMENTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE, STATION_NAMES, UTILITY_NAMES, STATION_FARE, UTILITY_CUT, BIZ_UTIL, TRANSIT_TOURISTS, PARK_TOURISTS, BUSINESSES, BIZ, bizName, eraDemand, NEEDS, PRICE_MIN, PRICE_MAX, PRICE_STEP, priceLabel, FIT_LEVELS, MAX_STAFF, STAFF_ROLES, TRAIN_DAYS, QUIT_MORALE, MAX_FLOORS, FLOOR_COST, PARKS, MAX_STARS, PROMOS, SURVEY_COST, SURVEY_DAYS, BUYOUT_MULT, BUYOUT_SET_MULT, DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, APT_NAMES, APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, YEAR_DAYS, TECH, techAt, ERAS, eraName, AUCTION_HOURS, AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, PEOPLE_PER_CITIZEN, WALK_RANGE, DISTANCE_FALLOFF, FIRST_NAMES, LAST_NAMES, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV, SECONDS_PER_HOUR, SPEEDS, DAY_NAMES, START_CASH, RIVALS, HUMAN_COLOR, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, GOAL_TEXT, DIFFICULTY, EVENTS };
 })();
 
 /* ===== map.js ===== */
@@ -957,12 +1035,135 @@ const STATION_TILES = MAP.lotDefs.filter(l => l.kind === 'station').map(l => [l.
 return { rand, MAP, ROADS, tileDist, roadPath, BLOCK_TILES, STATION_TILES };
 })();
 
+/* ===== staff.js ===== */
+__mods.staff = (() => {
+// Skyline Hustle - shop staff. Every shop has a team of named people:
+//
+//   servers   serve customers (they set how many the shop handles an hour)
+//   clerks    re-stock the shelves at 13:00 and cut spoilage
+//   manager   one per shop: lifts everyone's morale and the service
+//
+// Each person has a skill (grows with experience and training), an hourly
+// wage and a morale. Morale follows pay, hours, stress and management; a
+// fed-up employee quits. Pure helpers only: the actions live in sim.js.
+
+const { BIZ, STAFF_ROLES, MAX_STAFF, MAX_FLOORS, FIRST_NAMES, LAST_NAMES, QUIT_MORALE, TRAIN_DAYS } = __mods.data;
+const { rand } = __mods.map;
+
+const ROLE_WEIGHT = { server: 1, manager: 0.5, clerk: 0.25 };   // share of a server's throughput
+
+function fairPay(type, role, skill) {
+  return BIZ[type].wage * STAFF_ROLES[role].pay * (0.6 + 0.45 * skill);
+}
+
+function maxStaff(b) {
+  return MAX_STAFF + 3 * ((b.floors || 1) - 1);
+}
+const floorCap = floors => 1 + 0.6 * ((floors || 1) - 1);
+const clamp01 = v => Math.max(0, Math.min(1, v));
+
+function personName(s) {
+  return `${FIRST_NAMES[Math.floor(rand(s) * FIRST_NAMES.length)]} ${LAST_NAMES[Math.floor(rand(s) * LAST_NAMES.length)]}`;
+}
+
+function makeStaff(s, type, role = 'server', skill = null) {
+  const sk = skill ?? 0.55 + rand(s) * 0.75 + (rand(s) < 0.12 ? 0.3 : 0);
+  return {
+    id: (s.staffSeq = (s.staffSeq || 0) + 1),
+    name: personName(s), role, skill: Math.round(Math.min(1.6, sk) * 100) / 100,
+    pay: Math.round(fairPay(type, role, sk) * (0.95 + rand(s) * 0.15) * 10) / 10,
+    morale: 0.72, train: 0, days: 0,
+  };
+}
+
+// Three people looking for work at this shop; refreshed every night.
+function refreshCandidates(s, b) {
+  b.cands = [0, 1, 2].map(() => {
+    const c = makeStaff(s, b.type, 'server');
+    c.pay = Math.round(fairPay(b.type, 'server', c.skill) * (0.88 + rand(s) * 0.3) * 10) / 10;
+    return c;
+  });
+}
+
+function effectiveness(m) {
+  return m.skill * (0.7 + 0.3 * m.morale) * (m.train > 0 ? 0.5 : 1);
+}
+
+// Throughput in "server equivalents". Hypothetical shops (forecasts) have
+// only a head count.
+function teamPower(b) {
+  if (!b.team) return b.staff;
+  let p = 0;
+  for (const m of b.team) p += ROLE_WEIGHT[m.role] * effectiveness(m);
+  return p;
+}
+function teamWage(b) {
+  if (!b.team) return b.staff * BIZ[b.type].wage;
+  let w = 0;
+  for (const m of b.team) w += m.pay;
+  return w;
+}
+const servers = b => (b.team ? b.team.filter(m => m.role === 'server').length : b.staff);
+const clerks = b => (b.team ? b.team.filter(m => m.role === 'clerk').length : 0);
+const manager = b => (b.team ? b.team.find(m => m.role === 'manager') : null);
+function avgMorale(b) {
+  if (!b.team || !b.team.length) return 0.7;
+  return b.team.reduce((a, m) => a + m.morale, 0) / b.team.length;
+}
+function avgSkill(b) {
+  if (!b.team || !b.team.length) return 1;
+  return b.team.reduce((a, m) => a + m.skill, 0) / b.team.length;
+}
+// Service multiplier on how attractive the shop is.
+function serviceFactor(b) {
+  if (!b.team) return 1;
+  const mg = manager(b);
+  const mood = 0.85 + 0.3 * avgMorale(b);          // grumpy staff put people off
+  return mood * (mg ? 1 + 0.1 * effectiveness(mg) : 1);
+}
+
+function syncHeadcount(b) {
+  b.staff = servers(b);
+}
+
+// Nightly: experience, training, morale, quitting. Returns names who quit.
+function staffNight(s, b) {
+  if (!b.team) return [];
+  const t = b.yesterday || b.today;
+  const asked = t.cust + t.turned;
+  const stress = (t.peak >= 1 ? 0.1 : 0) + (asked && t.turned / asked > 0.1 ? 0.05 : 0);
+  const longHours = 0.025 * Math.max(0, (b.len || 12) - 12);
+  const mg = manager(b);
+  const quit = [];
+  for (const m of b.team) {
+    m.days++;
+    m.skill = Math.min(1.6, m.skill + 0.003);
+    if (m.train > 0 && --m.train === 0) { m.skill = Math.min(1.6, m.skill + 0.2); m.morale = clamp01(m.morale + 0.1); }
+    const payGap = Math.max(-0.25, Math.min(0.25, 0.5 * (m.pay / fairPay(b.type, m.role, m.skill) - 1)));
+    const target = 0.62 + payGap + (mg && mg !== m ? 0.1 : 0) - longHours - stress;
+    m.morale = clamp01(m.morale + 0.3 * (target - m.morale) + (rand(s) - 0.5) * 0.04);
+    if (m.morale < QUIT_MORALE && rand(s) < 0.3) quit.push(m);
+  }
+  if (quit.length) {
+    b.team = b.team.filter(m => !quit.includes(m));
+    syncHeadcount(b);
+  }
+  refreshCandidates(s, b);
+  return quit.map(m => m.name);
+}
+
+
+
+return { TRAIN_DAYS, MAX_FLOORS, fairPay, maxStaff, floorCap, clamp01, makeStaff, refreshCandidates, effectiveness, teamPower, teamWage, servers, clerks, manager, avgMorale, avgSkill, serviceFactor, syncHeadcount, staffNight };
+})();
+
 /* ===== demand.js ===== */
 __mods.demand = (() => {
 // Skyline Hustle - demand curves and shop attributes shared by the citizen
 // simulation (citizens.js), the analytic forecaster (sim.js) and the AI.
 
-const { BUSINESSES, BIZ, FIT_LEVELS, YEAR_DAYS, SCENARIOS, techAt, eraDemand } = __mods.data;
+const { BUSINESSES, BIZ, FIT_LEVELS, YEAR_DAYS, SCENARIOS, DISTRICTS, PARKS, MAX_STARS, techAt, eraDemand } = __mods.data;
+const { teamPower, serviceFactor, floorCap } = __mods.staff;
 
 const inRange = (from, len, h) => ((h - from + 24) % 24) < len;
 function defaultHours(def) {
@@ -1007,15 +1208,29 @@ function modFor(s, def) {
   return (m.all || 1) * (m[def.id] || 1) * (m[def.group] || 1) * eraDemand(def.id, yearOf(s));
 }
 
+// Customers an hour the shop can serve: its team, its floors, its fit-out.
 function capacity(b) {
-  return b.staff * BIZ[b.type].cap * FIT_LEVELS[b.fit].cap;
+  return teamPower(b) * BIZ[b.type].cap * FIT_LEVELS[b.fit].cap * floorCap(b.floors);
 }
+// How attractive the shop is before price and distance.
 function appeal(b) {
-  return FIT_LEVELS[b.fit].appeal * (b.rep ?? 1);
+  return FIT_LEVELS[b.fit].appeal * (b.rep ?? 1) * serviceFactor(b) * (b.promo ? b.promo.boost : 1);
 }
+
+// Block appeal in stars: wealthier districts start higher, parks add more.
+function blockStars(s, d) {
+  if (d < 0) return 0;
+  const mix = DISTRICTS[d].mix;
+  let st = 0.4 + 2.2 * mix[2] + 0.8 * mix[1];
+  for (const p of s.parks || []) if (p.d === d) st += PARKS.find(x => x.id === p.type).stars;
+  return Math.min(MAX_STARS, Math.round(st * 4) / 4);
+}
+// How much each wealth group cares about a block's stars.
+const STAR_TASTE = [0.02, 0.06, 0.13, 0.1];
+const starFactor = (stars, seg) => 1 + STAR_TASTE[seg] * stars;
 const unitCost = def => def.ticket * def.stock;
 
-return { defaultHours, NAT, bizOpen, yearOf, techOf, modFor, capacity, appeal, unitCost };
+return { defaultHours, NAT, bizOpen, yearOf, techOf, modFor, capacity, appeal, blockStars, STAR_TASTE, starFactor, unitCost };
 })();
 
 /* ===== citizens.js ===== */
@@ -1041,7 +1256,8 @@ const {
   OUTSIDE_WEIGHT, DEMAND_SCALE, APT_RESIDENTS, FIRST_NAMES, LAST_NAMES, bizName,
 } = __mods.data;
 const { MAP, rand, tileDist, BLOCK_TILES, STATION_TILES } = __mods.map;
-const { NAT, bizOpen, modFor, capacity, appeal, techOf, yearOf } = __mods.demand;
+const { NAT, bizOpen, modFor, capacity, appeal, techOf, yearOf, blockStars, starFactor } = __mods.demand;
+const { avgMorale, avgSkill, manager } = __mods.staff;
 
 const K = PEOPLE_PER_CITIZEN;
 const NEED_IDX = Object.fromEntries(NEEDS.map((n, i) => [n.id, i]));
@@ -1178,6 +1394,21 @@ function thoughtText(s, reason, type) {
     happy: `Lovely ${n}. I'll be back.`,
   })[reason];
 }
+// Comments about one particular shop (its Customers tab).
+function say(b, key) {
+  const fb = b.today.fb;
+  if (fb) fb[key] = (fb[key] || 0) + K;
+}
+const SHOP_COMMENTS = {
+  great:    { icon: '🤩', good: true,  text: n => `Wonderful service at this ${n}.` },
+  happy:    { icon: '😊', good: true,  text: n => `Nice ${n}. I'll be back.` },
+  slow:     { icon: '🐢', good: false, text: () => 'The staff are slow. Took ages.' },
+  grumpy:   { icon: '😒', good: false, text: () => 'The staff were rude and miserable.' },
+  pricey:   { icon: '💸', good: false, text: () => 'Too expensive for what you get.' },
+  queue:    { icon: '⏳', good: false, text: () => 'The queue was out the door. Gave up.' },
+  stockout: { icon: '📦', good: false, text: () => 'They had sold out.' },
+  closed:   { icon: '🔒', good: false, text: () => 'It was shut when I wanted it.' },
+};
 const CHATTER_ICON = { none: '🤷', closed: '🔒', pricey: '💸', queue: '⏳', stockout: '📦', happy: '😊' };
 
 // ------------------------------------------------------------- hour ----
@@ -1194,7 +1425,7 @@ function citizensHour(s, h) {
     if (!b) continue;
     const def = BIZ[b.type];
     const ni = NEED_IDX[def.need];
-    const entry = { l, b, def, a: appeal(b), queue: [] };
+    const entry = { l, b, def, a: appeal(b), stars: blockStars(s, l.district), mood: avgMorale(b), skill: avgSkill(b), mgr: !!manager(b), queue: [] };
     allShops[ni].push(entry);
     if (bizOpen(b, h)) shops[ni].push(entry);
   }
@@ -1224,7 +1455,7 @@ function citizensHour(s, h) {
     for (const sh of shops[bi]) {
       const dist = tileDist(c.hx, c.hy, sh.l.tx, sh.l.ty);
       if (dist > WALK_RANGE) continue;
-      let w = (sh.def.id === want ? 1 : 0.35) * sh.a * Math.pow(1 / sh.b.price, el) * Math.min(1, Math.exp(-(dist - 2) / DISTANCE_FALLOFF));
+      let w = (sh.def.id === want ? 1 : 0.35) * sh.a * starFactor(sh.stars, c.seg) * Math.pow(1 / sh.b.price, el) * Math.min(1, Math.exp(-(dist - 2) / DISTANCE_FALLOFF));
       if (c.fav === sh.l.id) w *= 1.5;
       if ((c.grudge[sh.l.id] || 0) > day) w *= 0.4;
       cand.push([sh, w, dist]);
@@ -1236,10 +1467,12 @@ function citizensHour(s, h) {
     if (r < out || !cand.length) {
       // Stayed home. Why?
       if (!cand.length) {
-        const shut = allShops[bi].some(sh => sh.def.id === want && tileDist(c.hx, c.hy, sh.l.tx, sh.l.ty) <= WALK_RANGE);
+        const shutShop = allShops[bi].find(sh => sh.def.id === want && tileDist(c.hx, c.hy, sh.l.tx, sh.l.ty) <= WALK_RANGE);
+        const shut = !!shutShop;
+        if (shutShop) say(shutShop.b, 'closed');
         grumble(s, c.d, shut ? 'closed' : 'none', want, c);
         if (shut && bv < 3) continue;           // wait for opening time
-      } else if (best && best.b.price > 1.15) grumble(s, c.d, 'pricey', best.def.id, c);
+      } else if (best && best.b.price > 1.15) { grumble(s, c.d, 'pricey', best.def.id, c); say(best.b, 'pricey'); }
       c.needs[bi] = 0;
       continue;
     }
@@ -1264,6 +1497,15 @@ function citizensHour(s, h) {
         cust += n; capLeft -= n; sh.b.stock -= n;
         c.needs[ni] = 0;
         c.visits++;
+        const t = sh.b.today;
+        if (t.seg) { t.seg[c.seg] += n; t.from[c.d] = (t.from[c.d] || 0) + n; }
+        // What they say on the way out.
+        const r = rand(s);
+        if (sh.mood < 0.4 && r < 0.45) say(sh.b, 'grumpy');
+        else if (sh.skill < 0.8 && r < 0.35) say(sh.b, 'slow');
+        else if (sh.b.price > 1.25 && c.seg < 2 && r < 0.35) say(sh.b, 'pricey');
+        else if (sh.mood > 0.7 && (sh.b.fit >= 2 || sh.mgr) && r < 0.35) say(sh.b, 'great');
+        else if (r < 0.2) say(sh.b, 'happy');
         if (rand(s) < 0.25) c.fav = sh.l.id;
         if (c.fav === sh.l.id && rand(s) < 0.3) c.thought = thoughtText(s, 'happy', sh.def.id);
       } else {
@@ -1272,6 +1514,7 @@ function citizensHour(s, h) {
         // A sold-out shop is remembered for two days; a queue only today.
         c.grudge[sh.l.id] = queue ? day + 1 : day + 2;
         grumble(s, c.d, queue ? 'queue' : 'stockout', sh.def.id, c);
+        say(sh.b, queue ? 'queue' : 'stockout');
       }
       c.busyUntil = now + 1;
       // Animate the trip during the next hour of play.
@@ -1313,7 +1556,7 @@ function tripPhase(t, T) {
   return null;
 }
 
-return { citizenName, buildCitizens, syncResidents, touristsIn, syncTourists, thoughtText, CHATTER_ICON, citizensHour, tripPhase };
+return { citizenName, buildCitizens, syncResidents, touristsIn, syncTourists, thoughtText, SHOP_COMMENTS, CHATTER_ICON, citizensHour, tripPhase };
 })();
 
 /* ===== sim.js ===== */
@@ -1334,9 +1577,11 @@ const {
   LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP,
   LOAN_LTV, START_CASH, RIVALS, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, DIFFICULTY, EVENTS, PRICE_MIN, PRICE_MAX,
   DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, TECH, YEAR_DAYS, GOAL_TEXT, bizName, eraName,
+  BIZ_UTIL, STAFF_ROLES, MAX_FLOORS, FLOOR_COST, PARKS, PROMOS, SURVEY_COST, SURVEY_DAYS, BUYOUT_MULT, BUYOUT_SET_MULT,
 } = __mods.data;
 const { MAP, rand } = __mods.map;
-const { NAT, bizOpen, defaultHours, yearOf, techOf, modFor, capacity, appeal, unitCost } = __mods.demand;
+const { NAT, bizOpen, defaultHours, yearOf, techOf, modFor, capacity, appeal, unitCost, blockStars, starFactor } = __mods.demand;
+const { makeStaff, refreshCandidates, teamWage, staffNight, syncHeadcount, servers, clerks, manager, maxStaff, fairPay, TRAIN_DAYS } = __mods.staff;
 const { buildCitizens, syncResidents, syncTourists, touristsIn, citizensHour } = __mods.citizens;
 
 
@@ -1347,7 +1592,7 @@ function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You'
   const diff = DIFFICULTY[difficulty] || DIFFICULTY.normal;
   const sc = SCENARIOS[scenario];
   const s = {
-    v: 3,
+    v: 4,
     rng: (seed ?? Math.floor(Math.random() * 2 ** 32)) >>> 0,
     day: 1, hour: 7, t: 0,
     scenario, difficulty,
@@ -1424,11 +1669,18 @@ function districtStats(s, d) {
   return { biz, apt };
 }
 
+// Stars added by parks (on top of a district's natural appeal).
+function parkStars(s, d) {
+  let st = 0;
+  for (const p of s.parks || []) if (p.d === d) st += PARKS.find(x => x.id === p.type).stars;
+  return st;
+}
+
 function landValue(s, lot) {
   if (lot.kind !== 'prop') return Math.round(lot.basePrice * (1 + 0.004 * (s.day - 1)) * s.landMod);
   const { biz, apt } = districtStats(s, lot.district);
   return Math.round(lot.basePrice * (1 + LAND_GROWTH_DAY * (s.day - 1)) *
-    (1 + LAND_GROWTH_BIZ * biz + LAND_GROWTH_APT * apt) * s.landMod);
+    (1 + LAND_GROWTH_BIZ * biz + LAND_GROWTH_APT * apt + 0.07 * parkStars(s, lot.district)) * s.landMod);
 }
 
 function setCount(s, pid, d) {
@@ -1452,7 +1704,7 @@ function aptCost(lot, level) {
 }
 function aptRentFor(s, lot) {
   const set = ownsSet(s, lot.owner, lot.district) ? APT_SET_MULT : 1;
-  return Math.round(lot.basePrice * APT_RENT_RATE * APT_RENT[lot.apt] * set * (1 + 0.004 * (s.day - 1)));
+  return Math.round(lot.basePrice * APT_RENT_RATE * APT_RENT[lot.apt] * set * (1 + 0.004 * (s.day - 1)) * (1 + 0.08 * parkStars(s, lot.district)));
 }
 
 function bizValue(b) { return Math.round(b.invested * 0.6 + b.stock * unitCost(BIZ[b.type]) * 0.5); }
@@ -1499,6 +1751,7 @@ function allocate(s, h, pools = null, onlyType = null) {
     (byType[b.type] ||= []).push(l);
   }
   const out = new Map();
+  const stars = DISTRICTS.map((_, d) => blockStars(s, d));
   for (let d = 0; d < DISTRICTS.length; d++) {
     if (pools && !pools.has(d)) continue;
     const seg = segments(s, d);
@@ -1517,7 +1770,7 @@ function allocate(s, h, pools = null, onlyType = null) {
         for (const l of byType[type]) {
           const n = neigh.find(x => x.d === l.district);
           if (!n) { ws.push(0); continue; }
-          const a = n.w * appeal(l.business) * Math.pow(1 / l.business.price, el);
+          const a = n.w * appeal(l.business) * starFactor(stars[l.district], g) * Math.pow(1 / l.business.price, el);
           ws.push(a);
           sum += a;
         }
@@ -1550,7 +1803,7 @@ function refreshMods(s) {
 
 // A new business's default settings.
 function newBizConfig(def) {
-  return { price: 1, staff: 3, fit: 1, ...defaultHours(def) };
+  return { price: 1, staff: 3, fit: 1, floors: 1, ...defaultHours(def) };
 }
 
 // What would this business make per day, right now? Temporarily installs
@@ -1561,10 +1814,13 @@ function estimate(s, lotId, type, ownerId, cfg = {}) {
   const saved = lot.business;
   const def = BIZ[type];
   const base = saved && saved.type === type ? saved : newBizConfig(def);
+  const same = saved && saved.type === type;
   const b = {
-    type, owner: ownerId, rep: saved?.type === type ? saved.rep : 1,
+    type, owner: ownerId, rep: same ? saved.rep : 1, promo: same ? saved.promo : null,
     price: cfg.price ?? base.price, staff: cfg.staff ?? base.staff, fit: cfg.fit ?? base.fit,
-    from: cfg.from ?? base.from, len: cfg.len ?? base.len,
+    from: cfg.from ?? base.from, len: cfg.len ?? base.len, floors: cfg.floors ?? base.floors ?? 1,
+    // The real team counts unless the forecast is asking "what if N servers?"
+    team: same && cfg.staff === undefined ? saved.team : undefined,
   };
   lot.business = b;
   const pools = new Set(MAP.neighbours[lot.district].map(n => n.d));
@@ -1582,10 +1838,15 @@ function estimate(s, lotId, type, ownerId, cfg = {}) {
   const rev = cust * def.ticket * b.price;
   // Goods sold, plus a little waste on perishables.
   const goods = cust * unitCost(def) * (1 + def.perish * 0.15);
-  const wages = b.staff * def.wage * hours;
+  const wages = teamWage(b) * hours;
   const rent = lot.owner === ownerId ? 0 : rentFor(s, lot);
-  const overhead = OVERHEAD_BASE + def.cost * OVERHEAD_RATE;
+  const overhead = billFor(def, b.floors);
   return { cust, lost, rev, goods, wages, rent, overhead, hours, profit: rev - goods - wages - rent - overhead };
+}
+
+// The nightly utilities bill for a business: power + water.
+function billFor(def, floors = 1) {
+  return (OVERHEAD_BASE + def.cost * OVERHEAD_RATE) * (BIZ_UTIL[def.id]?.[0] ?? 1) * (1 + 0.4 * ((floors || 1) - 1));
 }
 
 // ------------------------------------------------------------ clock ----
@@ -1599,7 +1860,9 @@ function stepHour(s, hooks = {}) {
   if (!s.over && hooks.onHour) hooks.onHour(s);
 }
 
-function freshBizDay() { return { cust: 0, turned: 0, rev: 0, cost: 0, peak: 0, rent: 0, waste: 0, delivered: 0, outHours: 0 }; }
+function freshBizDay() {
+  return { cust: 0, turned: 0, rev: 0, cost: 0, peak: 0, rent: 0, waste: 0, delivered: 0, outHours: 0, fb: {}, seg: [0, 0, 0, 0], from: {} };
+}
 
 function deliver(s, lot) {
   const b = lot.business, def = BIZ[b.type];
@@ -1621,6 +1884,8 @@ function autoTarget(b) {
 
 function runHour(s, h) {
   if (h === DELIVERY_HOUR) for (const l of s.lots) if (l.business) deliver(s, l);
+  // Stock clerks top the shelves up again at lunchtime.
+  if (h === 13) for (const l of s.lots) if (l.business && clerks(l.business)) deliver(s, l);
   const visits = citizensHour(s, h);
   s.lastHour = {};
   for (const l of s.lots) {
@@ -1630,7 +1895,7 @@ function runHour(s, h) {
     const p = s.players[b.owner];
     const v = visits.get(l.id) || { cust: 0, turned: 0 };
     const rev = v.cust * def.ticket * b.price;
-    const wages = b.staff * def.wage;
+    const wages = teamWage(b);
     ledger(p, 'sales', rev);
     ledger(p, 'wages', -wages);
     const t = b.today;
@@ -1646,7 +1911,7 @@ function runHour(s, h) {
 function endOfDay(s, hooks) {
   const P = s.players;
   // Ground rent, overheads, spoilage and storage.
-  let overheadPool = 0;
+  const pools = { power: 0, water: 0 };
   for (const l of s.lots) {
     const b = l.business;
     if (!b) continue;
@@ -1659,12 +1924,15 @@ function endOfDay(s, hooks) {
       b.today.cost += r;
       if (l.owner >= 0) ledger(P[l.owner], 'rentIn', r);
     }
-    const o = OVERHEAD_BASE + def.cost * OVERHEAD_RATE;
+    const o = billFor(def, b.floors);
     ledger(tenant, 'overhead', -o);
     b.today.cost += o;
-    overheadPool += o;
+    const water = BIZ_UTIL[def.id]?.[1] ?? 0.3;
+    pools.water += o * water;
+    pools.power += o * (1 - water);
     if (def.perish > 0 && b.stock > 0) {
-      const lost = Math.floor(b.stock * def.perish);
+      // Stock clerks rotate the shelves: less goes off.
+      const lost = Math.floor(b.stock * def.perish * (1 - Math.min(0.6, 0.3 * clerks(b))));
       b.stock -= lost;
       b.today.waste = lost;
     } else if (b.stock > 0) {
@@ -1682,8 +1950,9 @@ function endOfDay(s, hooks) {
   // Utilities take a cut of everyone's bills; stations collect fares.
   for (const p of P) {
     if (p.bankrupt) continue;
-    const utils = s.lots.filter(l => l.kind === 'utility' && l.owner === p.id).length;
-    if (utils) ledger(p, 'utility', overheadPool * UTILITY_CUT[utils] * utils);
+    // Volt Works takes a cut of every power bill, Clearwater of every water bill.
+    const utils = s.lots.filter(l => l.kind === 'utility' && l.owner === p.id);
+    for (const u of utils) ledger(p, 'utility', (u.name.startsWith('Volt') ? pools.power : pools.water) * UTILITY_CUT[utils.length]);
     const stations = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
     if (stations) ledger(p, 'fares', STATION_FARE[stations] * stations * (0.7 + 0.3 * s.touristMult) * (1 + 0.004 * (s.day - 1)));
   }
@@ -1696,7 +1965,13 @@ function endOfDay(s, hooks) {
     if (!b) continue;
     b.yesterday = b.today;
     b.hist.push(Math.round(b.today.rev - b.today.cost));
-    if (b.hist.length > 10) b.hist.shift();
+    if (b.hist.length > 14) b.hist.shift();
+    // What customers say about the shop, remembered over a few days.
+    b.fb = b.fb || {};
+    for (const k in b.fb) { b.fb[k] *= 0.6; if (b.fb[k] < 2) delete b.fb[k]; }
+    for (const k in b.today.fb) b.fb[k] = (b.fb[k] || 0) + b.today.fb[k];
+    if (b.promo && b.promo.until <= s.day) b.promo = null;
+    for (const name of staffNight(s, b)) news(s, `${name} quit your ${bizLabel(s, b.type)} on ${l.name}. Morale was too low.`, 'staff', b.owner);
     b.today = freshBizDay();
   }
   s.cityCustomersYesterday = s.cityCustomersToday;
@@ -1707,6 +1982,9 @@ function endOfDay(s, hooks) {
   if (hooks.onDay) hooks.onDay(s);   // AI reprices, trades, liquidates
 
   for (const p of P) {
+    p.profitHist = p.profitHist || [];
+    p.profitHist.push(Math.round(operating(p.today)));
+    if (p.profitHist.length > 60) p.profitHist.shift();
     p.yesterday = p.today;
     p.today = {};
     p.worthHist.push(netWorth(s, p.id));
@@ -1899,19 +2177,26 @@ function build(s, pid, lotId, type, cfg = {}) {
   const p = s.players[pid], lot = s.lots[lotId], def = BIZ[type];
   if (!canBuild(s, lotId)) return fail('Lot is not free.');
   if (!techOf(s).biz.has(type)) return fail(`Not invented yet: arrives in ${def.year}.`);
-  if (p.cash < def.cost) return fail(`Need ${money(def.cost)}.`);
   const conf = { ...newBizConfig(def), ...cfg };
+  conf.floors = Math.max(1, Math.min(MAX_FLOORS, Math.round(conf.floors || 1)));
+  const cost = buildCost(def, conf.floors);
+  if (p.cash < cost) return fail(`Need ${money(cost)}.`);
   const est = estimate(s, lotId, type, pid, conf);
-  ledger(p, 'capex', -def.cost);
-  lot.business = {
-    type, owner: pid, ...conf, rep: 1,
+  ledger(p, 'capex', -cost);
+  const b = lot.business = {
+    type, owner: pid, ...conf, rep: 1, promo: null, fb: {},
     stock: 0, stockTarget: Math.max(16, Math.round(est.cust * 0.9 / 4) * 4), autoStock: cfg.autoStock ?? true,
-    invested: def.cost, opened: s.day, today: freshBizDay(), yesterday: null, hist: [],
+    invested: cost, opened: s.day, today: freshBizDay(), yesterday: null, hist: [],
   };
+  b.team = Array.from({ length: conf.staff }, () => makeStaff(s, type, 'server', 0.75 + rand(s) * 0.35));
+  syncHeadcount(b);
+  refreshCandidates(s, b);
   deliver(s, lot);                       // opening stock arrives with the builders
   news(s, `${p.company} opened a ${bizLabel(s, type)} on ${lot.name}.`, 'build', pid);
   return { ok: true, msg: `${bizLabel(s, type)} is open for business!` };
 }
+
+const buildCost = (def, floors = 1) => Math.round(def.cost * (1 + FLOOR_COST * ((floors || 1) - 1)) / 100) * 100;
 
 function sellBusiness(s, pid, lotId) {
   const p = s.players[pid], lot = s.lots[lotId], b = lot.business;
@@ -1933,11 +2218,210 @@ function setPrice(s, pid, lotId, price) {
   b.price = Math.round(Math.max(PRICE_MIN, Math.min(PRICE_MAX, price)) * 100) / 100;
   return { ok: true };
 }
-function setStaff(s, pid, lotId, staff) {
+// Quick staffing: hire the best-value candidate or let the weakest server go
+// until the shop has this many servers.
+function setStaff(s, pid, lotId, count) {
   const b = mine(s, pid, lotId);
   if (!b) return fail('Not your business.');
-  b.staff = Math.max(1, Math.min(MAX_STAFF, staff));
-  return { ok: true };
+  count = Math.max(1, Math.min(maxStaff(b), count));
+  let msg = '';
+  while (servers(b) < count && b.team.length < maxStaff(b)) {
+    b.cands = b.cands && b.cands.length ? b.cands : [];
+    let pick = b.cands.sort((x, y) => y.skill / y.pay - x.skill / x.pay)[0];
+    if (pick) b.cands = b.cands.filter(c => c !== pick);
+    else pick = makeStaff(s, b.type, 'server');
+    pick.role = 'server';
+    b.team.push(pick);
+    msg = `Hired ${pick.name}.`;
+  }
+  while (servers(b) > count) {
+    const worst = b.team.filter(m => m.role === 'server').sort((x, y) => x.skill - y.skill)[0];
+    severance(s, b, worst);
+    msg = `Let ${worst.name} go.`;
+  }
+  syncHeadcount(b);
+  return { ok: true, msg };
+}
+function severance(s, b, m) {
+  ledger(s.players[b.owner], 'wages', -m.pay * 10);
+  b.team = b.team.filter(x => x !== m);
+  for (const o of b.team) o.morale = Math.max(0, o.morale - 0.04);
+}
+const member = (b, sid) => b.team.find(m => m.id === sid);
+
+function hireStaff(s, pid, lotId, candId, role = 'server') {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  if (!STAFF_ROLES[role]) return fail('No such job.');
+  const c = (b.cands || []).find(x => x.id === candId);
+  if (!c) return fail('They took another job.');
+  if (b.team.length >= maxStaff(b)) return fail(`No room: ${maxStaff(b)} staff max. Add a floor for more.`);
+  if (role === 'manager' && manager(b)) return fail('The shop already has a manager.');
+  b.cands = b.cands.filter(x => x !== c);
+  c.pay = Math.round(c.pay * STAFF_ROLES[role].pay * 10) / 10;
+  c.role = role;
+  b.team.push(c);
+  syncHeadcount(b);
+  return { ok: true, msg: `${c.name} joins as ${STAFF_ROLES[role].name.toLowerCase()}.` };
+}
+function fireStaff(s, pid, lotId, sid) {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  const m = member(b, sid);
+  if (!m) return fail('Not on the team.');
+  if (b.team.length <= 1) return fail('Someone has to open the shop.');
+  severance(s, b, m);
+  syncHeadcount(b);
+  return { ok: true, msg: `${m.name} has left (paid ${money(m.pay * 10)} severance).` };
+}
+function trainStaff(s, pid, lotId, sid) {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  const m = member(b, sid);
+  if (!m) return fail('Not on the team.');
+  if (m.train > 0) return fail('Already training.');
+  if (m.skill >= 1.55) return fail('Nothing left to teach them.');
+  const cost = Math.round(fairPay(b.type, m.role, m.skill) * 40);
+  if (s.players[pid].cash < cost) return fail(`Need ${money(cost)}.`);
+  ledger(s.players[pid], 'wages', -cost);
+  m.train = TRAIN_DAYS;
+  return { ok: true, msg: `${m.name} is on a course for ${TRAIN_DAYS} days (${money(cost)}).` };
+}
+function trainCost(b, m) { return Math.round(fairPay(b.type, m.role, m.skill) * 40); }
+function raiseStaff(s, pid, lotId, sid) {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  const m = member(b, sid);
+  if (!m) return fail('Not on the team.');
+  if (m.pay > fairPay(b.type, m.role, m.skill) * 1.6) return fail('They are already very well paid.');
+  m.pay = Math.round(m.pay * 1.1 * 10) / 10;
+  m.morale = Math.min(1, m.morale + 0.12);
+  return { ok: true, msg: `${m.name} now earns ${money(m.pay)}/hr.` };
+}
+function setRole(s, pid, lotId, sid, role) {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  const m = member(b, sid);
+  if (!m || !STAFF_ROLES[role]) return fail('Not on the team.');
+  if (role === 'manager' && manager(b) && manager(b) !== m) return fail('The shop already has a manager.');
+  const before = fairPay(b.type, m.role, m.skill);
+  m.pay = Math.round(m.pay * fairPay(b.type, role, m.skill) / before * 10) / 10;
+  if (role === 'manager') m.morale = Math.min(1, m.morale + 0.15);
+  m.role = role;
+  syncHeadcount(b);
+  return { ok: true, msg: `${m.name} is now ${role === 'manager' ? 'the manager' : 'a ' + STAFF_ROLES[role].name.toLowerCase()}.` };
+}
+
+// Extra shop floors: more capacity, more staff, more stock room.
+function floorCost(b) { return Math.round(BIZ[b.type].cost * FLOOR_COST / 100) * 100; }
+function addFloor(s, pid, lotId) {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  if ((b.floors || 1) >= MAX_FLOORS) return fail(`${MAX_FLOORS} shop floors is the most a shop can have.`);
+  const c = floorCost(b);
+  if (s.players[pid].cash < c) return fail(`Need ${money(c)}.`);
+  ledger(s.players[pid], 'capex', -c);
+  b.floors = (b.floors || 1) + 1;
+  b.invested += c;
+  return { ok: true, msg: `Floor ${b.floors} open: more room for customers and staff.` };
+}
+
+// Marketing campaigns.
+function promoCost(b, promo) { return Math.round(BIZ[b.type].cost * promo.cost / 50) * 50; }
+function startPromo(s, pid, lotId, id) {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  const pr = PROMOS.find(x => x.id === id);
+  if (!pr) return fail('No such campaign.');
+  if (yearOf(s) < pr.year) return fail(`${pr.name} arrives in ${pr.year}.`);
+  if (b.promo) return fail('A campaign is already running.');
+  const c = promoCost(b, pr);
+  if (s.players[pid].cash < c) return fail(`Need ${money(c)}.`);
+  ledger(s.players[pid], 'overhead', -c);
+  b.promo = { id, boost: pr.boost, until: s.day + pr.days - 1 };
+  return { ok: true, msg: `${pr.icon} ${pr.name} running for ${pr.days} days.` };
+}
+
+// Parks: whoever holds at least half a block can landscape its open tiles.
+function parkSlots(s, d) {
+  const blk = MAP.distBlock[d];
+  const out = [];
+  for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+    const t = MAP.tiles[blk.by + dy][blk.bx + dx];
+    if (t.kind === 'plaza') out.push([t.x, t.y]);
+  }
+  return out;
+}
+function canLandscape(s, pid, d) {
+  return setCount(s, pid, d) * 2 >= MAP.districtLots[d].length;
+}
+function buildPark(s, pid, d, type) {
+  const pk = PARKS.find(x => x.id === type);
+  if (!pk || d < 0 || d >= DISTRICTS.length) return fail('No such park.');
+  if (yearOf(s) < pk.year) return fail(`${pk.name}s arrive in ${pk.year}.`);
+  if (!canLandscape(s, pid, d)) return fail('You must own at least half the block to landscape it.');
+  s.parks = s.parks || [];
+  const used = new Set(s.parks.filter(p => p.d === d).map(p => p.x + ',' + p.y));
+  const slot = parkSlots(s, d).find(([x, y]) => !used.has(x + ',' + y));
+  if (!slot) {
+    // Replace the block's weakest park if this one is better.
+    const weakest = s.parks.filter(p => p.d === d).sort((a, b) => PARKS.findIndex(x => x.id === a.type) - PARKS.findIndex(x => x.id === b.type))[0];
+    if (!weakest || PARKS.findIndex(x => x.id === weakest.type) >= PARKS.indexOf(pk)) return fail('No open space left on this block.');
+    s.parks = s.parks.filter(p => p !== weakest);
+    return buildPark(s, pid, d, type);
+  }
+  if (s.players[pid].cash < pk.cost) return fail(`Need ${money(pk.cost)}.`);
+  ledger(s.players[pid], 'capex', -pk.cost);
+  s.parks.push({ d, x: slot[0], y: slot[1], type, owner: pid, day: s.day });
+  news(s, `${s.players[pid].company} built a ${pk.name.toLowerCase()} in ${DISTRICTS[d].name}. ${pk.icon}`, 'build', pid);
+  return { ok: true, msg: `${pk.icon} ${pk.name} built: ${DISTRICTS[d].name} now has ${blockStars(s, d)} stars.` };
+}
+
+// Landlords may buy out a rival's shop standing on their land.
+function buyoutPrice(s, lot) {
+  const b = lot.business;
+  if (!b) return 0;
+  const mult = ownsSet(s, lot.owner, lot.district) ? BUYOUT_SET_MULT : BUYOUT_MULT;
+  return Math.round((b.invested * 0.6 * mult + b.stock * unitCost(BIZ[b.type])) / 100) * 100;
+}
+function buyout(s, pid, lotId) {
+  const lot = s.lots[lotId], b = lot.business;
+  if (!b || b.owner === pid) return fail('Nothing to buy out.');
+  if (lot.owner !== pid) return fail('You can only buy out shops on your own land.');
+  const price = buyoutPrice(s, lot);
+  if (s.players[pid].cash < price) return fail(`Need ${money(price)}.`);
+  const seller = s.players[b.owner];
+  ledger(s.players[pid], 'trade', -price);
+  ledger(seller, 'trade', price);
+  b.owner = pid;
+  b.invested = Math.round(price * 0.8);
+  for (const m of b.team) m.morale = Math.max(0, m.morale - 0.1);
+  news(s, `${s.players[pid].company} bought out ${seller.company}'s ${bizLabel(s, b.type)} on ${lot.name} for ${money(price)}.`, 'deal', pid);
+  if (seller.human) news(s, `${s.players[pid].company} bought out your ${bizLabel(s, b.type)} on ${lot.name}. You received ${money(price)}.`, 'staff', seller.id);
+  return { ok: true, msg: `It's yours: ${bizLabel(s, b.type)} bought for ${money(price)}.` };
+}
+
+// Market research: what would do best on this block, and what people miss.
+function survey(s, pid, d) {
+  if (d < 0 || d >= DISTRICTS.length) return fail('No such block.');
+  if (s.players[pid].cash < SURVEY_COST) return fail(`Need ${money(SURVEY_COST)}.`);
+  ledger(s.players[pid], 'overhead', -SURVEY_COST);
+  const tech = techOf(s);
+  const ids = MAP.districtLots[d];
+  const probe = ids.find(id => !s.lots[id].business) ?? ids[0];
+  const items = BUSINESSES.filter(def => tech.biz.has(def.id)).map(def => {
+    let e;
+    const saved = s.lots[probe].business;
+    s.lots[probe].business = null;
+    try { e = estimate(s, probe, def.id, pid, {}); } finally { s.lots[probe].business = saved; }
+    let wanted = 0;
+    for (const [k, v] of Object.entries(s.chatter[d] || {})) if (k.endsWith('|' + def.id)) wanted += v;
+    const rivals = s.lots.filter(l => l.business && l.business.type === def.id && MAP.neighbours[d].some(n => n.d === l.district && n.w >= 0.3)).length;
+    return { type: def.id, cust: Math.round(e.cust), profit: Math.round(e.profit), wanted: Math.round(wanted), rivals };
+  }).sort((a, b) => b.profit - a.profit);
+  s.surveys = s.surveys || {};
+  (s.surveys[pid] ||= {})[d] = { day: s.day, until: s.day + SURVEY_DAYS, items };
+  return { ok: true, msg: `Survey of ${DISTRICTS[d].name} is in.` };
 }
 function setHours(s, pid, lotId, from, len) {
   const b = mine(s, pid, lotId);
@@ -2111,12 +2595,12 @@ function serialize(s) {
 }
 function deserialize(json) {
   const s = JSON.parse(json);
-  if (!s || s.v !== 3 || !Array.isArray(s.lots)) throw new Error('bad save');
+  if (!s || s.v !== 4 || !Array.isArray(s.lots)) throw new Error('bad save');
   buildCitizens(s);
   return s;
 }
 
-return { MAP, rand, yearOf, techOf, capacity, bizOpen, createGame, news, bizLabel, ledger, LEDGER_LABELS, operating, dayName, districtStats, landValue, setCount, ownsSet, setsOwned, rentFor, aptCost, aptRentFor, bizValue, playerAssets, netWorth, loanLimit, districtPopulation, allocate, newBizConfig, estimate, stepHour, deliver, autoTarget, runHour, bankrupt, goalProgress, goalText, humans, grantLand, petition, nextAuctionSlot, sellLand, canBuild, build, sellBusiness, setPrice, setStaff, setHours, setStock, rushDelivery, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize };
+return { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars, createGame, news, bizLabel, ledger, LEDGER_LABELS, operating, dayName, districtStats, parkStars, landValue, setCount, ownsSet, setsOwned, rentFor, aptCost, aptRentFor, bizValue, playerAssets, netWorth, loanLimit, districtPopulation, allocate, newBizConfig, estimate, billFor, stepHour, deliver, autoTarget, runHour, bankrupt, goalProgress, goalText, humans, grantLand, petition, nextAuctionSlot, sellLand, canBuild, build, buildCost, sellBusiness, setPrice, setStaff, hireStaff, fireStaff, trainStaff, trainCost, raiseStaff, setRole, floorCost, addFloor, promoCost, startPromo, parkSlots, canLandscape, buildPark, buyoutPrice, buyout, survey, setHours, setStock, rushDelivery, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize };
 })();
 
 /* ===== ai.js ===== */
@@ -2132,13 +2616,15 @@ __mods.ai = (() => {
 // to complete a colour set. At auctions it bids up to what the lot is worth
 // to it: more if it completes a set or blocks a rival's.
 
-const { BUSINESSES, BIZ, DISTRICTS, DIFFICULTY, MAX_STAFF, STATION_FARE, UTILITY_CUT,
-  OVERHEAD_BASE, OVERHEAD_RATE, APT_RESIDENTS, LOAN_STEP, PRICE_MIN, PRICE_MAX } = __mods.data;
+const { BUSINESSES, BIZ, DISTRICTS, DIFFICULTY, STATION_FARE, UTILITY_CUT,
+  OVERHEAD_BASE, OVERHEAD_RATE, APT_RESIDENTS, LOAN_STEP, PRICE_MIN, PRICE_MAX, PARKS, PROMOS } = __mods.data;
 const {
   MAP, rand, techOf, estimate, landValue, rentFor, ownsSet, setCount, netWorth, build, setPrice, setStaff,
   setHours, sellBusiness, upgradeFit, fitCost, aptCheck, buildApt, aptRentFor, askingPrice, transfer, sellLand,
-  loanLimit, takeLoan, repayLoan, money, news, newBizConfig,
+  loanLimit, takeLoan, repayLoan, money, news, newBizConfig, yearOf, aptRentFor: aptRent, canLandscape, parkSlots,
+  buildPark, buyoutPrice, buyout, startPromo, promoCost, hireStaff, setRole, raiseStaff, trainStaff, trainCost,
 } = __mods.sim;
+const { maxStaff, clerks, manager, avgMorale } = __mods.staff;
 
 const STYLE = {
   baron:   { build: 0.85, land: 1.35, apt: 1.5, set: 1.6, price: [0.9, 1.25],  start: 1.0,  fit: 0.5, prefer: [] },
@@ -2215,6 +2701,40 @@ function think1(s, p) {
     if (gain > 0) moves.push({ roi: gain / c, cost: c, run: () => upgradeFit(s, p.id, lot.id) });
   }
 
+  // Landscape a block it controls: lifts rents, land values and custom.
+  for (let d = 0; d < DISTRICTS.length; d++) {
+    if (!canLandscape(s, p.id, d)) continue;
+    const used = (s.parks || []).filter(x => x.d === d).length;
+    if (used >= parkSlots(s, d).length) continue;
+    const pk = [...PARKS].reverse().find(x => yearOf(s) >= x.year && x.cost < p.cash * 0.3);
+    if (!pk) continue;
+    let income = 0;
+    for (const id of MAP.districtLots[d]) { const l = s.lots[id]; if (l.owner === p.id) income += aptRent(s, l) + (l.business && l.business.owner !== p.id ? rentFor(s, l) : 0) + landValue(s, l) * 0.004; }
+    moves.push({ roi: pk.stars * income * 0.09 / pk.cost * st.land, cost: pk.cost, run: () => buildPark(s, p.id, d, pk.id) });
+  }
+  // Buy out a rival's shop on its own land.
+  for (const lot of s.lots) {
+    const b = lot.business;
+    if (!b || lot.owner !== p.id || b.owner === p.id || s.players[b.owner].bankrupt) continue;
+    const price = buyoutPrice(s, lot);
+    const e = estimate(s, lot.id, b.type, p.id, {});
+    const lostRent = rentFor(s, lot);
+    if (e.profit - lostRent > 0) moves.push({ roi: (e.profit - lostRent) / price * (st.set > 1.2 ? 1.2 : 1), cost: price, run: () => buyout(s, p.id, lot.id) });
+  }
+  // Advertise a shop that has room for more customers.
+  for (const lot of s.lots) {
+    const b = lot.business;
+    if (!b || b.owner !== p.id || b.promo || !b.yesterday || b.yesterday.peak > 0.85) continue;
+    const pr = [...PROMOS].reverse().find(x => yearOf(s) >= x.year);
+    const cost = promoCost(b, pr);
+    const e0 = estimate(s, lot.id, b.type, p.id, {});
+    b.promo = { boost: pr.boost };
+    const e1 = estimate(s, lot.id, b.type, p.id, {});
+    b.promo = null;
+    const gain = (e1.profit - e0.profit) * pr.days;
+    if (gain > cost * 1.2) moves.push({ roi: (gain / cost - 1) / pr.days * (p.style === 'premium' ? 1.3 : 1), cost, run: () => startPromo(s, p.id, lot.id, pr.id) });
+  }
+
   const diff = DIFFICULTY[s.difficulty];
   moves.sort((a, b) => b.roi - a.roi);
   for (const m of moves.slice(0, 6)) {
@@ -2237,12 +2757,13 @@ function tune(s, p) {
   for (const lot of s.lots) {
     const b = lot.business;
     if (!b || b.owner !== p.id || !b.yesterday) continue;
-    let best = { staff: b.staff, price: b.price, len: b.len, profit: estimate(s, lot.id, b.type, p.id, {}).profit };
+    // Compare like with like: head-count forecasts on both sides.
+    let best = { staff: b.staff, price: b.price, len: b.len, profit: estimate(s, lot.id, b.type, p.id, { staff: b.staff }).profit };
     const tryCfg = cfg => {
       const e = estimate(s, lot.id, b.type, p.id, { staff: best.staff, price: best.price, len: best.len, ...cfg });
       if (e.profit > best.profit + 5) best = { staff: best.staff, price: best.price, len: best.len, ...cfg, profit: e.profit };
     };
-    for (const ds of [-1, 1]) if (b.staff + ds >= 1 && b.staff + ds <= MAX_STAFF) tryCfg({ staff: b.staff + ds });
+    for (const ds of [-1, 1]) if (b.staff + ds >= 1 && b.staff + ds <= maxStaff(b)) tryCfg({ staff: b.staff + ds });
     for (const dp of [-0.1, 0.1]) {
       const price = Math.round((b.price + dp) * 100) / 100;
       if (price >= st.price[0] && price <= st.price[1] && price >= PRICE_MIN && price <= PRICE_MAX) tryCfg({ price });
@@ -2250,8 +2771,20 @@ function tune(s, p) {
     for (const dl of [-2, 2]) if (b.len + dl >= 4 && b.len + dl <= 24) tryCfg({ len: b.len + dl });
     // Queues out of the door trump the spreadsheet: hire.
     const y = b.yesterday;
-    if (y.turned > 0.1 * (y.cust + y.turned) && best.staff <= b.staff && b.staff < MAX_STAFF) best.staff = b.staff + 1;
+    if (y.turned > 0.1 * (y.cust + y.turned) && best.staff <= b.staff && b.team.length < maxStaff(b)) best.staff = b.staff + 1;
     setStaff(s, p.id, lot.id, best.staff);
+    // People: a clerk when shelves run dry, a manager for bigger teams,
+    // raises when morale sags, training for the best (premium style).
+    if (y.outHours > 2 && !clerks(b) && b.team.length < maxStaff(b) && b.cands?.length) hireStaff(s, p.id, lot.id, b.cands[0].id, 'clerk');
+    if (!manager(b) && b.team.length >= 4 && (b.hist.at(-1) || 0) > 300) {
+      const star = [...b.team].sort((x, z) => z.skill - x.skill)[0];
+      setRole(s, p.id, lot.id, star.id, 'manager');
+    }
+    if (avgMorale(b) < 0.45) for (const m of b.team) if (m.morale < 0.45) raiseStaff(s, p.id, lot.id, m.id);
+    if (p.style === 'premium' && p.cash > 20000) {
+      const pupil = b.team.find(m => !m.train && m.skill < 1.1);
+      if (pupil && trainCost(b, pupil) < p.cash * 0.02) trainStaff(s, p.id, lot.id, pupil.id);
+    }
     setPrice(s, p.id, lot.id, best.price);
     setHours(s, p.id, lot.id, b.from, best.len);
     const h = b.hist;
@@ -2524,6 +3057,7 @@ __mods.actions = (() => {
 const {
   build, sellBusiness, setPrice, setStaff, setHours, setStock, rushDelivery, upgradeFit, buildApt, sellApt,
   sellLand, petition, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan,
+  hireStaff, fireStaff, trainStaff, raiseStaff, setRole, addFloor, startPromo, buildPark, buyout, survey,
 } = __mods.sim;
 const { auctionBid, auctionPass } = __mods.auction;
 
@@ -2533,7 +3067,7 @@ const opt = v => (v === undefined || v === null ? undefined : num(v));
 const lot = (s, v) => { if (!Number.isInteger(v) || v < 0 || v >= s.lots.length) throw new Error('bad lot'); return v; };
 
 const ACTIONS = {
-  build:     (s, p, [l, type]) => build(s, p, lot(s, l), String(type)),
+  build:     (s, p, [l, type, floors]) => build(s, p, lot(s, l), String(type), floors === undefined ? {} : { floors: Math.round(num(floors)) }),
   sellBiz:   (s, p, [l]) => sellBusiness(s, p, lot(s, l)),
   price:     (s, p, [l, v]) => setPrice(s, p, lot(s, l), num(v)),
   staff:     (s, p, [l, v]) => setStaff(s, p, lot(s, l), Math.round(num(v))),
@@ -2551,6 +3085,16 @@ const ACTIONS = {
   loan:      (s, p, [amt]) => takeLoan(s, p, opt(amt)),
   repay:     (s, p, [amt]) => repayLoan(s, p, opt(amt)),
   bid:       (s, p, [amt]) => auctionBid(s, p, num(amt)),
+  hire:      (s, p, [l, cand, role]) => hireStaff(s, p, lot(s, l), num(cand), String(role || 'server')),
+  fire:      (s, p, [l, sid]) => fireStaff(s, p, lot(s, l), num(sid)),
+  train:     (s, p, [l, sid]) => trainStaff(s, p, lot(s, l), num(sid)),
+  raise:     (s, p, [l, sid]) => raiseStaff(s, p, lot(s, l), num(sid)),
+  role:      (s, p, [l, sid, role]) => setRole(s, p, lot(s, l), num(sid), String(role)),
+  floor:     (s, p, [l]) => addFloor(s, p, lot(s, l)),
+  promo:     (s, p, [l, id]) => startPromo(s, p, lot(s, l), String(id)),
+  park:      (s, p, [d, type]) => buildPark(s, p, Math.round(num(d)), String(type)),
+  buyout:    (s, p, [l]) => buyout(s, p, lot(s, l)),
+  survey:    (s, p, [d]) => survey(s, p, Math.round(num(d))),
   pass:      (s, p) => auctionPass(s, p),
 };
 
@@ -2700,11 +3244,11 @@ __mods.render3d = (() => {
 // real customer walking from home to a real shop and back (see citizens.js).
 
 const THREE = __mods.three;
-const { MAP_W, MAP_H, DISTRICTS, BIZ, MAX_APT, SEGMENTS } = __mods.data;
+const { MAP_W, MAP_H, DISTRICTS, BIZ, MAX_APT, SEGMENTS, PARKS, BUSINESSES } = __mods.data;
 const { MAP, BLOCK_TILES } = __mods.map;
 const { roadPath } = __mods.map;
 const { tripPhase } = __mods.citizens;
-const { ownsSet, bizOpen } = __mods.sim;
+const { ownsSet, bizOpen, blockStars, landValue, money } = __mods.sim;
 
 const OX = MAP_W / 2, OZ = MAP_H / 2;
 const wx = tx => tx + 0.5 - OX;           // tile -> world
@@ -2912,7 +3456,7 @@ class Renderer3D {
     for (const t of tiles) {
       if (t.kind !== 'plaza' && t.kind !== 'park') continue;
       const n = t.kind === 'park' ? 3 : 1 + (noise(t.x, t.y) < 0.4 ? 1 : 0);
-      for (let i = 0; i < n; i++) trees.push([wx(t.x) - 0.3 + noise(t.x, t.y, i + 1) * 0.6, wz(t.y) - 0.3 + noise(t.x, t.y, i + 9) * 0.6, 0.8 + noise(t.x, t.y, i + 3) * 0.5]);
+      for (let i = 0; i < n; i++) trees.push([wx(t.x) - 0.3 + noise(t.x, t.y, i + 1) * 0.6, wz(t.y) - 0.3 + noise(t.x, t.y, i + 9) * 0.6, 0.8 + noise(t.x, t.y, i + 3) * 0.5, t.x + ',' + t.y]);
     }
     const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.04, 0.22, 6), new THREE.MeshStandardMaterial({ color: '#6b4a2b' }), trees.length);
     const crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.17, 0), new THREE.MeshStandardMaterial({ color: '#3f8f3a', flatShading: true }), trees.length);
@@ -2923,6 +3467,7 @@ class Renderer3D {
     });
     trunk.castShadow = crown.castShadow = true;
     S.add(trunk, crown);
+    this.trees = { trunk, crown, list: trees };
 
     // Park pond and fountain.
     const park = MAP.blocks.find(b => b.kind === 'park');
@@ -2955,6 +3500,14 @@ class Renderer3D {
     this.setBorders = new THREE.Group();
     S.add(this.setBorders);
     this.setSig = '';
+    this.parkGroup = new THREE.Group();
+    S.add(this.parkGroup);
+    this.parkSig = null;
+    this.overlay = 'off';
+    this.overlayGroup = new THREE.Group();
+    S.add(this.overlayGroup);
+    this.overlayAt = 0;
+    this.buildRain();
   }
 
   // Box border around a 2x2 block.
@@ -2982,7 +3535,7 @@ class Renderer3D {
   lotSig(s, lot) {
     const b = lot.business;
     const auction = s.auction && s.auction.lotId === lot.id ? 'A' : '';
-    return `${lot.owner}|${lot.apt}|${b ? b.type + b.owner + b.fit : ''}|${auction}`;
+    return `${lot.owner}|${lot.apt}|${b ? b.type + b.owner + b.fit + 'f' + (b.floors || 1) + (b.promo ? 'P' : '') : ''}|${auction}`;
   }
 
   syncLot(s, lot) {
@@ -3041,10 +3594,12 @@ class Renderer3D {
     } else if (b || lot.apt) {
       const def = b ? BIZ[b.type] : null;
       const wall = def ? def.wall : '#8d8f99';
-      add(new THREE.BoxGeometry(0.76, FLOOR_H, 0.76), std(wall), 0, GROUND + FLOOR_H / 2, 0);
-      // Glass shopfront.
-      add(new THREE.BoxGeometry(0.78, FLOOR_H * 0.55, 0.78), this.litMaterial(this.tex.shop, '#ffffff', 2, 1), 0, GROUND + FLOOR_H * 0.38, 0, false);
-      height = GROUND + FLOOR_H;
+      const shopH = FLOOR_H * (b ? b.floors || 1 : 1);
+      add(new THREE.BoxGeometry(0.76, shopH, 0.76), std(wall), 0, GROUND + shopH / 2, 0);
+      // Glass shopfront, one band per shop floor.
+      for (let f = 0; f < (b ? b.floors || 1 : 1); f++)
+        add(new THREE.BoxGeometry(0.78, FLOOR_H * 0.55, 0.78), this.litMaterial(this.tex.shop, '#ffffff', 2, 1), 0, GROUND + FLOOR_H * (f + 0.38), 0, false);
+      height = GROUND + shopH;
       if (b) {
         const ac = s.players[b.owner].color;
         add(new THREE.BoxGeometry(0.86, 0.05, 0.86), std(ac), 0, height - 0.02, 0);
@@ -3106,6 +3661,14 @@ class Renderer3D {
       g.add(moon);
       g.userData.moon = moon;
     }
+    if (b && b.promo) {
+      const mega = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture('📣', '#ffd23f'), depthTest: false, sizeAttenuation: false }));
+      mega.position.set(0, height + 0.22, 0);
+      mega.center.set(1.25, -0.3);
+      mega.scale.set(0.022, 0.022, 1);
+      mega.renderOrder = 11;
+      g.add(mega);
+    }
     // Invisible pick volume for taps.
     const pick = new THREE.Mesh(new THREE.BoxGeometry(0.95, Math.max(0.3, height + 0.35), 0.95), new THREE.MeshBasicMaterial({ visible: false }));
     pick.position.y = Math.max(0.3, height + 0.35) / 2;
@@ -3115,6 +3678,142 @@ class Renderer3D {
     const obj = { sig, group: g, pick, height };
     this.lotObjs.set(lot.id, obj);
     return obj;
+  }
+
+  // -------------------------------------------------------- parks ----
+  syncParks(s) {
+    const parks = s.parks || [];
+    const sig = parks.map(p => `${p.x},${p.y},${p.type}`).join('|');
+    if (sig === this.parkSig) return;
+    this.parkSig = sig;
+    this.parkGroup.clear();
+    const used = new Set(parks.map(p => p.x + ',' + p.y));
+    // Clear the default trees off landscaped tiles.
+    const m = new THREE.Matrix4(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    this.trees.list.forEach(([x, z, sc, key], i) => {
+      if (used.has(key)) { this.trees.trunk.setMatrixAt(i, zero); this.trees.crown.setMatrixAt(i, zero); return; }
+      m.makeScale(sc, sc, sc).setPosition(x, 0.09 + 0.11 * sc, z); this.trees.trunk.setMatrixAt(i, m);
+      m.makeScale(sc, sc * 1.15, sc).setPosition(x, 0.09 + 0.33 * sc, z); this.trees.crown.setMatrixAt(i, m);
+    });
+    this.trees.trunk.instanceMatrix.needsUpdate = this.trees.crown.instanceMatrix.needsUpdate = true;
+    const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...extra });
+    for (const p of parks) {
+      const g = new THREE.Group();
+      g.position.set(wx(p.x), 0.1, wz(p.y));
+      const add = (geo, mat, x, y, z) => { const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true; g.add(mesh); return mesh; };
+      add(new THREE.BoxGeometry(0.92, 0.03, 0.92), std(p.type === 'garden' ? '#6cbf4f' : '#d8d2c4'), 0, 0.015, 0);
+      if (p.type === 'garden') {
+        for (const [x, z] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]]) add(new THREE.BoxGeometry(0.22, 0.09, 0.22), std('#2f7a3a'), x, 0.07, z);
+        const cols = ['#ff6b8a', '#ffd23f', '#c77dff', '#ffffff'];
+        for (let i = 0; i < 14; i++) add(new THREE.SphereGeometry(0.025, 6, 4), std(cols[i % 4]), -0.35 + noise(p.x, i) * 0.7, 0.06, -0.35 + noise(p.y, i + 7) * 0.7);
+        add(new THREE.CylinderGeometry(0.04, 0.05, 0.18, 6), std('#6b4a2b'), 0, 0.1, 0);
+        add(new THREE.IcosahedronGeometry(0.2, 0), std('#4fa646', { flatShading: true }), 0, 0.3, 0);
+      } else if (p.type === 'fountain') {
+        add(new THREE.CylinderGeometry(0.34, 0.36, 0.08, 20), std('#bfb6a6'), 0, 0.06, 0);
+        add(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 20), std('#5ab3e0', { roughness: 0.15 }), 0, 0.1, 0);
+        add(new THREE.CylinderGeometry(0.04, 0.06, 0.26, 8), std('#bfb6a6'), 0, 0.2, 0);
+        const spray = add(new THREE.SphereGeometry(0.08, 10, 8), new THREE.MeshBasicMaterial({ color: '#cfefff', transparent: true, opacity: 0.6 }), 0, 0.36, 0);
+        g.userData.spray = spray;
+      } else if (p.type === 'statue') {
+        add(new THREE.BoxGeometry(0.26, 0.18, 0.26), std('#bfb6a6'), 0, 0.12, 0);
+        add(new THREE.CylinderGeometry(0.05, 0.07, 0.32, 8), std('#7d6a3a', { metalness: 0.6, roughness: 0.4 }), 0, 0.37, 0);
+        add(new THREE.SphereGeometry(0.06, 8, 6), std('#7d6a3a', { metalness: 0.6, roughness: 0.4 }), 0, 0.58, 0);
+        add(new THREE.BoxGeometry(0.03, 0.18, 0.03), std('#7d6a3a', { metalness: 0.6 }), 0.07, 0.62, 0);
+      } else {
+        const knot = add(new THREE.TorusKnotGeometry(0.13, 0.035, 64, 8), new THREE.MeshStandardMaterial({ color: '#9fe6ff', emissive: '#4fc3ff', emissiveIntensity: 0.8, metalness: 0.5, roughness: 0.2 }), 0, 0.36, 0);
+        g.userData.spin = knot;
+      }
+      this.parkGroup.add(g);
+    }
+  }
+
+  // ------------------------------------------------------ overlays ----
+  // Colour each block by a city statistic, with a label floating over it.
+  setOverlay(mode) { this.overlay = mode; this.overlayAt = 0; }
+  overlayData(s) {
+    const mode = this.overlay;
+    return DISTRICTS.map((D, d) => {
+      const ids = MAP.districtLots[d];
+      if (mode === 'demand') {
+        // What locals can't get: the most-missed kind of business.
+        const tally = {};
+        for (const [k, v] of Object.entries(s.chatter[d] || {})) {
+          const [why, type] = k.split('|');
+          if (why === 'none' || why === 'closed' || why === 'queue' || why === 'stockout') tally[type] = (tally[type] || 0) + v;
+        }
+        const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+        const total = Object.values(tally).reduce((a, b) => a + b, 0);
+        return { v: total, label: top ? `${BIZ[top[0]].icon} ${Math.round(total)}` : '😊' };
+      }
+      if (mode === 'traffic') {
+        let c = 0;
+        for (const l of s.lots) if (l.business && l.district === d) c += l.business.yesterday ? l.business.yesterday.cust : l.business.today.cust;
+        return { v: c, label: `👣 ${Math.round(c)}` };
+      }
+      if (mode === 'wealth') {
+        const st = blockStars(s, d);
+        return { v: st, label: `${'★'.repeat(Math.floor(st))}${st % 1 >= 0.5 ? '½' : ''} ${Math.round(D.mix[2] * 100)}%💎` };
+      }
+      const v = ids.reduce((a, id) => a + landValue(s, s.lots[id]), 0) / ids.length;
+      return { v, label: money(v) };
+    });
+  }
+  updateOverlay(s) {
+    if (this.overlay === 'off') { if (this.overlayGroup.children.length) this.overlayGroup.clear(); return; }
+    if (this.clock < this.overlayAt) return;
+    this.overlayAt = this.clock + 1.2;
+    this.overlayGroup.clear();
+    const data = this.overlayData(s);
+    const max = Math.max(1e-6, ...data.map(x => x.v));
+    data.forEach((x, d) => {
+      const b = MAP.distBlock[d];
+      const k = x.v / max;
+      // Cool blue (low) through yellow to hot red (high).
+      const col = new THREE.Color().setHSL(0.62 - 0.62 * k, 0.85, 0.5);
+      const plane = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.02 + k * 0.5, 2.05), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.45, depthWrite: false }));
+      plane.position.set(wx(b.bx) + 0.5, 0.15 + (0.02 + k * 0.5) / 2, wz(b.by) + 0.5);
+      this.overlayGroup.add(plane);
+      const tex = canvasTex(256, 72, (g) => {
+        g.fillStyle = 'rgba(10,14,30,0.85)';
+        g.beginPath(); g.roundRect(4, 4, 248, 64, 18); g.fill();
+        g.fillStyle = '#fff'; g.font = 'bold 34px system-ui,"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(x.label, 128, 38);
+      });
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, sizeAttenuation: false }));
+      sp.scale.set(0.12, 0.034, 1);
+      sp.position.set(wx(b.bx) + 0.5, 0.9 + k * 0.5, wz(b.by) + 0.5);
+      sp.renderOrder = 20;
+      this.overlayGroup.add(sp);
+    });
+  }
+
+  // ---------------------------------------------------------- rain ----
+  buildRain() {
+    const n = 900;
+    const pos = new Float32Array(n * 6);
+    for (let i = 0; i < n; i++) {
+      const x = (Math.random() - 0.5) * 22, y = Math.random() * 9, z = (Math.random() - 0.5) * 18;
+      pos.set([x, y, z, x + 0.05, y - 0.35, z], i * 6);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.rain = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: '#cfe6ff', transparent: true, opacity: 0.45 }));
+    this.rain.visible = false;
+    this.rain.frustumCulled = false;
+    this.scene.add(this.rain);
+  }
+  updateRain(s, dt) {
+    const raining = s.events?.some(e => e.id === 'rain');
+    this.rain.visible = !!raining;
+    if (!raining) return;
+    const a = this.rain.geometry.attributes.position.array;
+    for (let i = 0; i < a.length; i += 6) {
+      a[i + 1] -= dt * 9; a[i + 4] -= dt * 9;
+      if (a[i + 4] < 0) { a[i + 1] += 9; a[i + 4] += 9; }
+    }
+    this.rain.geometry.attributes.position.needsUpdate = true;
+    this.rain.position.set(this.cam.x, 0, this.cam.z);
   }
 
   // ------------------------------------------------------- people ----
@@ -3475,6 +4174,16 @@ class Renderer3D {
       if (lot.kind === 'prop') this.districtLine.add(this.blockBorder(MAP.distBlock[lot.district], DISTRICTS[lot.district].color, 0.04, 0.13));
     } else this.selRing.visible = false;
 
+    this.syncParks(s);
+    for (const g of this.parkGroup.children) {
+      if (g.userData.spray) g.userData.spray.scale.setScalar(0.85 + 0.25 * Math.sin(this.clock * 6 + g.position.x));
+      if (g.userData.spin) g.userData.spin.rotation.y += dt * 0.8;
+    }
+    this.updateOverlay(s);
+    this.updateRain(s, dt);
+    const raining = s.events?.some(e => e.id === 'rain');
+    if (raining) { this.scene.background.lerp(new THREE.Color('#5d6b7a'), 0.45); this.sun.intensity *= 0.55; }
+
     const T = s.day * 24 + hourF;
     this.updatePeople(s, T);
     const carsActive = Math.round(6 + (1 - dark * 0.6) * 14);
@@ -3502,16 +4211,19 @@ const {
   DISTRICTS, BUSINESSES, BIZ, FIT_LEVELS, MAX_STAFF, APT_NAMES, APT_RESIDENTS, MAX_APT, STATION_FARE,
   UTILITY_CUT, SCENARIOS, RIVALS, LOAN_STEP, LOAN_RATE, OVERHEAD_BASE, OVERHEAD_RATE, NEEDS, SEGMENTS,
   PRICE_STEP, PRICE_MIN, PRICE_MAX, AUTO_STOCK_PREMIUM, TECH, priceLabel, bizName, eraName,
+  STAFF_ROLES, PARKS, PROMOS, SURVEY_COST, SURVEY_DAYS, MAX_FLOORS, MAX_STARS,
 } = __mods.data;
 const {
   MAP, money, landValue, rentFor, ownsSet, setCount, estimate, sellLand, build, sellBusiness, setPrice,
   setStaff, setHours, setStock, rushDelivery, autoTarget, upgradeFit, fitCost, aptCheck, buildApt, sellApt,
   aptRentFor, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, loanLimit, netWorth, playerAssets,
   capacity, districtPopulation, LEDGER_LABELS, operating, dayName, yearOf, techOf, bizOpen, bizLabel,
-  petition, nextAuctionSlot, goalProgress, goalText, setsOwned,
+  petition, nextAuctionSlot, goalProgress, goalText, setsOwned, buildCost, floorCost, promoCost, buyoutPrice,
+  canLandscape, parkSlots, blockStars, parkStars, trainCost,
 } = __mods.sim;
+const { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } = __mods.staff;
 const { auctionBid, settleRest, minBid, increment } = __mods.auction;
-const { citizenName, CHATTER_ICON, thoughtText } = __mods.citizens;
+const { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } = __mods.citizens;
 const { SEG_COLORS } = __mods.render3d;
 const { sfx, setSound, soundOn } = __mods.audio;
 
@@ -3542,6 +4254,7 @@ class UI {
     $('modal-card').addEventListener('click', e => this.onClick(e));
     $('auction').addEventListener('click', e => this.onClick(e));
     $('vote').addEventListener('click', e => this.onClick(e));
+    $('layers').addEventListener('click', e => this.onClick(e));
     $('sheet').addEventListener('pointerdown', () => { this.lastTouch = performance.now(); });
     $('sheet-close').addEventListener('click', () => { sfx.tap(); this.close(); });
     $('hud-cash').addEventListener('click', () => { sfx.tap(); this.openTab('bank'); });
@@ -3559,6 +4272,7 @@ class UI {
       if (a === 'left') r.rotate(Math.PI / 4);
       else if (a === 'right') r.rotate(-Math.PI / 4);
       else if (a === 'tilt') r.tilt();
+      else if (a === 'layers') { $('layers').classList.toggle('hidden'); this.layersUI(); }
       else r.fit();
     }));
   }
@@ -3567,10 +4281,13 @@ class UI {
 
   // ---------------------------------------------------------- sheet ----
   openLot(id) {
+    const fresh = this.view?.kind !== 'lot' || this.view.id !== id;
+    if (fresh) this.lotTab = 'manage';
     this.view = { kind: 'lot', id };
     this.app.renderer.sel = id;
     this.app.renderer.selCitizen = -1;
     this.render();
+    if (fresh) $('sheet').scrollTop = 0;
     this.app.renderer.focusLot(this.s.lots[id], $('sheet').offsetHeight + 58);
   }
   openCitizen(id) {
@@ -3645,6 +4362,7 @@ class UI {
     if (lot.kind === 'prop') {
       h += this.businessHTML(lot);
       h += this.aptHTML(lot);
+      h += this.blockHTML(lot.district);
       h += this.chatterHTML(lot.district);
     }
     return h;
@@ -3720,15 +4438,18 @@ class UI {
       const rentNote = lot.owner === ME ? 'Your land: no ground rent.' :
         lot.owner === -1 ? `You'd lease from the city: ${money(rentFor(s, lot))}/day rent.` :
         `You'd pay ${esc(s.players[lot.owner].company)} ${money(rentFor(s, lot))}/day rent.`;
+      const floors = this.buildFloors || 1;
       const open = BUSINESSES.filter(d => tech.biz.has(d.id));
       const locked = BUSINESSES.filter(d => !tech.biz.has(d.id)).sort((a, b) => a.year - b.year);
-      const opts = open.map(def => ({ def, e: estimate(s, lot.id, def.id, ME, {}) })).sort((a, b) => b.e.profit - a.e.profit);
+      const opts = open.map(def => ({ def, e: estimate(s, lot.id, def.id, ME, { floors, staff: 2 + floors }) })).sort((a, b) => b.e.profit - a.e.profit);
       const best = opts[0]?.def.id;
-      return `<h3>Open a business</h3><p class="note">${rentNote} Forecasts assume fair prices, 3 staff, usual hours.</p>
+      return `<h3>Open a business</h3><p class="note">${rentNote} Forecasts assume fair prices and usual hours.</p>
+        <div class="ctl"><span>Shop floors <small class="dim">more room, staff and stock</small></span>
+          <div class="stepper"><button data-act="bfloors" data-v="-1">−</button><b>${floors}</b><button data-act="bfloors" data-v="1">+</button></div></div>
         <div class="biz-list">${opts.map(({ def, e }) => `
-          <button class="biz-opt ${def.id === best && e.profit > 0 ? 'best' : ''}" data-act="build" data-type="${def.id}" ${me.cash < def.cost ? 'disabled' : ''}>
+          <button class="biz-opt ${def.id === best && e.profit > 0 ? 'best' : ''}" data-act="build" data-type="${def.id}" ${me.cash < buildCost(def, floors) ? 'disabled' : ''}>
             <i>${def.icon}</i>
-            <span><b>${esc(bizName(def, year))}</b><small>${money(def.cost)} · ${hh(def.open[0])}–${hh(def.open[1])} · ~${Math.round(e.cust)} cust/day</small></span>
+            <span><b>${esc(bizName(def, year))}</b><small>${money(buildCost(def, floors))} · ${hh(def.open[0])}–${hh(def.open[1])} · ~${Math.round(e.cust)} cust/day</small></span>
             <span class="est ${cls(e.profit)}">${sign(e.profit)}<small>per day</small></span>
           </button>`).join('')}
           ${locked.map(def => `<div class="biz-opt locked"><i>${def.icon}</i><span><b>${esc(bizName(def, def.year))}</b><small>Invented in ${def.year}</small></span><span class="est dim">🔒</span></div>`).join('')}
@@ -3736,46 +4457,52 @@ class UI {
     }
     const def = BIZ[b.type];
     const owner = s.players[b.owner];
-    const y = b.yesterday;
     const name = bizName(def, year);
     const stars = '★'.repeat(Math.round((b.rep ?? 1) * 2.5)) + '☆'.repeat(Math.max(0, 3.5 - Math.round((b.rep ?? 1) * 2.5)));
     if (b.owner !== ME) {
       const e = estimate(s, lot.id, b.type, b.owner, {});
+      const bo = lot.owner === ME ? buyoutPrice(s, lot) : 0;
       return `<h3>Business</h3><div class="card">
         <div class="row" style="margin:0"><span style="font-size:26px">${def.icon}</span>
-        <div><b>${esc(name)}</b> <span class="stars">${stars}</span><div class="note" style="margin:0">Run by <b style="color:${owner.color}">${esc(owner.company)}</b> · ${Math.round(b.price * 100)}% prices · ${FIT_LEVELS[b.fit].name} · ${b.staff} staff · ${hh(b.from)}–${hh(b.from + b.len)}</div></div></div>
-        <p class="note">Est. ~${Math.round(e.cust)} customers a day. ${lot.owner === ME ? `They pay you <b class="pos">${money(rentFor(s, lot))}</b> a day in rent.` : ''}</p></div>`;
+        <div><b>${esc(name)}</b> <span class="stars">${stars}</span><div class="note" style="margin:0">Run by <b style="color:${owner.color}">${esc(owner.company)}</b> · ${Math.round(b.price * 100)}% prices · ${FIT_LEVELS[b.fit].name} · ${b.team ? b.team.length : b.staff} staff · ${b.floors || 1} floor${(b.floors || 1) > 1 ? 's' : ''} · ${hh(b.from)}–${hh(b.from + b.len)}${b.promo ? ' · 📣 advertising' : ''}</div></div></div>
+        <p class="note">Est. ~${Math.round(e.cust)} customers a day. ${lot.owner === ME ? `They pay you <b class="pos">${money(rentFor(s, lot))}</b> a day in rent.` : ''}</p>
+        ${bo ? `<div class="row"><button class="btn gold" data-act="buyout" ${me.cash < bo ? 'disabled' : ''}>💼 Buy them out · ${money(bo)}</button></div>
+          <p class="note">It's your land, so they must sell. ${ownsSet(s, ME, lot.district) ? '<b class="pos">Full colour set: buyout at a discount.</b>' : 'Own the whole colour set and buyouts get much cheaper.'}</p>` : ''}</div>`;
     }
-    const cap = capacity(b);
-    const e = estimate(s, lot.id, b.type, ME, {});
+    const tab = this.lotTab || 'manage';
+    const y = b.yesterday;
     const t = y || b.today;
     const profitY = t.rev - t.cost;
+    let h = `<h3>${def.icon} ${esc(name)} <em>${FIT_LEVELS[b.fit].name} · ${b.floors || 1}F · <span class="stars">${stars}</span></em></h3>
+      <div class="stats">
+        <div class="stat"><small>${y ? 'Yesterday' : 'Today so far'}</small><b class="${cls(profitY)}">${sign(profitY)}</b></div>
+        <div class="stat"><small>Customers</small><b>${Math.round(t.cust)}</b></div>
+        <div class="stat"><small>Turned away</small><b class="${t.turned > 5 ? 'warn' : ''}">${Math.round(t.turned)}</b></div>
+      </div>
+      <div class="seg tabs">${[['manage', '⚙️ Manage'], ['staff', '👥 Staff'], ['customers', '💬 Customers'], ['promote', '📣 Promote']]
+        .map(([k, n]) => `<button data-act="ltab" data-v="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+    if (tab === 'staff') return h + this.staffTabHTML(lot, b);
+    if (tab === 'customers') return h + this.customersTabHTML(lot, b);
+    if (tab === 'promote') return h + this.promoTabHTML(lot, b);
+    const cap = capacity(b);
+    const e = estimate(s, lot.id, b.type, ME, {});
     const fc = fitCost(b);
     const openNow = bizOpen(b, s.hour);
     const target = b.autoStock ? autoTarget(b) : b.stockTarget;
     const nextFit = FIT_LEVELS[b.fit + 1];
-    let h = `<h3>${def.icon} ${esc(name)} <em>${FIT_LEVELS[b.fit].name} · <span class="stars">${stars}</span></em></h3>`;
-    h += `<div class="stats">
-      <div class="stat"><small>${y ? 'Yesterday' : 'Today so far'}</small><b class="${cls(profitY)}">${sign(profitY)}</b></div>
-      <div class="stat"><small>Customers</small><b>${Math.round(t.cust)}</b></div>
-      <div class="stat"><small>Turned away</small><b class="${t.turned > 5 ? 'warn' : ''}">${Math.round(t.turned)}</b></div>
-    </div>
-    <div class="note" style="margin-bottom:0">Busiest hour used ${Math.round(Math.min(1.5, t.peak) * 100)}% of ${Math.round(cap)}/hr capacity · ${openNow ? '<span class="pos">open now</span>' : '<span class="dim">closed now</span>'}</div>
-    <div class="meter"><i class="${t.peak >= 1 ? 'hot' : ''}" style="width:${Math.round(Math.min(1, t.peak) * 100)}%"></i></div>`;
-    // Price.
+    h += `<div class="note" style="margin-bottom:0">Busiest hour used ${Math.round(Math.min(1.5, t.peak) * 100)}% of ${Math.round(cap)}/hr capacity · ${openNow ? '<span class="pos">open now</span>' : '<span class="dim">closed now</span>'}</div>
+    <div class="meter"><i class="${t.peak >= 1 ? 'hot' : ''}" style="width:${Math.round(Math.min(1, t.peak) * 100)}%"></i></div>
+    ${this.barsHTML(b.hist, 'Daily profit, last two weeks')}`;
     h += `<div class="ctl"><span>Price <small class="dim">avg ticket</small></span>
-      <div class="stepper"><button data-act="price" data-v="-1">−</button><b style="min-width:96px">$${(def.ticket * b.price).toFixed(2)}<small class="sub">${Math.round(b.price * 100)}% · ${priceLabel(b.price)}</small></b><button data-act="price" data-v="1">+</button></div></div>`;
-    // Staff.
-    h += `<div class="ctl"><span>Staff <small class="dim">${money(def.wage)}/hr each</small></span>
-      <div class="stepper"><button data-act="staff" data-v="-1">−</button><b>${b.staff}</b><button data-act="staff" data-v="1">+</button></div></div>`;
-    // Opening hours.
-    h += `<div class="ctl"><span>Opens at</span>
+      <div class="stepper"><button data-act="price" data-v="-1">−</button><b style="min-width:96px">$${(def.ticket * b.price).toFixed(2)}<small class="sub">${Math.round(b.price * 100)}% · ${priceLabel(b.price)}</small></b><button data-act="price" data-v="1">+</button></div></div>
+      <div class="ctl"><span>Servers <small class="dim">quick hire / let go · see Staff</small></span>
+      <div class="stepper"><button data-act="staff" data-v="-1">−</button><b>${servers(b)}</b><button data-act="staff" data-v="1">+</button></div></div>
+      <div class="ctl"><span>Opens at</span>
       <div class="stepper"><button data-act="open" data-v="-1">−</button><b style="min-width:64px">${hh(b.from)}</b><button data-act="open" data-v="1">+</button></div></div>
-      <div class="ctl"><span>Open for <small class="dim">closes ${hh(b.from + b.len)}</small></span>
+      <div class="ctl"><span>Open for <small class="dim">closes ${hh(b.from + b.len)}${b.len > 12 ? ' · long shifts hurt morale' : ''}</small></span>
       <div class="stepper"><button data-act="len" data-v="-1">−</button><b style="min-width:64px">${b.len === 24 ? '24h' : b.len + 'h'}</b><button data-act="len" data-v="1">+</button></div></div>`;
-    // Stock.
     h += `<div class="card">
-      <div class="ctl" style="margin-top:0"><span>📦 Stock <small class="dim">delivered 06:00</small></span>
+      <div class="ctl" style="margin-top:0"><span>📦 Stock <small class="dim">06:00${clerks(b) ? ' + 13:00 (clerks)' : ''}</small></span>
         <div class="seg small" style="min-width:150px"><button data-act="auto" data-v="1" class="${b.autoStock ? 'on' : ''}">Auto</button><button data-act="auto" data-v="0" class="${!b.autoStock ? 'on' : ''}">Manual</button></div></div>
       <div class="stats">
         <div class="stat"><small>On shelves</small><b class="${b.stock < 8 ? 'neg' : ''}">${Math.round(b.stock)}</b></div>
@@ -3783,16 +4510,139 @@ class UI {
         <div class="stat"><small>${def.perish ? 'Spoiled' : 'Storage'}</small><b>${def.perish ? Math.round(t.waste || 0) : '1%/day'}</b></div>
       </div>
       ${b.autoStock ? `<p class="note">Auto-restock orders ~${target} a day from a wholesaler at +${Math.round(AUTO_STOCK_PREMIUM * 100)}%.</p>` :
-        `<div class="ctl"><span>Daily delivery up to</span><div class="stepper"><button data-act="stock" data-v="-1">−</button><b style="min-width:64px">${b.stockTarget}</b><button data-act="stock" data-v="1">+</button></div></div>`}
-      ${def.perish ? `<p class="note">${Math.round(def.perish * 100)}% of unsold stock spoils overnight. Order too much and you waste money. Too little and you sell out.</p>` : ''}
+        `<div class="ctl"><span>Delivery up to</span><div class="stepper"><button data-act="stock" data-v="-1">−</button><b style="min-width:64px">${b.stockTarget}</b><button data-act="stock" data-v="1">+</button></div></div>`}
+      ${def.perish ? `<p class="note">${Math.round(def.perish * 100)}% of unsold stock spoils overnight${clerks(b) ? ', less with clerks rotating the shelves' : ''}.</p>` : ''}
       <div class="row"><button class="btn small" data-act="rush">🚚 Rush delivery now (+25%)</button></div>
     </div>`;
     h += `<p class="note">Forecast at these settings: <b class="${cls(e.profit)}">${sign(e.profit)}/day</b> from ~${Math.round(e.cust)} customers${e.lost > 3 ? `, <span class="warn">${Math.round(e.lost)} turned away (hire!)</span>` : ''}.</p>
       <div class="row">
         ${fc ? (b.fit + 1 <= techOf(s).fit ? `<button class="btn small" data-act="refit" ${me.cash < fc ? 'disabled' : ''}>Refit: ${nextFit.name} · ${money(fc)}</button>`
           : `<button class="btn small" disabled>${nextFit.name} fit-outs arrive ${nextFit.year}</button>`) : ''}
-        <button class="btn small danger" data-act="sell-biz">Close · +${money(b.invested * 0.5)}</button>
-      </div>`;
+        ${(b.floors || 1) < MAX_FLOORS ? `<button class="btn small" data-act="floor" ${me.cash < floorCost(b) ? 'disabled' : ''}>Add floor · ${money(floorCost(b))}</button>` : ''}
+      </div>
+      <div class="row"><button class="btn small danger" data-act="sell-biz">Close · +${money(b.invested * 0.5)}</button></div>`;
+    return h;
+  }
+
+  // Small SVG bar chart of daily values.
+  barsHTML(vals, label) {
+    if (!vals || vals.length < 2) return '';
+    const max = Math.max(1, ...vals.map(Math.abs));
+    const w = 100 / vals.length;
+    const bars = vals.map((v, i) => {
+      const hgt = Math.abs(v) / max * 28;
+      return `<rect x="${(i * w + w * 0.15).toFixed(2)}" y="${(v >= 0 ? 30 - hgt : 30).toFixed(2)}" width="${(w * 0.7).toFixed(2)}" height="${Math.max(0.5, hgt).toFixed(2)}" fill="${v >= 0 ? '#3ddc84' : '#ff5a6e'}"/>`;
+    }).join('');
+    return `<div class="chart"><small>${label} · best ${money(Math.max(...vals))}</small><svg viewBox="0 0 100 60" preserveAspectRatio="none">${bars}<line x1="0" x2="100" y1="30" y2="30" stroke="rgba(255,255,255,0.25)" stroke-width="0.4"/></svg></div>`;
+  }
+
+  staffTabHTML(lot, b) {
+    const s = this.s, me = s.players[ME];
+    const mood = m => (m.morale > 0.7 ? '😄' : m.morale > 0.45 ? '🙂' : m.morale > 0.3 ? '😕' : '😠');
+    const room = maxStaff(b) - b.team.length;
+    let h = `<div class="stats">
+      <div class="stat"><small>Serves / hour</small><b>${Math.round(capacity(b))}</b></div>
+      <div class="stat"><small>Wage bill / hr</small><b>${money(teamWage(b))}</b></div>
+      <div class="stat"><small>Morale</small><b>${mood({ morale: avgMorale(b) })} ${Math.round(avgMorale(b) * 100)}%</b></div></div>
+      <p class="note">${manager(b) ? `Managed by <b>${esc(manager(b).name)}</b>.` : 'No manager: promote someone to lift morale and service.'}
+      ${clerks(b) ? ` ${clerks(b)} stock clerk${clerks(b) > 1 ? 's' : ''}: a 13:00 restock and less spoilage.` : ' A stock clerk adds a 13:00 restock.'}
+      ${b.len > 12 ? ' <span class="warn">Long opening hours are wearing the team down.</span>' : ''}</p>`;
+    h += b.team.map(m => {
+      const fair = fairPay(b.type, m.role, m.skill);
+      const role = STAFF_ROLES[m.role];
+      return `<div class="card staff">
+        <div class="row" style="margin:0"><span style="font-size:20px">${role.icon}</span>
+          <span class="grow"><b>${esc(m.name)}</b><small>${role.name}${m.train ? ' · 🎓 training' : ''} · ${m.days}d · ${money(m.pay)}/hr${m.pay < fair * 0.95 ? ' <span class="warn">(underpaid)</span>' : ''}</small></span>
+          <span class="skill">${'★'.repeat(Math.round(m.skill * 3))}</span></div>
+        <div class="row" style="margin:4px 0 0"><span style="font-size:16px">${mood(m)}</span><div class="meter grow"><i class="${m.morale < 0.35 ? 'hot' : ''}" style="width:${Math.round(m.morale * 100)}%"></i></div></div>
+        <div class="row" style="margin:6px 0 0;flex-wrap:wrap">
+          <button class="btn small" data-act="sraise" data-id="${m.id}">💵 +10%</button>
+          <button class="btn small" data-act="strain" data-id="${m.id}" ${m.train || m.skill >= 1.55 || me.cash < trainCost(b, m) ? 'disabled' : ''}>🎓 ${money(trainCost(b, m))}</button>
+          ${m.role !== 'manager' ? `<button class="btn small" data-act="srole" data-id="${m.id}" data-v="manager" ${manager(b) ? 'disabled' : ''}>👔 Boss</button>` : `<button class="btn small" data-act="srole" data-id="${m.id}" data-v="server">Demote</button>`}
+          ${m.role === 'server' ? `<button class="btn small" data-act="srole" data-id="${m.id}" data-v="clerk">📦 Clerk</button>` : m.role === 'clerk' ? `<button class="btn small" data-act="srole" data-id="${m.id}" data-v="server">🧑‍🍳 Server</button>` : ''}
+          <button class="btn small danger" data-act="sfire" data-id="${m.id}" ${b.team.length <= 1 ? 'disabled' : ''}>Fire</button>
+        </div></div>`;
+    }).join('');
+    h += `<h3>Looking for work <em>${room > 0 ? `${room} place${room > 1 ? 's' : ''} free` : 'team full: add a floor'}</em></h3>`;
+    h += (b.cands || []).map(c => `<div class="card staff"><div class="row" style="margin:0">
+        <span class="grow"><b>${esc(c.name)}</b><small>asks ${money(c.pay)}/hr as a server</small></span><span class="skill">${'★'.repeat(Math.round(c.skill * 3))}</span></div>
+        <div class="row" style="margin:6px 0 0">
+          <button class="btn small buy" data-act="hire" data-id="${c.id}" data-v="server" ${room <= 0 ? 'disabled' : ''}>Hire as server</button>
+          <button class="btn small" data-act="hire" data-id="${c.id}" data-v="clerk" ${room <= 0 ? 'disabled' : ''}>As clerk</button>
+          ${manager(b) ? '' : `<button class="btn small" data-act="hire" data-id="${c.id}" data-v="manager" ${room <= 0 ? 'disabled' : ''}>As manager</button>`}
+        </div></div>`).join('') || '<p class="note">Nobody new today. Check back tomorrow.</p>';
+    return h + '<p class="note">Skill grows with experience and training. Morale follows pay, hours, stress and management. Below a quarter, people quit.</p>';
+  }
+
+  customersTabHTML(lot, b) {
+    const fb = { ...(b.fb || {}) };
+    for (const k in b.today.fb || {}) fb[k] = (fb[k] || 0) + b.today.fb[k];
+    const items = Object.entries(fb).filter(([k]) => SHOP_COMMENTS[k]).sort((a, c) => c[1] - a[1]);
+    const good = items.filter(([k]) => SHOP_COMMENTS[k].good).reduce((a, [, v]) => a + v, 0);
+    const total = items.reduce((a, [, v]) => a + v, 0);
+    const score = total ? Math.round(good / total * 100) : null;
+    const name = bizLabel(this.s, b.type);
+    const t = b.yesterday || b.today;
+    const segTotal = (t.seg || []).reduce((a, v) => a + v, 0);
+    const part = (keys) => { const bad = keys.reduce((a, k) => a + (fb[k] || 0), 0); return total ? Math.max(0, 100 - Math.round(bad / total * 300)) : 100; };
+    let h = `<div class="card"><div class="row" style="margin:0"><b class="grow">Customer satisfaction</b><b class="${score == null ? '' : score >= 60 ? 'pos' : 'neg'}">${score == null ? '–' : score + '%'}</b></div>
+      ${[['Service', ['slow', 'grumpy']], ['Prices', ['pricey']], ['Stock', ['stockout']], ['Waiting', ['queue']], ['Hours', ['closed']]].map(([n, k]) => {
+        const v = part(k);
+        return `<div class="need"><span class="grow">${n}</span><div class="meter" style="width:55%"><i class="${v < 50 ? 'hot' : ''}" style="width:${v}%"></i></div></div>`;
+      }).join('')}</div>`;
+    h += '<h3>What customers say</h3>' + (items.length ? items.map(([k, v]) => `<div class="chat"><span>${SHOP_COMMENTS[k].icon}</span><span class="grow">“${esc(SHOP_COMMENTS[k].text(name))}”</span><b>${Math.round(v)}</b></div>`).join('')
+      : '<p class="note">No comments yet. Give it a day.</p>');
+    if (segTotal) {
+      h += `<h3>Who shops here <em>${b.yesterday ? 'yesterday' : 'today'}</em></h3>` + SEGMENTS.map((n, i) => {
+        const v = t.seg[i] / segTotal;
+        return `<div class="need"><span style="color:${SEG_COLORS[i]}">●</span><span class="grow">${n}</span><div class="meter" style="width:50%"><i style="width:${Math.round(v * 100)}%;background:${SEG_COLORS[i]}"></i></div><b style="min-width:36px;text-align:right">${Math.round(v * 100)}%</b></div>`;
+      }).join('');
+      const from = Object.entries(t.from || {}).sort((a, c) => c[1] - a[1]).slice(0, 4);
+      h += `<p class="note">Coming from: ${from.map(([d, v]) => `<span style="color:${DISTRICTS[d].color}">■</span> ${esc(DISTRICTS[d].short)} ${Math.round(v / segTotal * 100)}%`).join(' · ')}</p>`;
+    }
+    return h;
+  }
+
+  promoTabHTML(lot, b) {
+    const s = this.s, me = s.players[ME];
+    const year = yearOf(s);
+    let h = b.promo ? `<div class="card"><b>📣 ${esc(PROMOS.find(p => p.id === b.promo.id)?.name || 'Campaign')} running</b>
+      <div class="note">+${Math.round((b.promo.boost - 1) * 100)}% pull on customers until the end of day ${b.promo.until}.</div></div>` :
+      '<p class="note">Advertising makes the shop more attractive to everyone in walking range. Best when you have spare capacity.</p>';
+    h += PROMOS.map(pr => {
+      const locked = year < pr.year;
+      const cost = promoCost(b, pr);
+      return `<button class="biz-opt" data-act="promo" data-id="${pr.id}" ${locked || b.promo || me.cash < cost ? 'disabled' : ''}>
+        <i>${pr.icon}</i><span><b>${pr.name}</b><small>${locked ? `Arrives ${pr.year}` : `+${Math.round((pr.boost - 1) * 100)}% for ${pr.days} days`}</small></span>
+        <span class="est">${locked ? '🔒' : money(cost)}</span></button>`;
+    }).join('');
+    return h;
+  }
+
+  // Block appeal (stars), parks and market research.
+  blockHTML(d) {
+    const s = this.s, me = s.players[ME];
+    const year = yearOf(s);
+    const st = blockStars(s, d);
+    const full = Math.floor(st), half = st % 1 >= 0.5;
+    const parks = (s.parks || []).filter(p => p.d === d);
+    const slots = parkSlots(s, d).length;
+    const can = canLandscape(s, ME, d);
+    let h = `<h3>Block appeal <em><span class="stars">${'★'.repeat(full)}${half ? '½' : ''}${'☆'.repeat(Math.max(0, MAX_STARS - full - (half ? 1 : 0)))}</span></em></h3>
+      <p class="note">Stars draw wealthy shoppers and visitors, and lift land values and apartment rents.
+      ${parks.length ? 'Here: ' + parks.map(p => { const pk = PARKS.find(x => x.id === p.type); return `${pk.icon} ${pk.name} (${esc(s.players[p.owner].company.split(' ')[0])})`; }).join(', ') + '.' : ''}</p>`;
+    if (can) {
+      h += `<div class="biz-list">${PARKS.map(pk => `<button class="biz-opt" data-act="park" data-id="${pk.id}" ${year < pk.year || me.cash < pk.cost || (parks.length >= slots && !parks.some(p => PARKS.findIndex(x => x.id === p.type) < PARKS.indexOf(pk))) ? 'disabled' : ''}>
+        <i>${pk.icon}</i><span><b>${pk.name}</b><small>${year < pk.year ? `Arrives ${pk.year}` : `+${pk.stars} stars`}</small></span><span class="est">${year < pk.year ? '🔒' : money(pk.cost)}</span></button>`).join('')}</div>
+        <p class="note">${slots} open space${slots > 1 ? 's' : ''} on this block. A better park replaces the weakest one when it's full.</p>`;
+    } else h += '<p class="note">Own at least half this block to landscape it.</p>';
+    const sv = s.surveys?.[ME]?.[d];
+    if (sv && sv.until >= s.day) {
+      h += `<h3>Market survey <em>day ${sv.day}</em></h3>` + sv.items.slice(0, 6).map(it => `<div class="chat"><span>${BIZ[it.type].icon}</span>
+        <span class="grow">${esc(bizLabel(s, it.type))}<small class="dim"> · ~${it.cust}/day${it.rivals ? ` · ${it.rivals} rival${it.rivals > 1 ? 's' : ''} nearby` : ' · no competition'}${it.wanted ? ` · ${it.wanted} asking` : ''}</small></span>
+        <b class="${cls(it.profit)}">${sign(it.profit)}</b></div>`).join('');
+    } else h += `<div class="row"><button class="btn small" data-act="survey" ${me.cash < SURVEY_COST ? 'disabled' : ''}>📋 Commission a market survey · ${money(SURVEY_COST)}</button></div>
+      <p class="note">Ranks every kind of business for this block: expected customers, profit and local competition. Valid ${SURVEY_DAYS} days.</p>`;
     return h;
   }
 
@@ -4008,6 +4858,7 @@ class UI {
         <button class="btn small" data-act="repay" ${!me.loan || me.cash < Math.min(LOAN_STEP, me.loan) ? 'disabled' : ''}>Repay ${money(Math.min(LOAN_STEP, me.loan || LOAN_STEP))}</button>
         <button class="btn small" data-act="repay-all" ${!me.loan || me.cash < me.loan ? 'disabled' : ''}>Repay all</button>
       </div>
+      ${this.barsHTML((me.profitHist || []).slice(-30), 'Operating profit, last 30 days')}
       <h3>Yesterday's books <em class="${cls(op)}">${sign(op)}</em></h3>`;
     if (!keys.length) h += '<p class="note">Nothing to report yet. Come back after midnight.</p>';
     else h += `<table class="ledger">${keys.map(k => `<tr><td>${LEDGER_LABELS[k]}</td><td class="${cls(y[k])}">${sign(y[k])}</td></tr>`).join('')}
@@ -4119,6 +4970,17 @@ class UI {
   }
 
 
+  // ------------------------------------------------------- layers ----
+  layersUI() {
+    const cur = this.app.renderer.overlay;
+    const modes = [['off', '🏙️', 'City'], ['demand', '🔥', 'Unmet demand'], ['traffic', '👣', 'Customers'], ['wealth', '💎', 'Appeal & wealth'], ['land', '💰', 'Land value']];
+    const tips = { off: '', demand: 'Hotter blocks have more people who couldn\'t get what they wanted. The icon is what they want most.',
+      traffic: 'Customers served per block yesterday.', wealth: 'Block stars and the share of wealthy residents.', land: 'Average land value per lot.' };
+    $('layers').innerHTML = `<div class="seg">${modes.map(([k, i, n]) => `<button data-act="layer" data-v="${k}" class="${cur === k ? 'on' : ''}">${i}<small>${n}</small></button>`).join('')}</div>
+      ${tips[cur] ? `<div class="note" style="margin:6px 2px 0">${tips[cur]}</div>` : ''}`;
+    $('camctl').querySelector('[data-cam=layers]').classList.toggle('on', cur !== 'off');
+  }
+
   // ----------------------------------------------------- speed vote ----
   // LAN games: one player proposes a speed, everyone else must agree.
   voteFrame(mp) {
@@ -4167,10 +5029,23 @@ class UI {
       case 'petition': act$('petition', lotId).then(r => res(r) && sfx.buy()); return;
       case 'sell-land': this.confirm('Sell this land back to the city?', 'You get 70% of its value plus half of what you spent on apartments. Apartments are demolished and the lot goes back up for auction.', () => act$('sellLand', lotId).then(r => res(r) && sfx.buy())); return;
       case 'build': {
-        const type = el.dataset.type;
-        act$('build', lotId, type).then(r => { if (res(r)) { sfx.build(); this.app.renderer.floater(this.s.lots[lotId], `−${money(BIZ[type].cost)}`, '#ff8a8a'); } });
+        const type = el.dataset.type, floors = this.buildFloors || 1;
+        act$('build', lotId, type, floors).then(r => { if (res(r)) { sfx.build(); this.lotTab = 'manage'; this.app.renderer.floater(this.s.lots[lotId], `−${money(buildCost(BIZ[type], floors))}`, '#ff8a8a'); } });
         return;
       }
+      case 'bfloors': this.buildFloors = Math.max(1, Math.min(MAX_FLOORS, (this.buildFloors || 1) + +el.dataset.v)); sfx.tap(); break;
+      case 'ltab': this.lotTab = el.dataset.v; sfx.tap(); break;
+      case 'hire': act$('hire', lotId, +el.dataset.id, el.dataset.v).then(r => res(r) && sfx.buy()); return;
+      case 'sfire': this.confirm('Let them go?', 'They get ten hours of pay as severance, and the rest of the team gets a little nervous.', () => act$('fire', lotId, +el.dataset.id).then(res)); return;
+      case 'strain': act$('train', lotId, +el.dataset.id).then(r => res(r) && sfx.buy()); return;
+      case 'sraise': act$('raise', lotId, +el.dataset.id).then(r => res(r) && sfx.coin()); return;
+      case 'srole': act$('role', lotId, +el.dataset.id, el.dataset.v).then(res); return;
+      case 'floor': act$('floor', lotId).then(r => res(r) && sfx.build()); return;
+      case 'promo': act$('promo', lotId, el.dataset.id).then(r => res(r) && sfx.buy()); return;
+      case 'park': act$('park', s.lots[lotId].district, el.dataset.id).then(r => res(r) && sfx.build()); return;
+      case 'survey': act$('survey', s.lots[lotId].district).then(r => res(r) && sfx.buy()); return;
+      case 'buyout': this.confirm('Buy out this shop?', `It stands on your land, so the owner must sell. You take over the shop, its staff and its stock for ${money(buyoutPrice(s, s.lots[lotId]))}.`, () => act$('buyout', lotId).then(r => res(r) && sfx.set())); return;
+      case 'layer': this.app.renderer.setOverlay(el.dataset.v); this.layersUI(); sfx.tap(); return;
       case 'price': act$('price', lotId, Math.round((b.price + PRICE_STEP * +el.dataset.v) * 100) / 100).then(res); sfx.tap(); return;
       case 'staff': act$('staff', lotId, b.staff + +el.dataset.v).then(res); sfx.tap(); return;
       case 'open': act$('hours', lotId, b.from + +el.dataset.v, b.len).then(res); sfx.tap(); return;
@@ -4250,6 +5125,7 @@ class UI {
     const fresh = s.news.filter(n => n.seq > this.seenNews).reverse();
     for (const n of fresh) {
       this.seenNews = Math.max(this.seenNews, n.seq);
+      if (n.kind === 'staff') { if (n.who === ME) { this.toast(n.text, 'bad'); sfx.bad(); } continue; }
       if (n.who === ME && n.kind !== 'set') continue;
       if (['set', 'event', 'bad', 'warn', 'tech', 'goal'].includes(n.kind)) {
         this.toast(n.text, n.kind === 'warn' ? 'bad' : n.kind);
@@ -4359,7 +5235,7 @@ const { UI, getMe, setMe } = __mods.ui;
 const { Net, lanAvailable } = __mods.net;
 const { sfx, setSound } = __mods.audio;
 
-const SAVE_KEY = 'skyline-hustle-save-v3';
+const SAVE_KEY = 'skyline-hustle-save-v4';
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const token = localStorage.getItem('skyline-token') || (() => {

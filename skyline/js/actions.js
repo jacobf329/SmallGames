@@ -6,6 +6,7 @@
 import {
   build, sellBusiness, setPrice, setStaff, setHours, setStock, rushDelivery, upgradeFit, buildApt, sellApt,
   sellLand, petition, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan,
+  hireStaff, fireStaff, trainStaff, raiseStaff, setRole, addFloor, startPromo, buildPark, buyout, survey,
 } from './sim.js';
 import { auctionBid, auctionPass } from './auction.js';
 
@@ -15,7 +16,7 @@ const opt = v => (v === undefined || v === null ? undefined : num(v));
 const lot = (s, v) => { if (!Number.isInteger(v) || v < 0 || v >= s.lots.length) throw new Error('bad lot'); return v; };
 
 const ACTIONS = {
-  build:     (s, p, [l, type]) => build(s, p, lot(s, l), String(type)),
+  build:     (s, p, [l, type, floors]) => build(s, p, lot(s, l), String(type), floors === undefined ? {} : { floors: Math.round(num(floors)) }),
   sellBiz:   (s, p, [l]) => sellBusiness(s, p, lot(s, l)),
   price:     (s, p, [l, v]) => setPrice(s, p, lot(s, l), num(v)),
   staff:     (s, p, [l, v]) => setStaff(s, p, lot(s, l), Math.round(num(v))),
@@ -33,6 +34,16 @@ const ACTIONS = {
   loan:      (s, p, [amt]) => takeLoan(s, p, opt(amt)),
   repay:     (s, p, [amt]) => repayLoan(s, p, opt(amt)),
   bid:       (s, p, [amt]) => auctionBid(s, p, num(amt)),
+  hire:      (s, p, [l, cand, role]) => hireStaff(s, p, lot(s, l), num(cand), String(role || 'server')),
+  fire:      (s, p, [l, sid]) => fireStaff(s, p, lot(s, l), num(sid)),
+  train:     (s, p, [l, sid]) => trainStaff(s, p, lot(s, l), num(sid)),
+  raise:     (s, p, [l, sid]) => raiseStaff(s, p, lot(s, l), num(sid)),
+  role:      (s, p, [l, sid, role]) => setRole(s, p, lot(s, l), num(sid), String(role)),
+  floor:     (s, p, [l]) => addFloor(s, p, lot(s, l)),
+  promo:     (s, p, [l, id]) => startPromo(s, p, lot(s, l), String(id)),
+  park:      (s, p, [d, type]) => buildPark(s, p, Math.round(num(d)), String(type)),
+  buyout:    (s, p, [l]) => buyout(s, p, lot(s, l)),
+  survey:    (s, p, [d]) => survey(s, p, Math.round(num(d))),
   pass:      (s, p) => auctionPass(s, p),
 };
 

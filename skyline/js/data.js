@@ -45,7 +45,14 @@ export const UTILITY_NAMES = ['Volt Works', 'Clearwater Works'];
 // Daily fare per station, by how many stations the same owner holds.
 export const STATION_FARE = [0, 300, 520, 800, 1150];
 // Utilities collect a cut of every business's daily overhead bill.
-export const UTILITY_CUT = [0, 0.30, 0.45];   // per utility, owning 1 / 2
+export const UTILITY_CUT = [0, 0.55, 0.8];   // share of its own kind of bill, owning 1 / 2 utilities
+// Each business's nightly bill: how heavy a user it is, and the split
+// between power (Volt Works) and water (Clearwater Works).
+export const BIZ_UTIL = {
+  cafe: [1.0, 0.45], burger: [1.2, 0.4], smoothie: [0.9, 0.55], bistro: [1.1, 0.45], grocer: [1.1, 0.25],
+  pharmacy: [0.8, 0.2], boutique: [0.7, 0.1], gadget: [1.2, 0.05], gym: [1.4, 0.5], cinema: [1.6, 0.1],
+  arcade: [1.8, 0.05], club: [1.5, 0.25], hotel: [1.8, 0.6],
+};
 
 // Tourists a transit block / park sends into neighbouring districts.
 export const TRANSIT_TOURISTS = 650;
@@ -132,7 +139,47 @@ export const FIT_LEVELS = [
   { name: 'Smart',    appeal: 1.28, cap: 1.15, costMult: 0.35, year: 1936 },
   { name: 'Flagship', appeal: 1.60, cap: 1.30, costMult: 0.70, year: 1960 },
 ];
-export const MAX_STAFF = 8;
+export const MAX_STAFF = 8;            // per shop floor beyond the first: +3
+
+// ------------------------------------------------------------- staff ----
+// Servers serve customers, stock clerks re-stock shelves during the day,
+// a manager lifts everyone's morale and the shop's service. Each person has
+// a skill (0.5 - 1.6), an hourly wage and a morale (0 - 1).
+export const STAFF_ROLES = {
+  server:  { name: 'Server',      icon: '🧑‍🍳', pay: 1.0 },
+  clerk:   { name: 'Stock clerk', icon: '📦', pay: 0.9 },
+  manager: { name: 'Manager',     icon: '👔', pay: 1.7 },
+};
+export const TRAIN_DAYS = 2;
+export const QUIT_MORALE = 0.22;
+export const MAX_FLOORS = 3;            // shop floors (capacity, stock room, staff)
+export const FLOOR_COST = 0.55;         // each extra floor x build cost
+
+// ----------------------------------------------------- block appeal ----
+// Landlords holding at least half a block can landscape its open spaces.
+// Appeal stars draw wealthy shoppers and visitors and lift rents.
+export const PARKS = [
+  { id: 'garden',   name: 'Garden',         icon: '🌳', cost: 4000,  stars: 0.75, year: 1930 },
+  { id: 'fountain', name: 'Fountain plaza', icon: '⛲', cost: 11000, stars: 1.25, year: 1930 },
+  { id: 'statue',   name: 'Monument',       icon: '🗽', cost: 24000, stars: 2.0,  year: 1950 },
+  { id: 'sculpture',name: 'Light sculpture',icon: '✨', cost: 30000, stars: 2.4,  year: 1990 },
+];
+export const MAX_STARS = 5;
+
+// --------------------------------------------------------- marketing ----
+export const PROMOS = [
+  { id: 'flyers', name: 'Flyers',          icon: '📄', year: 1930, cost: 0.03, days: 3, boost: 1.15 },
+  { id: 'radio',  name: 'Radio spot',      icon: '📻', year: 1930, cost: 0.09, days: 5, boost: 1.3 },
+  { id: 'tv',     name: 'TV commercial',   icon: '📺', year: 1955, cost: 0.18, days: 6, boost: 1.5 },
+  { id: 'social', name: 'Social campaign', icon: '📱', year: 2005, cost: 0.12, days: 5, boost: 1.45 },
+];
+
+// --------------------------------------------------------- research ----
+export const SURVEY_COST = 1500;        // per block; results last SURVEY_DAYS
+export const SURVEY_DAYS = 5;
+// Landlords can force-buy a rival's shop standing on their land.
+export const BUYOUT_MULT = 1.6;         // x the shop's value
+export const BUYOUT_SET_MULT = 1.05;    // ... if the landlord owns the whole colour set
 
 // -------------------------------------------------------------- stock ----
 // Deliveries arrive at 06:00 and top shelves up to the target. Food spoils

@@ -1,7 +1,8 @@
 // Skyline Hustle - demand curves and shop attributes shared by the citizen
 // simulation (citizens.js), the analytic forecaster (sim.js) and the AI.
 
-import { BUSINESSES, BIZ, FIT_LEVELS, YEAR_DAYS, SCENARIOS, techAt, eraDemand } from './data.js';
+import { BUSINESSES, BIZ, FIT_LEVELS, YEAR_DAYS, SCENARIOS, DISTRICTS, PARKS, MAX_STARS, techAt, eraDemand } from './data.js';
+import { teamPower, serviceFactor, floorCap } from './staff.js';
 
 const inRange = (from, len, h) => ((h - from + 24) % 24) < len;
 export function defaultHours(def) {
@@ -46,10 +47,24 @@ export function modFor(s, def) {
   return (m.all || 1) * (m[def.id] || 1) * (m[def.group] || 1) * eraDemand(def.id, yearOf(s));
 }
 
+// Customers an hour the shop can serve: its team, its floors, its fit-out.
 export function capacity(b) {
-  return b.staff * BIZ[b.type].cap * FIT_LEVELS[b.fit].cap;
+  return teamPower(b) * BIZ[b.type].cap * FIT_LEVELS[b.fit].cap * floorCap(b.floors);
 }
+// How attractive the shop is before price and distance.
 export function appeal(b) {
-  return FIT_LEVELS[b.fit].appeal * (b.rep ?? 1);
+  return FIT_LEVELS[b.fit].appeal * (b.rep ?? 1) * serviceFactor(b) * (b.promo ? b.promo.boost : 1);
 }
+
+// Block appeal in stars: wealthier districts start higher, parks add more.
+export function blockStars(s, d) {
+  if (d < 0) return 0;
+  const mix = DISTRICTS[d].mix;
+  let st = 0.4 + 2.2 * mix[2] + 0.8 * mix[1];
+  for (const p of s.parks || []) if (p.d === d) st += PARKS.find(x => x.id === p.type).stars;
+  return Math.min(MAX_STARS, Math.round(st * 4) / 4);
+}
+// How much each wealth group cares about a block's stars.
+export const STAR_TASTE = [0.02, 0.06, 0.13, 0.1];
+export const starFactor = (stars, seg) => 1 + STAR_TASTE[seg] * stars;
 export const unitCost = def => def.ticket * def.stock;

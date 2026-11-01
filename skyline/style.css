@@ -343,3 +343,28 @@ h3 em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(
 #lan-box { padding: 12px; }
 
 body.voting #toasts { top: calc(186px + var(--safe-t)); }
+
+/* ------------------------------------------------- shops, staff, maps -- */
+.seg.tabs { margin: 8px 0 4px; }
+.seg.tabs button { font-size: 12px; padding: 6px 2px; min-height: 34px; }
+.chart { margin: 6px 0; }
+.chart small { color: var(--dim); font-size: 11px; }
+.chart svg { display: block; width: 100%; height: 46px; background: rgba(255,255,255,0.03); border-radius: 8px; }
+.card.staff { padding: 8px 10px; }
+.card.staff .grow { flex: 1; min-width: 0; }
+.card.staff .grow b { display: block; font-size: 14px; }
+.card.staff small { color: var(--dim); font-size: 11.5px; }
+.card.staff .btn.small { min-height: 30px; padding: 4px 7px; font-size: 11.5px; flex: 0 0 auto; }
+.card.staff .row { gap: 5px; }
+.skill { color: #ffd23f; font-size: 12px; letter-spacing: -1px; white-space: nowrap; }
+.meter.grow { flex: 1; margin: 0; }
+.chat small { font-style: normal; }
+#camctl button.on { background: var(--you); color: #032530; }
+#layers {
+  position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); top: calc(214px + var(--safe-t));
+  width: min(94vw, 420px); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 6px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+#layers .seg button { display: flex; flex-direction: column; align-items: center; font-size: 17px; line-height: 1.1; padding: 5px 1px; }
+#layers .seg button small { font-size: 9.5px; }
+@media (max-height: 500px) { #layers { top: auto; bottom: 60px; left: 8px; transform: none; width: min(60vw, 420px); } }

@@ -5,16 +5,19 @@ import {
   DISTRICTS, BUSINESSES, BIZ, FIT_LEVELS, MAX_STAFF, APT_NAMES, APT_RESIDENTS, MAX_APT, STATION_FARE,
   UTILITY_CUT, SCENARIOS, RIVALS, LOAN_STEP, LOAN_RATE, OVERHEAD_BASE, OVERHEAD_RATE, NEEDS, SEGMENTS,
   PRICE_STEP, PRICE_MIN, PRICE_MAX, AUTO_STOCK_PREMIUM, TECH, priceLabel, bizName, eraName,
+  STAFF_ROLES, PARKS, PROMOS, SURVEY_COST, SURVEY_DAYS, MAX_FLOORS, MAX_STARS,
 } from './data.js';
 import {
   MAP, money, landValue, rentFor, ownsSet, setCount, estimate, sellLand, build, sellBusiness, setPrice,
   setStaff, setHours, setStock, rushDelivery, autoTarget, upgradeFit, fitCost, aptCheck, buildApt, sellApt,
   aptRentFor, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, loanLimit, netWorth, playerAssets,
   capacity, districtPopulation, LEDGER_LABELS, operating, dayName, yearOf, techOf, bizOpen, bizLabel,
-  petition, nextAuctionSlot, goalProgress, goalText, setsOwned,
+  petition, nextAuctionSlot, goalProgress, goalText, setsOwned, buildCost, floorCost, promoCost, buyoutPrice,
+  canLandscape, parkSlots, blockStars, parkStars, trainCost,
 } from './sim.js';
+import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } from './staff.js';
 import { auctionBid, settleRest, minBid, increment } from './auction.js';
-import { citizenName, CHATTER_ICON, thoughtText } from './citizens.js';
+import { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } from './citizens.js';
 import { SEG_COLORS } from './render3d.js';
 import { sfx, setSound, soundOn } from './audio.js';
 
@@ -45,6 +48,7 @@ export class UI {
     $('modal-card').addEventListener('click', e => this.onClick(e));
     $('auction').addEventListener('click', e => this.onClick(e));
     $('vote').addEventListener('click', e => this.onClick(e));
+    $('layers').addEventListener('click', e => this.onClick(e));
     $('sheet').addEventListener('pointerdown', () => { this.lastTouch = performance.now(); });
     $('sheet-close').addEventListener('click', () => { sfx.tap(); this.close(); });
     $('hud-cash').addEventListener('click', () => { sfx.tap(); this.openTab('bank'); });
@@ -62,6 +66,7 @@ export class UI {
       if (a === 'left') r.rotate(Math.PI / 4);
       else if (a === 'right') r.rotate(-Math.PI / 4);
       else if (a === 'tilt') r.tilt();
+      else if (a === 'layers') { $('layers').classList.toggle('hidden'); this.layersUI(); }
       else r.fit();
     }));
   }
@@ -70,10 +75,13 @@ export class UI {
 
   // ---------------------------------------------------------- sheet ----
   openLot(id) {
+    const fresh = this.view?.kind !== 'lot' || this.view.id !== id;
+    if (fresh) this.lotTab = 'manage';
     this.view = { kind: 'lot', id };
     this.app.renderer.sel = id;
     this.app.renderer.selCitizen = -1;
     this.render();
+    if (fresh) $('sheet').scrollTop = 0;
     this.app.renderer.focusLot(this.s.lots[id], $('sheet').offsetHeight + 58);
   }
   openCitizen(id) {
@@ -148,6 +156,7 @@ export class UI {
     if (lot.kind === 'prop') {
       h += this.businessHTML(lot);
       h += this.aptHTML(lot);
+      h += this.blockHTML(lot.district);
       h += this.chatterHTML(lot.district);
     }
     return h;
@@ -223,15 +232,18 @@ export class UI {
       const rentNote = lot.owner === ME ? 'Your land: no ground rent.' :
         lot.owner === -1 ? `You'd lease from the city: ${money(rentFor(s, lot))}/day rent.` :
         `You'd pay ${esc(s.players[lot.owner].company)} ${money(rentFor(s, lot))}/day rent.`;
+      const floors = this.buildFloors || 1;
       const open = BUSINESSES.filter(d => tech.biz.has(d.id));
       const locked = BUSINESSES.filter(d => !tech.biz.has(d.id)).sort((a, b) => a.year - b.year);
-      const opts = open.map(def => ({ def, e: estimate(s, lot.id, def.id, ME, {}) })).sort((a, b) => b.e.profit - a.e.profit);
+      const opts = open.map(def => ({ def, e: estimate(s, lot.id, def.id, ME, { floors, staff: 2 + floors }) })).sort((a, b) => b.e.profit - a.e.profit);
       const best = opts[0]?.def.id;
-      return `<h3>Open a business</h3><p class="note">${rentNote} Forecasts assume fair prices, 3 staff, usual hours.</p>
+      return `<h3>Open a business</h3><p class="note">${rentNote} Forecasts assume fair prices and usual hours.</p>
+        <div class="ctl"><span>Shop floors <small class="dim">more room, staff and stock</small></span>
+          <div class="stepper"><button data-act="bfloors" data-v="-1">−</button><b>${floors}</b><button data-act="bfloors" data-v="1">+</button></div></div>
         <div class="biz-list">${opts.map(({ def, e }) => `
-          <button class="biz-opt ${def.id === best && e.profit > 0 ? 'best' : ''}" data-act="build" data-type="${def.id}" ${me.cash < def.cost ? 'disabled' : ''}>
+          <button class="biz-opt ${def.id === best && e.profit > 0 ? 'best' : ''}" data-act="build" data-type="${def.id}" ${me.cash < buildCost(def, floors) ? 'disabled' : ''}>
             <i>${def.icon}</i>
-            <span><b>${esc(bizName(def, year))}</b><small>${money(def.cost)} · ${hh(def.open[0])}–${hh(def.open[1])} · ~${Math.round(e.cust)} cust/day</small></span>
+            <span><b>${esc(bizName(def, year))}</b><small>${money(buildCost(def, floors))} · ${hh(def.open[0])}–${hh(def.open[1])} · ~${Math.round(e.cust)} cust/day</small></span>
             <span class="est ${cls(e.profit)}">${sign(e.profit)}<small>per day</small></span>
           </button>`).join('')}
           ${locked.map(def => `<div class="biz-opt locked"><i>${def.icon}</i><span><b>${esc(bizName(def, def.year))}</b><small>Invented in ${def.year}</small></span><span class="est dim">🔒</span></div>`).join('')}
@@ -239,46 +251,52 @@ export class UI {
     }
     const def = BIZ[b.type];
     const owner = s.players[b.owner];
-    const y = b.yesterday;
     const name = bizName(def, year);
     const stars = '★'.repeat(Math.round((b.rep ?? 1) * 2.5)) + '☆'.repeat(Math.max(0, 3.5 - Math.round((b.rep ?? 1) * 2.5)));
     if (b.owner !== ME) {
       const e = estimate(s, lot.id, b.type, b.owner, {});
+      const bo = lot.owner === ME ? buyoutPrice(s, lot) : 0;
       return `<h3>Business</h3><div class="card">
         <div class="row" style="margin:0"><span style="font-size:26px">${def.icon}</span>
-        <div><b>${esc(name)}</b> <span class="stars">${stars}</span><div class="note" style="margin:0">Run by <b style="color:${owner.color}">${esc(owner.company)}</b> · ${Math.round(b.price * 100)}% prices · ${FIT_LEVELS[b.fit].name} · ${b.staff} staff · ${hh(b.from)}–${hh(b.from + b.len)}</div></div></div>
-        <p class="note">Est. ~${Math.round(e.cust)} customers a day. ${lot.owner === ME ? `They pay you <b class="pos">${money(rentFor(s, lot))}</b> a day in rent.` : ''}</p></div>`;
+        <div><b>${esc(name)}</b> <span class="stars">${stars}</span><div class="note" style="margin:0">Run by <b style="color:${owner.color}">${esc(owner.company)}</b> · ${Math.round(b.price * 100)}% prices · ${FIT_LEVELS[b.fit].name} · ${b.team ? b.team.length : b.staff} staff · ${b.floors || 1} floor${(b.floors || 1) > 1 ? 's' : ''} · ${hh(b.from)}–${hh(b.from + b.len)}${b.promo ? ' · 📣 advertising' : ''}</div></div></div>
+        <p class="note">Est. ~${Math.round(e.cust)} customers a day. ${lot.owner === ME ? `They pay you <b class="pos">${money(rentFor(s, lot))}</b> a day in rent.` : ''}</p>
+        ${bo ? `<div class="row"><button class="btn gold" data-act="buyout" ${me.cash < bo ? 'disabled' : ''}>💼 Buy them out · ${money(bo)}</button></div>
+          <p class="note">It's your land, so they must sell. ${ownsSet(s, ME, lot.district) ? '<b class="pos">Full colour set: buyout at a discount.</b>' : 'Own the whole colour set and buyouts get much cheaper.'}</p>` : ''}</div>`;
     }
-    const cap = capacity(b);
-    const e = estimate(s, lot.id, b.type, ME, {});
+    const tab = this.lotTab || 'manage';
+    const y = b.yesterday;
     const t = y || b.today;
     const profitY = t.rev - t.cost;
+    let h = `<h3>${def.icon} ${esc(name)} <em>${FIT_LEVELS[b.fit].name} · ${b.floors || 1}F · <span class="stars">${stars}</span></em></h3>
+      <div class="stats">
+        <div class="stat"><small>${y ? 'Yesterday' : 'Today so far'}</small><b class="${cls(profitY)}">${sign(profitY)}</b></div>
+        <div class="stat"><small>Customers</small><b>${Math.round(t.cust)}</b></div>
+        <div class="stat"><small>Turned away</small><b class="${t.turned > 5 ? 'warn' : ''}">${Math.round(t.turned)}</b></div>
+      </div>
+      <div class="seg tabs">${[['manage', '⚙️ Manage'], ['staff', '👥 Staff'], ['customers', '💬 Customers'], ['promote', '📣 Promote']]
+        .map(([k, n]) => `<button data-act="ltab" data-v="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+    if (tab === 'staff') return h + this.staffTabHTML(lot, b);
+    if (tab === 'customers') return h + this.customersTabHTML(lot, b);
+    if (tab === 'promote') return h + this.promoTabHTML(lot, b);
+    const cap = capacity(b);
+    const e = estimate(s, lot.id, b.type, ME, {});
     const fc = fitCost(b);
     const openNow = bizOpen(b, s.hour);
     const target = b.autoStock ? autoTarget(b) : b.stockTarget;
     const nextFit = FIT_LEVELS[b.fit + 1];
-    let h = `<h3>${def.icon} ${esc(name)} <em>${FIT_LEVELS[b.fit].name} · <span class="stars">${stars}</span></em></h3>`;
-    h += `<div class="stats">
-      <div class="stat"><small>${y ? 'Yesterday' : 'Today so far'}</small><b class="${cls(profitY)}">${sign(profitY)}</b></div>
-      <div class="stat"><small>Customers</small><b>${Math.round(t.cust)}</b></div>
-      <div class="stat"><small>Turned away</small><b class="${t.turned > 5 ? 'warn' : ''}">${Math.round(t.turned)}</b></div>
-    </div>
-    <div class="note" style="margin-bottom:0">Busiest hour used ${Math.round(Math.min(1.5, t.peak) * 100)}% of ${Math.round(cap)}/hr capacity · ${openNow ? '<span class="pos">open now</span>' : '<span class="dim">closed now</span>'}</div>
-    <div class="meter"><i class="${t.peak >= 1 ? 'hot' : ''}" style="width:${Math.round(Math.min(1, t.peak) * 100)}%"></i></div>`;
-    // Price.
+    h += `<div class="note" style="margin-bottom:0">Busiest hour used ${Math.round(Math.min(1.5, t.peak) * 100)}% of ${Math.round(cap)}/hr capacity · ${openNow ? '<span class="pos">open now</span>' : '<span class="dim">closed now</span>'}</div>
+    <div class="meter"><i class="${t.peak >= 1 ? 'hot' : ''}" style="width:${Math.round(Math.min(1, t.peak) * 100)}%"></i></div>
+    ${this.barsHTML(b.hist, 'Daily profit, last two weeks')}`;
     h += `<div class="ctl"><span>Price <small class="dim">avg ticket</small></span>
-      <div class="stepper"><button data-act="price" data-v="-1">−</button><b style="min-width:96px">$${(def.ticket * b.price).toFixed(2)}<small class="sub">${Math.round(b.price * 100)}% · ${priceLabel(b.price)}</small></b><button data-act="price" data-v="1">+</button></div></div>`;
-    // Staff.
-    h += `<div class="ctl"><span>Staff <small class="dim">${money(def.wage)}/hr each</small></span>
-      <div class="stepper"><button data-act="staff" data-v="-1">−</button><b>${b.staff}</b><button data-act="staff" data-v="1">+</button></div></div>`;
-    // Opening hours.
-    h += `<div class="ctl"><span>Opens at</span>
+      <div class="stepper"><button data-act="price" data-v="-1">−</button><b style="min-width:96px">$${(def.ticket * b.price).toFixed(2)}<small class="sub">${Math.round(b.price * 100)}% · ${priceLabel(b.price)}</small></b><button data-act="price" data-v="1">+</button></div></div>
+      <div class="ctl"><span>Servers <small class="dim">quick hire / let go · see Staff</small></span>
+      <div class="stepper"><button data-act="staff" data-v="-1">−</button><b>${servers(b)}</b><button data-act="staff" data-v="1">+</button></div></div>
+      <div class="ctl"><span>Opens at</span>
       <div class="stepper"><button data-act="open" data-v="-1">−</button><b style="min-width:64px">${hh(b.from)}</b><button data-act="open" data-v="1">+</button></div></div>
-      <div class="ctl"><span>Open for <small class="dim">closes ${hh(b.from + b.len)}</small></span>
+      <div class="ctl"><span>Open for <small class="dim">closes ${hh(b.from + b.len)}${b.len > 12 ? ' · long shifts hurt morale' : ''}</small></span>
       <div class="stepper"><button data-act="len" data-v="-1">−</button><b style="min-width:64px">${b.len === 24 ? '24h' : b.len + 'h'}</b><button data-act="len" data-v="1">+</button></div></div>`;
-    // Stock.
     h += `<div class="card">
-      <div class="ctl" style="margin-top:0"><span>📦 Stock <small class="dim">delivered 06:00</small></span>
+      <div class="ctl" style="margin-top:0"><span>📦 Stock <small class="dim">06:00${clerks(b) ? ' + 13:00 (clerks)' : ''}</small></span>
         <div class="seg small" style="min-width:150px"><button data-act="auto" data-v="1" class="${b.autoStock ? 'on' : ''}">Auto</button><button data-act="auto" data-v="0" class="${!b.autoStock ? 'on' : ''}">Manual</button></div></div>
       <div class="stats">
         <div class="stat"><small>On shelves</small><b class="${b.stock < 8 ? 'neg' : ''}">${Math.round(b.stock)}</b></div>
@@ -286,16 +304,139 @@ export class UI {
         <div class="stat"><small>${def.perish ? 'Spoiled' : 'Storage'}</small><b>${def.perish ? Math.round(t.waste || 0) : '1%/day'}</b></div>
       </div>
       ${b.autoStock ? `<p class="note">Auto-restock orders ~${target} a day from a wholesaler at +${Math.round(AUTO_STOCK_PREMIUM * 100)}%.</p>` :
-        `<div class="ctl"><span>Daily delivery up to</span><div class="stepper"><button data-act="stock" data-v="-1">−</button><b style="min-width:64px">${b.stockTarget}</b><button data-act="stock" data-v="1">+</button></div></div>`}
-      ${def.perish ? `<p class="note">${Math.round(def.perish * 100)}% of unsold stock spoils overnight. Order too much and you waste money. Too little and you sell out.</p>` : ''}
+        `<div class="ctl"><span>Delivery up to</span><div class="stepper"><button data-act="stock" data-v="-1">−</button><b style="min-width:64px">${b.stockTarget}</b><button data-act="stock" data-v="1">+</button></div></div>`}
+      ${def.perish ? `<p class="note">${Math.round(def.perish * 100)}% of unsold stock spoils overnight${clerks(b) ? ', less with clerks rotating the shelves' : ''}.</p>` : ''}
       <div class="row"><button class="btn small" data-act="rush">🚚 Rush delivery now (+25%)</button></div>
     </div>`;
     h += `<p class="note">Forecast at these settings: <b class="${cls(e.profit)}">${sign(e.profit)}/day</b> from ~${Math.round(e.cust)} customers${e.lost > 3 ? `, <span class="warn">${Math.round(e.lost)} turned away (hire!)</span>` : ''}.</p>
       <div class="row">
         ${fc ? (b.fit + 1 <= techOf(s).fit ? `<button class="btn small" data-act="refit" ${me.cash < fc ? 'disabled' : ''}>Refit: ${nextFit.name} · ${money(fc)}</button>`
           : `<button class="btn small" disabled>${nextFit.name} fit-outs arrive ${nextFit.year}</button>`) : ''}
-        <button class="btn small danger" data-act="sell-biz">Close · +${money(b.invested * 0.5)}</button>
-      </div>`;
+        ${(b.floors || 1) < MAX_FLOORS ? `<button class="btn small" data-act="floor" ${me.cash < floorCost(b) ? 'disabled' : ''}>Add floor · ${money(floorCost(b))}</button>` : ''}
+      </div>
+      <div class="row"><button class="btn small danger" data-act="sell-biz">Close · +${money(b.invested * 0.5)}</button></div>`;
+    return h;
+  }
+
+  // Small SVG bar chart of daily values.
+  barsHTML(vals, label) {
+    if (!vals || vals.length < 2) return '';
+    const max = Math.max(1, ...vals.map(Math.abs));
+    const w = 100 / vals.length;
+    const bars = vals.map((v, i) => {
+      const hgt = Math.abs(v) / max * 28;
+      return `<rect x="${(i * w + w * 0.15).toFixed(2)}" y="${(v >= 0 ? 30 - hgt : 30).toFixed(2)}" width="${(w * 0.7).toFixed(2)}" height="${Math.max(0.5, hgt).toFixed(2)}" fill="${v >= 0 ? '#3ddc84' : '#ff5a6e'}"/>`;
+    }).join('');
+    return `<div class="chart"><small>${label} · best ${money(Math.max(...vals))}</small><svg viewBox="0 0 100 60" preserveAspectRatio="none">${bars}<line x1="0" x2="100" y1="30" y2="30" stroke="rgba(255,255,255,0.25)" stroke-width="0.4"/></svg></div>`;
+  }
+
+  staffTabHTML(lot, b) {
+    const s = this.s, me = s.players[ME];
+    const mood = m => (m.morale > 0.7 ? '😄' : m.morale > 0.45 ? '🙂' : m.morale > 0.3 ? '😕' : '😠');
+    const room = maxStaff(b) - b.team.length;
+    let h = `<div class="stats">
+      <div class="stat"><small>Serves / hour</small><b>${Math.round(capacity(b))}</b></div>
+      <div class="stat"><small>Wage bill / hr</small><b>${money(teamWage(b))}</b></div>
+      <div class="stat"><small>Morale</small><b>${mood({ morale: avgMorale(b) })} ${Math.round(avgMorale(b) * 100)}%</b></div></div>
+      <p class="note">${manager(b) ? `Managed by <b>${esc(manager(b).name)}</b>.` : 'No manager: promote someone to lift morale and service.'}
+      ${clerks(b) ? ` ${clerks(b)} stock clerk${clerks(b) > 1 ? 's' : ''}: a 13:00 restock and less spoilage.` : ' A stock clerk adds a 13:00 restock.'}
+      ${b.len > 12 ? ' <span class="warn">Long opening hours are wearing the team down.</span>' : ''}</p>`;
+    h += b.team.map(m => {
+      const fair = fairPay(b.type, m.role, m.skill);
+      const role = STAFF_ROLES[m.role];
+      return `<div class="card staff">
+        <div class="row" style="margin:0"><span style="font-size:20px">${role.icon}</span>
+          <span class="grow"><b>${esc(m.name)}</b><small>${role.name}${m.train ? ' · 🎓 training' : ''} · ${m.days}d · ${money(m.pay)}/hr${m.pay < fair * 0.95 ? ' <span class="warn">(underpaid)</span>' : ''}</small></span>
+          <span class="skill">${'★'.repeat(Math.round(m.skill * 3))}</span></div>
+        <div class="row" style="margin:4px 0 0"><span style="font-size:16px">${mood(m)}</span><div class="meter grow"><i class="${m.morale < 0.35 ? 'hot' : ''}" style="width:${Math.round(m.morale * 100)}%"></i></div></div>
+        <div class="row" style="margin:6px 0 0;flex-wrap:wrap">
+          <button class="btn small" data-act="sraise" data-id="${m.id}">💵 +10%</button>
+          <button class="btn small" data-act="strain" data-id="${m.id}" ${m.train || m.skill >= 1.55 || me.cash < trainCost(b, m) ? 'disabled' : ''}>🎓 ${money(trainCost(b, m))}</button>
+          ${m.role !== 'manager' ? `<button class="btn small" data-act="srole" data-id="${m.id}" data-v="manager" ${manager(b) ? 'disabled' : ''}>👔 Boss</button>` : `<button class="btn small" data-act="srole" data-id="${m.id}" data-v="server">Demote</button>`}
+          ${m.role === 'server' ? `<button class="btn small" data-act="srole" data-id="${m.id}" data-v="clerk">📦 Clerk</button>` : m.role === 'clerk' ? `<button class="btn small" data-act="srole" data-id="${m.id}" data-v="server">🧑‍🍳 Server</button>` : ''}
+          <button class="btn small danger" data-act="sfire" data-id="${m.id}" ${b.team.length <= 1 ? 'disabled' : ''}>Fire</button>
+        </div></div>`;
+    }).join('');
+    h += `<h3>Looking for work <em>${room > 0 ? `${room} place${room > 1 ? 's' : ''} free` : 'team full: add a floor'}</em></h3>`;
+    h += (b.cands || []).map(c => `<div class="card staff"><div class="row" style="margin:0">
+        <span class="grow"><b>${esc(c.name)}</b><small>asks ${money(c.pay)}/hr as a server</small></span><span class="skill">${'★'.repeat(Math.round(c.skill * 3))}</span></div>
+        <div class="row" style="margin:6px 0 0">
+          <button class="btn small buy" data-act="hire" data-id="${c.id}" data-v="server" ${room <= 0 ? 'disabled' : ''}>Hire as server</button>
+          <button class="btn small" data-act="hire" data-id="${c.id}" data-v="clerk" ${room <= 0 ? 'disabled' : ''}>As clerk</button>
+          ${manager(b) ? '' : `<button class="btn small" data-act="hire" data-id="${c.id}" data-v="manager" ${room <= 0 ? 'disabled' : ''}>As manager</button>`}
+        </div></div>`).join('') || '<p class="note">Nobody new today. Check back tomorrow.</p>';
+    return h + '<p class="note">Skill grows with experience and training. Morale follows pay, hours, stress and management. Below a quarter, people quit.</p>';
+  }
+
+  customersTabHTML(lot, b) {
+    const fb = { ...(b.fb || {}) };
+    for (const k in b.today.fb || {}) fb[k] = (fb[k] || 0) + b.today.fb[k];
+    const items = Object.entries(fb).filter(([k]) => SHOP_COMMENTS[k]).sort((a, c) => c[1] - a[1]);
+    const good = items.filter(([k]) => SHOP_COMMENTS[k].good).reduce((a, [, v]) => a + v, 0);
+    const total = items.reduce((a, [, v]) => a + v, 0);
+    const score = total ? Math.round(good / total * 100) : null;
+    const name = bizLabel(this.s, b.type);
+    const t = b.yesterday || b.today;
+    const segTotal = (t.seg || []).reduce((a, v) => a + v, 0);
+    const part = (keys) => { const bad = keys.reduce((a, k) => a + (fb[k] || 0), 0); return total ? Math.max(0, 100 - Math.round(bad / total * 300)) : 100; };
+    let h = `<div class="card"><div class="row" style="margin:0"><b class="grow">Customer satisfaction</b><b class="${score == null ? '' : score >= 60 ? 'pos' : 'neg'}">${score == null ? '–' : score + '%'}</b></div>
+      ${[['Service', ['slow', 'grumpy']], ['Prices', ['pricey']], ['Stock', ['stockout']], ['Waiting', ['queue']], ['Hours', ['closed']]].map(([n, k]) => {
+        const v = part(k);
+        return `<div class="need"><span class="grow">${n}</span><div class="meter" style="width:55%"><i class="${v < 50 ? 'hot' : ''}" style="width:${v}%"></i></div></div>`;
+      }).join('')}</div>`;
+    h += '<h3>What customers say</h3>' + (items.length ? items.map(([k, v]) => `<div class="chat"><span>${SHOP_COMMENTS[k].icon}</span><span class="grow">“${esc(SHOP_COMMENTS[k].text(name))}”</span><b>${Math.round(v)}</b></div>`).join('')
+      : '<p class="note">No comments yet. Give it a day.</p>');
+    if (segTotal) {
+      h += `<h3>Who shops here <em>${b.yesterday ? 'yesterday' : 'today'}</em></h3>` + SEGMENTS.map((n, i) => {
+        const v = t.seg[i] / segTotal;
+        return `<div class="need"><span style="color:${SEG_COLORS[i]}">●</span><span class="grow">${n}</span><div class="meter" style="width:50%"><i style="width:${Math.round(v * 100)}%;background:${SEG_COLORS[i]}"></i></div><b style="min-width:36px;text-align:right">${Math.round(v * 100)}%</b></div>`;
+      }).join('');
+      const from = Object.entries(t.from || {}).sort((a, c) => c[1] - a[1]).slice(0, 4);
+      h += `<p class="note">Coming from: ${from.map(([d, v]) => `<span style="color:${DISTRICTS[d].color}">■</span> ${esc(DISTRICTS[d].short)} ${Math.round(v / segTotal * 100)}%`).join(' · ')}</p>`;
+    }
+    return h;
+  }
+
+  promoTabHTML(lot, b) {
+    const s = this.s, me = s.players[ME];
+    const year = yearOf(s);
+    let h = b.promo ? `<div class="card"><b>📣 ${esc(PROMOS.find(p => p.id === b.promo.id)?.name || 'Campaign')} running</b>
+      <div class="note">+${Math.round((b.promo.boost - 1) * 100)}% pull on customers until the end of day ${b.promo.until}.</div></div>` :
+      '<p class="note">Advertising makes the shop more attractive to everyone in walking range. Best when you have spare capacity.</p>';
+    h += PROMOS.map(pr => {
+      const locked = year < pr.year;
+      const cost = promoCost(b, pr);
+      return `<button class="biz-opt" data-act="promo" data-id="${pr.id}" ${locked || b.promo || me.cash < cost ? 'disabled' : ''}>
+        <i>${pr.icon}</i><span><b>${pr.name}</b><small>${locked ? `Arrives ${pr.year}` : `+${Math.round((pr.boost - 1) * 100)}% for ${pr.days} days`}</small></span>
+        <span class="est">${locked ? '🔒' : money(cost)}</span></button>`;
+    }).join('');
+    return h;
+  }
+
+  // Block appeal (stars), parks and market research.
+  blockHTML(d) {
+    const s = this.s, me = s.players[ME];
+    const year = yearOf(s);
+    const st = blockStars(s, d);
+    const full = Math.floor(st), half = st % 1 >= 0.5;
+    const parks = (s.parks || []).filter(p => p.d === d);
+    const slots = parkSlots(s, d).length;
+    const can = canLandscape(s, ME, d);
+    let h = `<h3>Block appeal <em><span class="stars">${'★'.repeat(full)}${half ? '½' : ''}${'☆'.repeat(Math.max(0, MAX_STARS - full - (half ? 1 : 0)))}</span></em></h3>
+      <p class="note">Stars draw wealthy shoppers and visitors, and lift land values and apartment rents.
+      ${parks.length ? 'Here: ' + parks.map(p => { const pk = PARKS.find(x => x.id === p.type); return `${pk.icon} ${pk.name} (${esc(s.players[p.owner].company.split(' ')[0])})`; }).join(', ') + '.' : ''}</p>`;
+    if (can) {
+      h += `<div class="biz-list">${PARKS.map(pk => `<button class="biz-opt" data-act="park" data-id="${pk.id}" ${year < pk.year || me.cash < pk.cost || (parks.length >= slots && !parks.some(p => PARKS.findIndex(x => x.id === p.type) < PARKS.indexOf(pk))) ? 'disabled' : ''}>
+        <i>${pk.icon}</i><span><b>${pk.name}</b><small>${year < pk.year ? `Arrives ${pk.year}` : `+${pk.stars} stars`}</small></span><span class="est">${year < pk.year ? '🔒' : money(pk.cost)}</span></button>`).join('')}</div>
+        <p class="note">${slots} open space${slots > 1 ? 's' : ''} on this block. A better park replaces the weakest one when it's full.</p>`;
+    } else h += '<p class="note">Own at least half this block to landscape it.</p>';
+    const sv = s.surveys?.[ME]?.[d];
+    if (sv && sv.until >= s.day) {
+      h += `<h3>Market survey <em>day ${sv.day}</em></h3>` + sv.items.slice(0, 6).map(it => `<div class="chat"><span>${BIZ[it.type].icon}</span>
+        <span class="grow">${esc(bizLabel(s, it.type))}<small class="dim"> · ~${it.cust}/day${it.rivals ? ` · ${it.rivals} rival${it.rivals > 1 ? 's' : ''} nearby` : ' · no competition'}${it.wanted ? ` · ${it.wanted} asking` : ''}</small></span>
+        <b class="${cls(it.profit)}">${sign(it.profit)}</b></div>`).join('');
+    } else h += `<div class="row"><button class="btn small" data-act="survey" ${me.cash < SURVEY_COST ? 'disabled' : ''}>📋 Commission a market survey · ${money(SURVEY_COST)}</button></div>
+      <p class="note">Ranks every kind of business for this block: expected customers, profit and local competition. Valid ${SURVEY_DAYS} days.</p>`;
     return h;
   }
 
@@ -511,6 +652,7 @@ export class UI {
         <button class="btn small" data-act="repay" ${!me.loan || me.cash < Math.min(LOAN_STEP, me.loan) ? 'disabled' : ''}>Repay ${money(Math.min(LOAN_STEP, me.loan || LOAN_STEP))}</button>
         <button class="btn small" data-act="repay-all" ${!me.loan || me.cash < me.loan ? 'disabled' : ''}>Repay all</button>
       </div>
+      ${this.barsHTML((me.profitHist || []).slice(-30), 'Operating profit, last 30 days')}
       <h3>Yesterday's books <em class="${cls(op)}">${sign(op)}</em></h3>`;
     if (!keys.length) h += '<p class="note">Nothing to report yet. Come back after midnight.</p>';
     else h += `<table class="ledger">${keys.map(k => `<tr><td>${LEDGER_LABELS[k]}</td><td class="${cls(y[k])}">${sign(y[k])}</td></tr>`).join('')}
@@ -622,6 +764,17 @@ export class UI {
   }
 
 
+  // ------------------------------------------------------- layers ----
+  layersUI() {
+    const cur = this.app.renderer.overlay;
+    const modes = [['off', '🏙️', 'City'], ['demand', '🔥', 'Unmet demand'], ['traffic', '👣', 'Customers'], ['wealth', '💎', 'Appeal & wealth'], ['land', '💰', 'Land value']];
+    const tips = { off: '', demand: 'Hotter blocks have more people who couldn\'t get what they wanted. The icon is what they want most.',
+      traffic: 'Customers served per block yesterday.', wealth: 'Block stars and the share of wealthy residents.', land: 'Average land value per lot.' };
+    $('layers').innerHTML = `<div class="seg">${modes.map(([k, i, n]) => `<button data-act="layer" data-v="${k}" class="${cur === k ? 'on' : ''}">${i}<small>${n}</small></button>`).join('')}</div>
+      ${tips[cur] ? `<div class="note" style="margin:6px 2px 0">${tips[cur]}</div>` : ''}`;
+    $('camctl').querySelector('[data-cam=layers]').classList.toggle('on', cur !== 'off');
+  }
+
   // ----------------------------------------------------- speed vote ----
   // LAN games: one player proposes a speed, everyone else must agree.
   voteFrame(mp) {
@@ -670,10 +823,23 @@ export class UI {
       case 'petition': act$('petition', lotId).then(r => res(r) && sfx.buy()); return;
       case 'sell-land': this.confirm('Sell this land back to the city?', 'You get 70% of its value plus half of what you spent on apartments. Apartments are demolished and the lot goes back up for auction.', () => act$('sellLand', lotId).then(r => res(r) && sfx.buy())); return;
       case 'build': {
-        const type = el.dataset.type;
-        act$('build', lotId, type).then(r => { if (res(r)) { sfx.build(); this.app.renderer.floater(this.s.lots[lotId], `−${money(BIZ[type].cost)}`, '#ff8a8a'); } });
+        const type = el.dataset.type, floors = this.buildFloors || 1;
+        act$('build', lotId, type, floors).then(r => { if (res(r)) { sfx.build(); this.lotTab = 'manage'; this.app.renderer.floater(this.s.lots[lotId], `−${money(buildCost(BIZ[type], floors))}`, '#ff8a8a'); } });
         return;
       }
+      case 'bfloors': this.buildFloors = Math.max(1, Math.min(MAX_FLOORS, (this.buildFloors || 1) + +el.dataset.v)); sfx.tap(); break;
+      case 'ltab': this.lotTab = el.dataset.v; sfx.tap(); break;
+      case 'hire': act$('hire', lotId, +el.dataset.id, el.dataset.v).then(r => res(r) && sfx.buy()); return;
+      case 'sfire': this.confirm('Let them go?', 'They get ten hours of pay as severance, and the rest of the team gets a little nervous.', () => act$('fire', lotId, +el.dataset.id).then(res)); return;
+      case 'strain': act$('train', lotId, +el.dataset.id).then(r => res(r) && sfx.buy()); return;
+      case 'sraise': act$('raise', lotId, +el.dataset.id).then(r => res(r) && sfx.coin()); return;
+      case 'srole': act$('role', lotId, +el.dataset.id, el.dataset.v).then(res); return;
+      case 'floor': act$('floor', lotId).then(r => res(r) && sfx.build()); return;
+      case 'promo': act$('promo', lotId, el.dataset.id).then(r => res(r) && sfx.buy()); return;
+      case 'park': act$('park', s.lots[lotId].district, el.dataset.id).then(r => res(r) && sfx.build()); return;
+      case 'survey': act$('survey', s.lots[lotId].district).then(r => res(r) && sfx.buy()); return;
+      case 'buyout': this.confirm('Buy out this shop?', `It stands on your land, so the owner must sell. You take over the shop, its staff and its stock for ${money(buyoutPrice(s, s.lots[lotId]))}.`, () => act$('buyout', lotId).then(r => res(r) && sfx.set())); return;
+      case 'layer': this.app.renderer.setOverlay(el.dataset.v); this.layersUI(); sfx.tap(); return;
       case 'price': act$('price', lotId, Math.round((b.price + PRICE_STEP * +el.dataset.v) * 100) / 100).then(res); sfx.tap(); return;
       case 'staff': act$('staff', lotId, b.staff + +el.dataset.v).then(res); sfx.tap(); return;
       case 'open': act$('hours', lotId, b.from + +el.dataset.v, b.len).then(res); sfx.tap(); return;
@@ -753,6 +919,7 @@ export class UI {
     const fresh = s.news.filter(n => n.seq > this.seenNews).reverse();
     for (const n of fresh) {
       this.seenNews = Math.max(this.seenNews, n.seq);
+      if (n.kind === 'staff') { if (n.who === ME) { this.toast(n.text, 'bad'); sfx.bad(); } continue; }
       if (n.who === ME && n.kind !== 'set') continue;
       if (['set', 'event', 'bad', 'warn', 'tech', 'goal'].includes(n.kind)) {
         this.toast(n.text, n.kind === 'warn' ? 'bad' : n.kind);

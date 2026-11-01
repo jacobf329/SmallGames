@@ -14,7 +14,7 @@ import { UI, getMe, setMe } from './ui.js';
 import { Net, lanAvailable } from './net.js';
 import { sfx, setSound } from './audio.js';
 
-const SAVE_KEY = 'skyline-hustle-save-v3';
+const SAVE_KEY = 'skyline-hustle-save-v4';
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const token = localStorage.getItem('skyline-token') || (() => {

@@ -80,6 +80,47 @@ pay the landowner (or the city) ground rent every night. Each shop has:
 Reputation (★) rises when you serve everyone who comes and falls when you
 turn them away or charge luxury prices.
 
+Each shop sheet has four tabs:
+
+- **Manage**: price, opening hours, stock, a two-week profit chart, refits,
+  and extra **shop floors** (up to 3), which add capacity, staff places and bills.
+- **Staff**: your team as named people. **Servers** set how many customers
+  you can serve. **Stock clerks** add a 13:00 restock and cut spoilage. One
+  **manager** lifts everyone's morale and the service. Each person has a skill
+  that grows with experience and paid **training**, an hourly wage, and a
+  **morale** that follows pay, opening hours, stress and management.
+  Underpaid, overworked staff turn grumpy (customers notice) and eventually
+  **quit**. Hire from the day's job seekers, give raises, promote, demote or fire
+  (ten hours' severance).
+- **Customers**: what shoppers say about this shop (great service, slow
+  staff, rude staff, too pricey, queues, sold out, shut when I came), a
+  satisfaction breakdown, and who shops there and which blocks they come from.
+- **Promote**: ad campaigns that unlock by era (flyers, radio, TV, social
+  media) and pull more customers for a few days.
+
+### Block appeal, parks and buyouts
+Every block has **appeal stars**. Wealthier districts start higher. Hold at
+least half a block's lots and you can landscape its open spaces with a
+garden, fountain plaza, monument (1950) or light sculpture (1990). Stars
+draw wealthy shoppers and visitors, and raise land values and apartment rents.
+
+On **your own land** you can **buy out** a rival's shop, team and stock
+included. Owning the whole colour set makes buyouts much cheaper. Rivals do
+this to you as well.
+
+### Research and map layers
+Commission a **market survey** of any block ($1,500, valid 5 days). It ranks
+every kind of business there by expected customers and profit, shows nearby
+competition, and how many people are asking for it. Tap **🗺️** for map layers:
+**unmet demand** (hot blocks, with an icon of the most-wanted business),
+customers served, appeal and wealth, and land value.
+
+### Utilities
+Every business pays a nightly power and water bill. Heavy users such as
+cinemas, arcades, hotels and gyms pay more, and so do bigger shops.
+**Volt Works** takes a cut of all power bills and **Clearwater Works** of all
+water bills, so their income follows what the city builds.
+
 ### Apartments
 You can build apartments on **any lot you own**. Each level adds residents,
 who become customers for every shop nearby, plus rent. Owning the full
@@ -154,7 +195,8 @@ skyline/
   js/data.js       every number: districts, businesses, eras, tech, scenarios, events
   js/map.js        the city grid, road network (BFS distances / paths), seeded RNG
   js/demand.js     demand curves by hour, opening hours, era fashions
-  js/citizens.js   the citizens: needs, choices, queues, grudges, trips
+  js/citizens.js   the citizens: needs, choices, queues, grudges, comments, trips
+  js/staff.js      shop staff: roles, skill, wages, morale, training, quitting
   js/sim.js        economy: shops, stock, rent, sets, apartments, goals, trades, bank
   js/auction.js    live land auctions
   js/ai.js         rival tycoons (build, tune, trade, bid)
