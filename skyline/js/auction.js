@@ -1,12 +1,15 @@
-// Skyline Hustle - live land auctions. The city puts one lot under the
-// hammer at 9:00, 13:00 and 17:00 while it still owns land. The clock
-// stops while the auction runs; bidding happens in real seconds. Every
-// bid resets the countdown to at least a few seconds, so there is always
-// time to answer. Rivals bid up to what the lot is worth to them.
+// Skyline Hustle - live land auctions. The city sells its land only when a
+// player calls an auction on a lot: the caller opens the bidding at the
+// reserve price, so every auction has a bid. Rivals call auctions for lots
+// they want. Auctions are at least AUCTION_GAP game hours apart and each
+// player may call one every CALL_COOLDOWN hours. The clock stops while an
+// auction runs; bidding happens in real seconds, and every bid resets the
+// countdown to at least a few seconds. Rivals bid up to what the lot is
+// worth to them.
 //
 // With liveAuctions off (headless tests) auctions settle instantly.
 
-import { AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, AUCTION_HOURS, LOAN_STEP } from './data.js';
+import { AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, AUCTION_GAP, CALL_COOLDOWN, LOAN_STEP } from './data.js';
 import { rand, landValue, grantLand, news, money, loanLimit, takeLoan } from './sim.js';
 import { aiAuctionMax } from './ai.js';
 
@@ -19,16 +22,54 @@ export function minBid(a) {
   return a.leader < 0 ? a.price : a.price + increment(a.price);
 }
 
-export function maybeOpenAuction(s) {
-  if (s.auction || s.over || !AUCTION_HOURS.includes(s.hour)) return;
-  const id = s.auctionQueue.find(i => s.lots[i].owner === -1);
-  if (id === undefined) return;
-  s.auctionQueue = s.auctionQueue.filter(i => i !== id);
-  openAuction(s, id);
-  if (!s.liveAuctions) { settleRest(s); closeAuction(s); }
+const nowH = s => s.day * 24 + s.hour;
+
+// Can this player call an auction on this lot right now?
+export function canCall(s, pid, lotId) {
+  const lot = s.lots[lotId], p = s.players[pid];
+  if (!lot || lot.owner !== -1) return { ok: false, msg: 'Only city land is auctioned.' };
+  if (s.auction) return { ok: false, msg: 'An auction is already running.' };
+  const gap = (s.lastAuctionAt ?? -99) + AUCTION_GAP - nowH(s);
+  if (gap > 0) return { ok: false, msg: `The auction house reopens in ${gap}h.`, wait: gap };
+  const cd = (p.lastCall ?? -99) + CALL_COOLDOWN - nowH(s);
+  if (cd > 0) return { ok: false, msg: `You can call another auction in ${cd}h.`, wait: cd };
+  const reserve = reservePrice(s, lot);
+  const room = p.human ? loanLimit(s, pid) - p.loan : 0;
+  if (p.cash + room < reserve) return { ok: false, msg: `You'd need ${money(reserve)} to open the bidding.` };
+  return { ok: true, reserve };
 }
 
-export function openAuction(s, lotId) {
+// Put a city lot under the hammer, with the caller's opening bid.
+export function callAuction(s, pid, lotId) {
+  const chk = canCall(s, pid, lotId);
+  if (!chk.ok) return chk;
+  const p = s.players[pid];
+  p.lastCall = nowH(s);
+  openAuction(s, lotId, pid);
+  if (!s.liveAuctions) { settleRest(s); closeAuction(s); }
+  return { ok: true, msg: `Auction called: you open at ${money(chk.reserve)}.` };
+}
+
+// Rivals call auctions for lots they really want, mostly in office hours.
+export function aiCallAuctions(s) {
+  if (s.auction || s.over || s.hour < 8 || s.hour > 20) return;
+  if ((s.lastAuctionAt ?? -99) + AUCTION_GAP > nowH(s)) return;
+  const rivals = s.players.filter(p => !p.human && !p.bankrupt);
+  for (let i = rivals.length - 1; i > 0; i--) { const j = Math.floor(rand(s) * (i + 1)); [rivals[i], rivals[j]] = [rivals[j], rivals[i]]; }
+  for (const p of rivals) {
+    if (rand(s) > 0.25) continue;
+    let best = null;
+    for (const lot of s.lots) {
+      if (lot.owner !== -1 || !canCall(s, p.id, lot.id).ok) continue;
+      const reserve = reservePrice(s, lot);
+      const keen = aiAuctionMax(s, p, lot) / reserve;
+      if (keen >= 1.15 && (!best || keen > best.keen)) best = { lot, keen };
+    }
+    if (best) { callAuction(s, p.id, best.lot.id); return; }
+  }
+}
+
+export function openAuction(s, lotId, caller = -1) {
   const lot = s.lots[lotId];
   const reserve = reservePrice(s, lot);
   const bidders = {};
@@ -36,8 +77,10 @@ export function openAuction(s, lotId) {
     if (p.human || p.bankrupt) continue;
     bidders[p.id] = { max: aiAuctionMax(s, p, lot), wait: 1.2 + rand(s) * 2.4 };
   }
-  s.auction = { lotId, price: reserve, reserve, leader: -1, timer: AUCTION_SECONDS, bids: [], bidders, out: {} };
-  news(s, `🔨 Auction: ${lot.name}, opening at ${money(reserve)}.`, 'auction');
+  s.auction = { lotId, price: reserve, reserve, leader: caller, caller, timer: AUCTION_SECONDS,
+    bids: caller >= 0 ? [{ pid: caller, amount: reserve }] : [], bidders, out: {} };
+  s.lastAuctionAt = nowH(s);
+  news(s, `🔨 ${caller >= 0 ? s.players[caller].company + ' called an auction' : 'Auction'}: ${lot.name}, opening at ${money(reserve)}.`, 'auction', caller);
 }
 
 export function auctionBid(s, pid, amount) {

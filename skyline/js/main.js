@@ -392,7 +392,7 @@ $('btn-new').addEventListener('click', () => {
   localStorage.setItem('skyline-company', company);
   sfx.build();
   app.start(createGame({ scenario, difficulty, company, name: 'You' }));
-  setTimeout(() => app.ui.toast('Tap any empty lot to open a shop. Land goes on sale at 9:00.', 'good'), 600);
+  setTimeout(() => app.ui.toast('Tap any empty lot to open a shop, or call an auction to buy city land.', 'good'), 600);
 });
 $('btn-continue').addEventListener('click', () => {
   try { app.start(deserialize(localStorage.getItem(SAVE_KEY))); sfx.tap(); }

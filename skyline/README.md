@@ -51,15 +51,17 @@ node skyline/tools/bundle.mjs   # -> dist/skyline-hustle.html
 ## The game
 
 ### Land: live auctions
-The city starts out owning every lot and sells them **by live auction at
-9:00, 13:00 and 17:00**. The clock stops while an auction runs. You bid in
-real seconds against the rivals, and every bid resets the countdown to at
-least 3.5 s. The rivals bid up to what a lot is worth to them, which is much
-more if it completes their colour set or blocks yours. Tap any city lot to
-**petition** for it to be auctioned next. Lots nobody bids on come back
-cheaper. Land sold back to the city, or seized from a bankrupt rival, goes
-back into the auction queue. After that, land changes hands through offers
-between tycoons.
+The city starts out owning every lot and sells one only when a tycoon
+**calls an auction** on it. Tap a city lot and call it: you place the
+opening bid at the reserve price, so every auction has a bid, and the panel
+shows who called it. Rivals call auctions for lots they really want, mostly
+during the day. Auctions are at least **6 game hours apart**, and each player
+can call one every **12 game hours**. The clock stops while an auction runs.
+You bid in real seconds against the rivals, and every bid resets the
+countdown to at least 3.5 s. The rivals bid up to what a lot is worth to
+them, which is much more if it completes their colour set or blocks yours.
+Land sold back to the city, or seized from a bankrupt rival, can be called
+again. Otherwise land changes hands through offers between tycoons.
 
 ### Colour sets
 The city has eight colour districts. Owning **every lot of a colour**

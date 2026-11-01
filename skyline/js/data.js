@@ -234,7 +234,10 @@ export const eraName = y => [...ERAS].reverse().find(e => y >= e.from).name;
 
 // ---------------------------------------------------------- auctions ----
 // The city sells land by live auction a few times a day.
-export const AUCTION_HOURS = [9, 13, 17];
+// Auctions are called by players (human or rival) on city land; the caller
+// opens the bidding. Spacing keeps them from piling up.
+export const AUCTION_GAP = 6;            // game hours between any two auctions
+export const CALL_COOLDOWN = 12;         // game hours before the same player can call again
 export const AUCTION_SECONDS = 9;        // countdown, real time
 export const AUCTION_EXTEND = 3.5;       // a late bid resets the clock to at least this
 export const AUCTION_RESERVE = 0.8;      // opening bid x land value

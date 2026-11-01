@@ -495,8 +495,8 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
     <details class="howto">
       <summary>How to play</summary>
       <ul>
-        <li><b>The city sells land at live auctions</b> at 9:00, 13:00 and 17:00. Bid against the rivals in real time
-          (the clock waits). Tap a city lot to <b>petition</b> for it to be auctioned next.</li>
+        <li><b>City land is sold at live auctions</b> that you or a rival call: tap a city lot and <b>call an auction</b> to
+          open the bidding yourself. Bid against the rivals in real time (the clock waits). Auctions are spaced at least 6 game hours apart.</li>
         <li>You can <b>open a business on any free lot</b>, even land you don't own; you just pay the landowner
           (or the city) ground rent every night.</li>
         <li>Build <b>apartments</b> on any land you own. Residents become customers for every shop nearby.</li>
@@ -766,7 +766,10 @@ const eraName = y => [...ERAS].reverse().find(e => y >= e.from).name;
 
 // ---------------------------------------------------------- auctions ----
 // The city sells land by live auction a few times a day.
-const AUCTION_HOURS = [9, 13, 17];
+// Auctions are called by players (human or rival) on city land; the caller
+// opens the bidding. Spacing keeps them from piling up.
+const AUCTION_GAP = 6;            // game hours between any two auctions
+const CALL_COOLDOWN = 12;         // game hours before the same player can call again
 const AUCTION_SECONDS = 9;        // countdown, real time
 const AUCTION_EXTEND = 3.5;       // a late bid resets the clock to at least this
 const AUCTION_RESERVE = 0.8;      // opening bid x land value
@@ -870,7 +873,7 @@ const EVENTS = [
   { id: 'concert',   days: [1, 1], weight: 2, district: true, text: d => `Open-air concert near ${d}: late-night crowds expected.`, tourists: 1200, mods: { club: 1.5, bistro: 1.2, burger: 1.2 } },
 ];
 
-return { MAP_W, MAP_H, BLOCK_COLS, BLOCK_ROWS, BLOCK_LAYOUT, DISTRICTS, SEGMENTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE, STATION_NAMES, UTILITY_NAMES, STATION_FARE, UTILITY_CUT, BIZ_UTIL, TRANSIT_TOURISTS, PARK_TOURISTS, BUSINESSES, BIZ, bizName, eraDemand, NEEDS, PRICE_MIN, PRICE_MAX, PRICE_STEP, priceLabel, FIT_LEVELS, MAX_STAFF, STAFF_ROLES, TRAIN_DAYS, QUIT_MORALE, MAX_FLOORS, FLOOR_COST, PARKS, MAX_STARS, PROMOS, SURVEY_COST, SURVEY_DAYS, BUYOUT_MULT, BUYOUT_SET_MULT, DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, APT_NAMES, APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, YEAR_DAYS, TECH, techAt, ERAS, eraName, AUCTION_HOURS, AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, PEOPLE_PER_CITIZEN, WALK_RANGE, DISTANCE_FALLOFF, FIRST_NAMES, LAST_NAMES, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV, SECONDS_PER_HOUR, SPEEDS, DAY_NAMES, START_CASH, RIVALS, HUMAN_COLOR, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, GOAL_TEXT, DIFFICULTY, EVENTS };
+return { MAP_W, MAP_H, BLOCK_COLS, BLOCK_ROWS, BLOCK_LAYOUT, DISTRICTS, SEGMENTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE, STATION_NAMES, UTILITY_NAMES, STATION_FARE, UTILITY_CUT, BIZ_UTIL, TRANSIT_TOURISTS, PARK_TOURISTS, BUSINESSES, BIZ, bizName, eraDemand, NEEDS, PRICE_MIN, PRICE_MAX, PRICE_STEP, priceLabel, FIT_LEVELS, MAX_STAFF, STAFF_ROLES, TRAIN_DAYS, QUIT_MORALE, MAX_FLOORS, FLOOR_COST, PARKS, MAX_STARS, PROMOS, SURVEY_COST, SURVEY_DAYS, BUYOUT_MULT, BUYOUT_SET_MULT, DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, APT_NAMES, APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, YEAR_DAYS, TECH, techAt, ERAS, eraName, AUCTION_GAP, CALL_COOLDOWN, AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, PEOPLE_PER_CITIZEN, WALK_RANGE, DISTANCE_FALLOFF, FIRST_NAMES, LAST_NAMES, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV, SECONDS_PER_HOUR, SPEEDS, DAY_NAMES, START_CASH, RIVALS, HUMAN_COLOR, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, GOAL_TEXT, DIFFICULTY, EVENTS };
 })();
 
 /* ===== map.js ===== */
@@ -1624,7 +1627,7 @@ function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You'
   refreshMods(s);
   buildCitizens(s);
   news(s, `Welcome to ${yearOf(s)}, ${people.length > 1 ? people.map(h => h.company).join(', ') : s.players[0].company}. ${sc.blurb}`, 'info');
-  news(s, 'The city sells its land at live auctions at 9:00, 13:00 and 17:00. Open shops anywhere meanwhile.', 'info');
+  news(s, 'City land is sold at auction when someone calls one: tap a city lot to call it and open the bidding.', 'info');
   return s;
 }
 
@@ -2872,15 +2875,18 @@ return { aiHour, aiDay, reserveFor, aiAuctionMax };
 
 /* ===== auction.js ===== */
 __mods.auction = (() => {
-// Skyline Hustle - live land auctions. The city puts one lot under the
-// hammer at 9:00, 13:00 and 17:00 while it still owns land. The clock
-// stops while the auction runs; bidding happens in real seconds. Every
-// bid resets the countdown to at least a few seconds, so there is always
-// time to answer. Rivals bid up to what the lot is worth to them.
+// Skyline Hustle - live land auctions. The city sells its land only when a
+// player calls an auction on a lot: the caller opens the bidding at the
+// reserve price, so every auction has a bid. Rivals call auctions for lots
+// they want. Auctions are at least AUCTION_GAP game hours apart and each
+// player may call one every CALL_COOLDOWN hours. The clock stops while an
+// auction runs; bidding happens in real seconds, and every bid resets the
+// countdown to at least a few seconds. Rivals bid up to what the lot is
+// worth to them.
 //
 // With liveAuctions off (headless tests) auctions settle instantly.
 
-const { AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, AUCTION_HOURS, LOAN_STEP } = __mods.data;
+const { AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, AUCTION_GAP, CALL_COOLDOWN, LOAN_STEP } = __mods.data;
 const { rand, landValue, grantLand, news, money, loanLimit, takeLoan } = __mods.sim;
 const { aiAuctionMax } = __mods.ai;
 
@@ -2893,16 +2899,54 @@ function minBid(a) {
   return a.leader < 0 ? a.price : a.price + increment(a.price);
 }
 
-function maybeOpenAuction(s) {
-  if (s.auction || s.over || !AUCTION_HOURS.includes(s.hour)) return;
-  const id = s.auctionQueue.find(i => s.lots[i].owner === -1);
-  if (id === undefined) return;
-  s.auctionQueue = s.auctionQueue.filter(i => i !== id);
-  openAuction(s, id);
-  if (!s.liveAuctions) { settleRest(s); closeAuction(s); }
+const nowH = s => s.day * 24 + s.hour;
+
+// Can this player call an auction on this lot right now?
+function canCall(s, pid, lotId) {
+  const lot = s.lots[lotId], p = s.players[pid];
+  if (!lot || lot.owner !== -1) return { ok: false, msg: 'Only city land is auctioned.' };
+  if (s.auction) return { ok: false, msg: 'An auction is already running.' };
+  const gap = (s.lastAuctionAt ?? -99) + AUCTION_GAP - nowH(s);
+  if (gap > 0) return { ok: false, msg: `The auction house reopens in ${gap}h.`, wait: gap };
+  const cd = (p.lastCall ?? -99) + CALL_COOLDOWN - nowH(s);
+  if (cd > 0) return { ok: false, msg: `You can call another auction in ${cd}h.`, wait: cd };
+  const reserve = reservePrice(s, lot);
+  const room = p.human ? loanLimit(s, pid) - p.loan : 0;
+  if (p.cash + room < reserve) return { ok: false, msg: `You'd need ${money(reserve)} to open the bidding.` };
+  return { ok: true, reserve };
 }
 
-function openAuction(s, lotId) {
+// Put a city lot under the hammer, with the caller's opening bid.
+function callAuction(s, pid, lotId) {
+  const chk = canCall(s, pid, lotId);
+  if (!chk.ok) return chk;
+  const p = s.players[pid];
+  p.lastCall = nowH(s);
+  openAuction(s, lotId, pid);
+  if (!s.liveAuctions) { settleRest(s); closeAuction(s); }
+  return { ok: true, msg: `Auction called: you open at ${money(chk.reserve)}.` };
+}
+
+// Rivals call auctions for lots they really want, mostly in office hours.
+function aiCallAuctions(s) {
+  if (s.auction || s.over || s.hour < 8 || s.hour > 20) return;
+  if ((s.lastAuctionAt ?? -99) + AUCTION_GAP > nowH(s)) return;
+  const rivals = s.players.filter(p => !p.human && !p.bankrupt);
+  for (let i = rivals.length - 1; i > 0; i--) { const j = Math.floor(rand(s) * (i + 1)); [rivals[i], rivals[j]] = [rivals[j], rivals[i]]; }
+  for (const p of rivals) {
+    if (rand(s) > 0.25) continue;
+    let best = null;
+    for (const lot of s.lots) {
+      if (lot.owner !== -1 || !canCall(s, p.id, lot.id).ok) continue;
+      const reserve = reservePrice(s, lot);
+      const keen = aiAuctionMax(s, p, lot) / reserve;
+      if (keen >= 1.15 && (!best || keen > best.keen)) best = { lot, keen };
+    }
+    if (best) { callAuction(s, p.id, best.lot.id); return; }
+  }
+}
+
+function openAuction(s, lotId, caller = -1) {
   const lot = s.lots[lotId];
   const reserve = reservePrice(s, lot);
   const bidders = {};
@@ -2910,8 +2954,10 @@ function openAuction(s, lotId) {
     if (p.human || p.bankrupt) continue;
     bidders[p.id] = { max: aiAuctionMax(s, p, lot), wait: 1.2 + rand(s) * 2.4 };
   }
-  s.auction = { lotId, price: reserve, reserve, leader: -1, timer: AUCTION_SECONDS, bids: [], bidders, out: {} };
-  news(s, `🔨 Auction: ${lot.name}, opening at ${money(reserve)}.`, 'auction');
+  s.auction = { lotId, price: reserve, reserve, leader: caller, caller, timer: AUCTION_SECONDS,
+    bids: caller >= 0 ? [{ pid: caller, amount: reserve }] : [], bidders, out: {} };
+  s.lastAuctionAt = nowH(s);
+  news(s, `🔨 ${caller >= 0 ? s.players[caller].company + ' called an auction' : 'Auction'}: ${lot.name}, opening at ${money(reserve)}.`, 'auction', caller);
 }
 
 function auctionBid(s, pid, amount) {
@@ -3012,7 +3058,7 @@ function closeAuction(s) {
   return (s.lastAuction = { lotId: a.lotId, winner: -1 });
 }
 
-return { increment, reservePrice, minBid, maybeOpenAuction, openAuction, auctionBid, auctionTick, auctionPass, maybeSettle, settleRest, closeAuction };
+return { increment, reservePrice, minBid, canCall, callAuction, aiCallAuctions, openAuction, auctionBid, auctionTick, auctionPass, maybeSettle, settleRest, closeAuction };
 })();
 
 /* ===== game.js ===== */
@@ -3023,10 +3069,10 @@ __mods.game = (() => {
 
 const { stepHour } = __mods.sim;
 const { aiHour, aiDay } = __mods.ai;
-const { maybeOpenAuction } = __mods.auction;
+const { aiCallAuctions } = __mods.auction;
 
 const HOOKS = {
-  onHour(s) { aiHour(s); maybeOpenAuction(s); },
+  onHour(s) { aiHour(s); aiCallAuctions(s); },
   onDay: aiDay,
 };
 
@@ -3059,7 +3105,7 @@ const {
   sellLand, petition, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan,
   hireStaff, fireStaff, trainStaff, raiseStaff, setRole, addFloor, startPromo, buildPark, buyout, survey,
 } = __mods.sim;
-const { auctionBid, auctionPass } = __mods.auction;
+const { auctionBid, auctionPass, callAuction } = __mods.auction;
 
 // Bad arguments throw; perform() turns that into a failed action.
 const num = v => { if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error('bad number'); return v; };
@@ -3078,7 +3124,7 @@ const ACTIONS = {
   apt:       (s, p, [l]) => buildApt(s, p, lot(s, l)),
   sellApt:   (s, p, [l]) => sellApt(s, p, lot(s, l)),
   sellLand:  (s, p, [l]) => sellLand(s, p, lot(s, l)),
-  petition:  (s, p, [l]) => petition(s, lot(s, l)),
+  call:      (s, p, [l]) => callAuction(s, p, lot(s, l)),
   offer:     (s, p, [l, amt]) => makeOffer(s, p, lot(s, l), num(amt)),
   accept:    (s, p, [id]) => (s.offers.find(o => o.id === id)?.to === p ? acceptOffer(s, id) : { ok: false, msg: 'Not your offer.' }),
   decline:   (s, p, [id]) => (s.offers.find(o => o.id === id)?.to === p ? declineOffer(s, id) : { ok: false, msg: 'Not your offer.' }),
@@ -4285,7 +4331,7 @@ const {
   canLandscape, parkSlots, blockStars, parkStars, trainCost,
 } = __mods.sim;
 const { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } = __mods.staff;
-const { auctionBid, settleRest, minBid, increment } = __mods.auction;
+const { auctionBid, settleRest, minBid, increment, canCall, reservePrice } = __mods.auction;
 const { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } = __mods.citizens;
 const { SEG_COLORS } = __mods.render3d;
 const { sfx, setSound, soundOn } = __mods.audio;
@@ -4469,11 +4515,10 @@ class UI {
     if (lot.owner === -1) {
       if (s.auction && s.auction.lotId === lot.id) h += '<p class="note warn"><b>🔨 Under the hammer right now!</b></p>';
       else {
-        const pos = s.auctionQueue.indexOf(lot.id);
-        const slot = nextAuctionSlot(s);
-        h += `<p class="note">The city sells land only at live auctions (9:00, 13:00, 17:00).
-          ${pos === 0 ? `<b>This lot is next</b>, ${slot.tomorrow ? 'tomorrow' : 'today'} at ${hh(slot.hour)}.` : pos > 0 ? `It is <b>#${pos + 1}</b> in the queue.` : ''}</p>
-          ${pos !== 0 ? '<div class="row"><button class="btn go" data-act="petition">📜 Petition: auction this next</button></div>' : ''}`;
+        const chk = canCall(s, ME, lot.id);
+        h += `<p class="note">The city sells land only at auction, when a tycoon calls one. Auctions are at least 6 game hours apart.
+          </p><div class="row"><button class="btn go" data-act="call" ${chk.ok ? '' : 'disabled'}>🔨 Call an auction · open at ${money(reservePrice(s, lot))}</button></div>
+          <p class="note">${chk.ok ? 'You place the opening bid; rivals can outbid you.' : esc(chk.msg)}</p>`;
       }
     } else if (lot.owner === ME) {
       const back = Math.round(value * 0.7 + lot.aptInvested * 0.5);
@@ -4980,7 +5025,7 @@ class UI {
           setNote += `<div class="warn">${p.id === ME ? '⭐ Winning this completes <b>your</b> set!' : `⚠ This completes <b style="color:${p.color}">${esc(p.company)}</b>'s set!`}</div>`;
       }
       const D = lot.kind === 'prop' ? DISTRICTS[lot.district] : null;
-      el.innerHTML = `<div class="auc-head"><span class="pill">🔨 LIVE AUCTION</span><span class="dim">clock paused</span></div>
+      el.innerHTML = `<div class="auc-head"><span class="pill">🔨 LIVE AUCTION</span><span class="dim">${a.caller >= 0 ? `called by ${a.caller === ME ? 'you' : esc(s.players[a.caller].company)} · ` : ''}clock paused</span></div>
         <div class="sh-head" style="margin:6px 0"><div class="chip" style="background:${D ? D.color : lot.kind === 'station' ? '#2f80ed' : '#8c8c80'}">${D ? '' : lot.kind === 'station' ? '🚇' : '⚡'}</div>
           <div><div class="sh-title">${esc(lot.name)}</div><div class="sh-sub">${D ? esc(D.name) + ' · ' : ''}land value ${money(landValue(s, lot))}</div></div></div>
         ${lot.kind === 'prop' ? this.setBarHTML(lot.district, lot.id) : ''}${setNote}
@@ -5089,7 +5134,7 @@ class UI {
     };
     const act$ = (name, ...args) => this.app.act(name, ...args);
     switch (act) {
-      case 'petition': act$('petition', lotId).then(r => res(r) && sfx.buy()); return;
+      case 'call': act$('call', lotId).then(r => { if (!r.ok) res(r); }); return;
       case 'sell-land': this.confirm('Sell this land back to the city?', 'You get 70% of its value plus half of what you spent on apartments. Apartments are demolished and the lot goes back up for auction.', () => act$('sellLand', lotId).then(r => res(r) && sfx.buy())); return;
       case 'build': {
         const type = el.dataset.type, floors = this.buildFloors || 1;
@@ -5676,7 +5721,7 @@ $('btn-new').addEventListener('click', () => {
   localStorage.setItem('skyline-company', company);
   sfx.build();
   app.start(createGame({ scenario, difficulty, company, name: 'You' }));
-  setTimeout(() => app.ui.toast('Tap any empty lot to open a shop. Land goes on sale at 9:00.', 'good'), 600);
+  setTimeout(() => app.ui.toast('Tap any empty lot to open a shop, or call an auction to buy city land.', 'good'), 600);
 });
 $('btn-continue').addEventListener('click', () => {
   try { app.start(deserialize(localStorage.getItem(SAVE_KEY))); sfx.tap(); }

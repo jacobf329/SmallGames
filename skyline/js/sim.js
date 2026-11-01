@@ -61,7 +61,7 @@ export function createGame({ scenario = 'boomtown', difficulty = 'normal', name 
   refreshMods(s);
   buildCitizens(s);
   news(s, `Welcome to ${yearOf(s)}, ${people.length > 1 ? people.map(h => h.company).join(', ') : s.players[0].company}. ${sc.blurb}`, 'info');
-  news(s, 'The city sells its land at live auctions at 9:00, 13:00 and 17:00. Open shops anywhere meanwhile.', 'info');
+  news(s, 'City land is sold at auction when someone calls one: tap a city lot to call it and open the bidding.', 'info');
   return s;
 }
 

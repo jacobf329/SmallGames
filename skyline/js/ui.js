@@ -16,7 +16,7 @@ import {
   canLandscape, parkSlots, blockStars, parkStars, trainCost,
 } from './sim.js';
 import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } from './staff.js';
-import { auctionBid, settleRest, minBid, increment } from './auction.js';
+import { auctionBid, settleRest, minBid, increment, canCall, reservePrice } from './auction.js';
 import { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } from './citizens.js';
 import { SEG_COLORS } from './render3d.js';
 import { sfx, setSound, soundOn } from './audio.js';
@@ -200,11 +200,10 @@ export class UI {
     if (lot.owner === -1) {
       if (s.auction && s.auction.lotId === lot.id) h += '<p class="note warn"><b>🔨 Under the hammer right now!</b></p>';
       else {
-        const pos = s.auctionQueue.indexOf(lot.id);
-        const slot = nextAuctionSlot(s);
-        h += `<p class="note">The city sells land only at live auctions (9:00, 13:00, 17:00).
-          ${pos === 0 ? `<b>This lot is next</b>, ${slot.tomorrow ? 'tomorrow' : 'today'} at ${hh(slot.hour)}.` : pos > 0 ? `It is <b>#${pos + 1}</b> in the queue.` : ''}</p>
-          ${pos !== 0 ? '<div class="row"><button class="btn go" data-act="petition">📜 Petition: auction this next</button></div>' : ''}`;
+        const chk = canCall(s, ME, lot.id);
+        h += `<p class="note">The city sells land only at auction, when a tycoon calls one. Auctions are at least 6 game hours apart.
+          </p><div class="row"><button class="btn go" data-act="call" ${chk.ok ? '' : 'disabled'}>🔨 Call an auction · open at ${money(reservePrice(s, lot))}</button></div>
+          <p class="note">${chk.ok ? 'You place the opening bid; rivals can outbid you.' : esc(chk.msg)}</p>`;
       }
     } else if (lot.owner === ME) {
       const back = Math.round(value * 0.7 + lot.aptInvested * 0.5);
@@ -711,7 +710,7 @@ export class UI {
           setNote += `<div class="warn">${p.id === ME ? '⭐ Winning this completes <b>your</b> set!' : `⚠ This completes <b style="color:${p.color}">${esc(p.company)}</b>'s set!`}</div>`;
       }
       const D = lot.kind === 'prop' ? DISTRICTS[lot.district] : null;
-      el.innerHTML = `<div class="auc-head"><span class="pill">🔨 LIVE AUCTION</span><span class="dim">clock paused</span></div>
+      el.innerHTML = `<div class="auc-head"><span class="pill">🔨 LIVE AUCTION</span><span class="dim">${a.caller >= 0 ? `called by ${a.caller === ME ? 'you' : esc(s.players[a.caller].company)} · ` : ''}clock paused</span></div>
         <div class="sh-head" style="margin:6px 0"><div class="chip" style="background:${D ? D.color : lot.kind === 'station' ? '#2f80ed' : '#8c8c80'}">${D ? '' : lot.kind === 'station' ? '🚇' : '⚡'}</div>
           <div><div class="sh-title">${esc(lot.name)}</div><div class="sh-sub">${D ? esc(D.name) + ' · ' : ''}land value ${money(landValue(s, lot))}</div></div></div>
         ${lot.kind === 'prop' ? this.setBarHTML(lot.district, lot.id) : ''}${setNote}
@@ -820,7 +819,7 @@ export class UI {
     };
     const act$ = (name, ...args) => this.app.act(name, ...args);
     switch (act) {
-      case 'petition': act$('petition', lotId).then(r => res(r) && sfx.buy()); return;
+      case 'call': act$('call', lotId).then(r => { if (!r.ok) res(r); }); return;
       case 'sell-land': this.confirm('Sell this land back to the city?', 'You get 70% of its value plus half of what you spent on apartments. Apartments are demolished and the lot goes back up for auction.', () => act$('sellLand', lotId).then(r => res(r) && sfx.buy())); return;
       case 'build': {
         const type = el.dataset.type, floors = this.buildFloors || 1;

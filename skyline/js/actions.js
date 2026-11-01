@@ -8,7 +8,7 @@ import {
   sellLand, petition, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan,
   hireStaff, fireStaff, trainStaff, raiseStaff, setRole, addFloor, startPromo, buildPark, buyout, survey,
 } from './sim.js';
-import { auctionBid, auctionPass } from './auction.js';
+import { auctionBid, auctionPass, callAuction } from './auction.js';
 
 // Bad arguments throw; perform() turns that into a failed action.
 const num = v => { if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error('bad number'); return v; };
@@ -27,7 +27,7 @@ const ACTIONS = {
   apt:       (s, p, [l]) => buildApt(s, p, lot(s, l)),
   sellApt:   (s, p, [l]) => sellApt(s, p, lot(s, l)),
   sellLand:  (s, p, [l]) => sellLand(s, p, lot(s, l)),
-  petition:  (s, p, [l]) => petition(s, lot(s, l)),
+  call:      (s, p, [l]) => callAuction(s, p, lot(s, l)),
   offer:     (s, p, [l, amt]) => makeOffer(s, p, lot(s, l), num(amt)),
   accept:    (s, p, [id]) => (s.offers.find(o => o.id === id)?.to === p ? acceptOffer(s, id) : { ok: false, msg: 'Not your offer.' }),
   decline:   (s, p, [id]) => (s.offers.find(o => o.id === id)?.to === p ? declineOffer(s, id) : { ok: false, msg: 'Not your offer.' }),
