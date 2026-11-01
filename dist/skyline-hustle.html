@@ -217,7 +217,7 @@ h3 em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(
 .toast {
   background: rgba(14, 20, 36, 0.95); border: 1px solid var(--line); border-left: 4px solid var(--you);
   border-radius: 12px; padding: 7px 11px; font-size: 13px; box-shadow: 0 8px 22px rgba(0,0,0,0.35);
-  animation: pop .22s ease-out; pointer-events: auto;
+  animation: pop .22s ease-out; pointer-events: none;
 }
 .toast.set { border-left-color: var(--gold); }
 .toast.bad { border-left-color: var(--bad); }
@@ -338,6 +338,24 @@ h3 em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(
   #auction { left: 8px; transform: none; bottom: 8px; width: min(48vw, 400px); max-height: calc(100vh - 16px); }
 }
 
+/* ------------------------------------------------------------- LAN -- */
+.speeds { position: relative; }
+.speeds button.wait { opacity: 0.35; }
+#speed-cd { position: absolute; right: 4px; bottom: -16px; font-size: 10px; color: var(--gold); font-weight: 800; }
+#vote {
+  margin-top: 6px; pointer-events: auto; background: rgba(28, 22, 52, 0.96); border: 1px solid #c77dff;
+  border-radius: 14px; padding: 7px 10px; font-size: 13px; box-shadow: 0 8px 22px rgba(0,0,0,0.35);
+}
+.vote-row { display: flex; align-items: center; gap: 8px; }
+.vote-row > span:first-child { flex: 1; }
+.vote-row small { display: block; color: var(--dim); font-size: 11px; }
+.vote-btns { display: flex; gap: 6px; }
+.vote-btns .btn { min-height: 34px; padding: 6px 10px; }
+#net-status { margin-top: 6px; display: inline-block; background: rgba(255, 90, 110, 0.9); color: #fff; font-weight: 700; font-size: 12px; padding: 4px 10px; border-radius: 10px; }
+#lan-box { padding: 12px; }
+
+body.voting #toasts { top: calc(186px + var(--safe-t)); }
+
 </style>
 </head>
 <body>
@@ -355,6 +373,7 @@ h3 em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(
       <span id="clock-day">Day 1 · Mon</span>
     </div>
     <div class="speeds" id="speeds">
+      <span id="speed-cd" class="hidden"></span>
       <button data-speed="0" aria-label="Pause">❚❚</button>
       <button data-speed="1" aria-label="Play">▶</button>
       <button data-speed="2" aria-label="Fast">▶▶</button>
@@ -363,6 +382,8 @@ h3 em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(
   </div>
   <div class="goal" id="goal"><div class="goal-fill" id="goal-fill"></div><span id="goal-text"></span></div>
   <div id="ticker"></div>
+  <div id="vote" class="hidden"></div>
+  <div id="net-status" class="hidden"></div>
 </header>
 
 <div id="floaters"></div>
@@ -393,6 +414,13 @@ h3 em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(
 
 <div id="toasts"></div>
 <div id="modal" class="hidden"><div class="modal-card" id="modal-card"></div></div>
+
+<section id="lobby" class="screen hidden">
+  <div class="title-card">
+    <div class="logo"><span class="logo-sky" style="font-size:30px">LAN</span><span class="logo-hustle" style="font-size:36px">LOBBY</span></div>
+    <div id="lobby-body"></div>
+  </div>
+</section>
 
 <section id="title" class="screen">
   <div class="title-card">
@@ -428,6 +456,14 @@ h3 em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(
     </div>
 
     <button id="btn-new" class="btn go">New Game</button>
+
+    <div id="lan-box" class="card hidden">
+      <b>📶 LAN multiplayer</b>
+      <p class="note">Play with friends on the same wifi. Up to 4 players; rivals fill empty seats.
+        Speed changes need everyone to agree.</p>
+      <label class="field"><span>Your name</span><input id="in-name" maxlength="20" placeholder="Player" autocomplete="off"></label>
+      <div class="row"><button id="btn-lan" class="btn wide">Join LAN lobby</button></div>
+    </div>
 
     <details class="howto">
       <summary>How to play</summary>
@@ -700,6 +736,9 @@ const RIVALS = [
     blurb: 'Smart fit-outs, premium prices, wealthy streets.' },
 ];
 const HUMAN_COLOR = '#2ee6ff';
+// Colours for human players in LAN games (player 1 keeps the classic cyan).
+const HUMAN_COLORS = ['#2ee6ff', '#3ddc84', '#f5f7ff', '#ff7ae0'];
+const MAX_COMPANIES = 4;
 
 // Scenarios. 'goals' scenarios are won by meeting every goal before its
 // deadline (miss one and you lose); 'race' scenarios by being first to a
@@ -753,7 +792,7 @@ const EVENTS = [
   { id: 'concert',   days: [1, 1], weight: 2, district: true, text: d => `Open-air concert near ${d}: late-night crowds expected.`, tourists: 1200, mods: { club: 1.5, bistro: 1.2, burger: 1.2 } },
 ];
 
-return { MAP_W, MAP_H, BLOCK_COLS, BLOCK_ROWS, BLOCK_LAYOUT, DISTRICTS, SEGMENTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE, STATION_NAMES, UTILITY_NAMES, STATION_FARE, UTILITY_CUT, TRANSIT_TOURISTS, PARK_TOURISTS, BUSINESSES, BIZ, bizName, eraDemand, NEEDS, PRICE_MIN, PRICE_MAX, PRICE_STEP, priceLabel, FIT_LEVELS, MAX_STAFF, DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, APT_NAMES, APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, YEAR_DAYS, TECH, techAt, ERAS, eraName, AUCTION_HOURS, AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, PEOPLE_PER_CITIZEN, WALK_RANGE, DISTANCE_FALLOFF, FIRST_NAMES, LAST_NAMES, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV, SECONDS_PER_HOUR, SPEEDS, DAY_NAMES, START_CASH, RIVALS, HUMAN_COLOR, SCENARIOS, GOAL_TEXT, DIFFICULTY, EVENTS };
+return { MAP_W, MAP_H, BLOCK_COLS, BLOCK_ROWS, BLOCK_LAYOUT, DISTRICTS, SEGMENTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE, STATION_NAMES, UTILITY_NAMES, STATION_FARE, UTILITY_CUT, TRANSIT_TOURISTS, PARK_TOURISTS, BUSINESSES, BIZ, bizName, eraDemand, NEEDS, PRICE_MIN, PRICE_MAX, PRICE_STEP, priceLabel, FIT_LEVELS, MAX_STAFF, DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, APT_NAMES, APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, YEAR_DAYS, TECH, techAt, ERAS, eraName, AUCTION_HOURS, AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, PEOPLE_PER_CITIZEN, WALK_RANGE, DISTANCE_FALLOFF, FIRST_NAMES, LAST_NAMES, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV, SECONDS_PER_HOUR, SPEEDS, DAY_NAMES, START_CASH, RIVALS, HUMAN_COLOR, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, GOAL_TEXT, DIFFICULTY, EVENTS };
 })();
 
 /* ===== map.js ===== */
@@ -1293,7 +1332,7 @@ const {
   APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, DEMAND_SCALE,
   OUTSIDE_WEIGHT, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE,
   LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP,
-  LOAN_LTV, START_CASH, RIVALS, HUMAN_COLOR, SCENARIOS, DIFFICULTY, EVENTS, PRICE_MIN, PRICE_MAX,
+  LOAN_LTV, START_CASH, RIVALS, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, DIFFICULTY, EVENTS, PRICE_MIN, PRICE_MAX,
   DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, TECH, YEAR_DAYS, GOAL_TEXT, bizName, eraName,
 } = __mods.data;
 const { MAP, rand } = __mods.map;
@@ -1303,11 +1342,12 @@ const { buildCitizens, syncResidents, syncTourists, touristsIn, citizensHour } =
 
 
 // ------------------------------------------------------------ setup ----
-function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You', company = 'Your Company', seed } = {}) {
+// humans: [{ name, company }] for LAN games; otherwise one player from name/company.
+function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You', company = 'Your Company', seed, humans } = {}) {
   const diff = DIFFICULTY[difficulty] || DIFFICULTY.normal;
   const sc = SCENARIOS[scenario];
   const s = {
-    v: 2,
+    v: 3,
     rng: (seed ?? Math.floor(Math.random() * 2 ** 32)) >>> 0,
     day: 1, hour: 7, t: 0,
     scenario, difficulty,
@@ -1318,18 +1358,27 @@ function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You'
     chatter: DISTRICTS.map(() => ({})),
     cityCustomersToday: 0, cityCustomersYesterday: 0,
     auction: null, auctionQueue: [], liveAuctions: false,
-    goals: (sc.goals || []).map(g => ({ ...g, done: false, doneDay: 0 })),
+    goals: sc.goals || [],
     over: false, winner: -1, endReason: '',
   };
-  s.players.push(makePlayer(0, name || 'You', company || 'Your Company', HUMAN_COLOR, true, 'human', START_CASH));
-  RIVALS.forEach((r, i) => s.players.push(makePlayer(i + 1, r.name, r.company, r.color, false, r.style,
-    Math.round(START_CASH * diff.aiCash))));
+  const people = (humans && humans.length ? humans : [{ name, company }]).slice(0, MAX_COMPANIES);
+  people.forEach((h, i) => {
+    const p = makePlayer(i, h.name || `Player ${i + 1}`, h.company || `Company ${i + 1}`, HUMAN_COLORS[i], true, 'human', START_CASH);
+    p.goals = s.goals.map(g => ({ done: false, doneDay: 0 }));
+    p.failed = false;
+    s.players.push(p);
+  });
+  RIVALS.slice(0, MAX_COMPANIES - people.length).forEach(r => {
+    const p = makePlayer(s.players.length, r.name, r.company, r.color, false, r.style, Math.round(START_CASH * diff.aiCash));
+    p.blurb = r.blurb;
+    s.players.push(p);
+  });
   // The city auctions its land roughly cheapest first, with some shuffle.
   s.auctionQueue = s.lots.map(l => ({ id: l.id, k: l.basePrice * (0.6 + rand(s) * 0.9) }))
     .sort((a, b) => a.k - b.k).map(x => x.id);
   refreshMods(s);
   buildCitizens(s);
-  news(s, `Welcome to ${yearOf(s)}, ${s.players[0].company}. ${sc.blurb}`, 'info');
+  news(s, `Welcome to ${yearOf(s)}, ${people.length > 1 ? people.map(h => h.company).join(', ') : s.players[0].company}. ${sc.blurb}`, 'info');
   news(s, 'The city sells its land at live auctions at 9:00, 13:00 and 17:00. Open shops anywhere meanwhile.', 'info');
   return s;
 }
@@ -1736,8 +1785,8 @@ function tickEvents(s) {
 }
 
 // ------------------------------------------------------------ goals ----
-function goalProgress(s, g) {
-  const me = 0;
+// Scenario goals are shared templates; each human tracks their own progress.
+function goalProgress(s, g, me = 0) {
   const own = s.lots.filter(l => l.owner === me);
   const v = ({
     biz: () => s.lots.filter(l => l.business && l.business.owner === me).length,
@@ -1754,25 +1803,38 @@ function goalProgress(s, g) {
   return Math.round(v);
 }
 const goalText = g => GOAL_TEXT[g.type](g.n);
+const humans = s => s.players.filter(p => p.human);
 
 function checkGoals(s) {
   if (s.over || !s.goals.length) return;
-  for (const g of s.goals) {
-    if (g.done) continue;
-    if (goalProgress(s, g) >= g.n) {
-      g.done = true; g.doneDay = s.day;
-      news(s, `🎯 Goal complete: ${goalText(g)}!`, 'goal');
-    } else if (s.day > g.by) {
-      return finish(s, -1, `You missed a goal: "${goalText(g)}" by day ${g.by}.`);
+  const people = humans(s);
+  for (const p of people) {
+    if (p.failed || p.bankrupt) continue;
+    s.goals.forEach((g, i) => {
+      const st = p.goals[i];
+      if (st.done || p.failed) return;
+      if (goalProgress(s, g, p.id) >= g.n) {
+        st.done = true; st.doneDay = s.day;
+        news(s, `🎯 ${people.length > 1 ? p.company + ': ' : 'Goal complete: '}${goalText(g)}!`, 'goal', people.length > 1 ? -1 : p.id);
+      } else if (s.day > g.by) {
+        p.failed = true;
+        if (people.length > 1) news(s, `${p.company} missed "${goalText(g)}" and is out of the running.`, 'bad', p.id);
+        else p.failReason = `You missed a goal: "${goalText(g)}" by day ${g.by}.`;
+      }
+    });
+    if (!p.failed && p.goals.every(x => x.done)) {
+      return finish(s, p.id, people.length > 1 ? `${p.company} met every milestone first!` : `Every milestone met. ${SCENARIOS[s.scenario].name} complete!`);
     }
   }
-  if (s.goals.every(g => g.done)) finish(s, 0, `Every milestone met. ${SCENARIOS[s.scenario].name} complete!`);
+  if (people.every(p => p.failed || p.bankrupt)) {
+    finish(s, -1, people.length > 1 ? 'Every player missed a milestone.' : people[0].failReason || 'You missed a milestone.');
+  }
 }
 
 function checkEnd(s) {
   const sc = SCENARIOS[s.scenario];
-  const me = s.players[0];
-  if (me.bankrupt) return finish(s, -1, 'You went bankrupt.');
+  const people = humans(s);
+  if (people.every(p => p.bankrupt)) return finish(s, -1, people.length > 1 ? 'Every player went bankrupt.' : 'You went bankrupt.');
   const alive = s.players.filter(p => !p.bankrupt);
   if (alive.length === 1 && sc.mode === 'race') return finish(s, alive[0].id, 'Every rival has gone bust.');
   if (sc.mode !== 'race') return;
@@ -2049,12 +2111,12 @@ function serialize(s) {
 }
 function deserialize(json) {
   const s = JSON.parse(json);
-  if (!s || s.v !== 2 || !Array.isArray(s.lots)) throw new Error('bad save');
+  if (!s || s.v !== 3 || !Array.isArray(s.lots)) throw new Error('bad save');
   buildCitizens(s);
   return s;
 }
 
-return { MAP, rand, yearOf, techOf, capacity, bizOpen, createGame, news, bizLabel, ledger, LEDGER_LABELS, operating, dayName, districtStats, landValue, setCount, ownsSet, setsOwned, rentFor, aptCost, aptRentFor, bizValue, playerAssets, netWorth, loanLimit, districtPopulation, allocate, newBizConfig, estimate, stepHour, deliver, autoTarget, runHour, bankrupt, goalProgress, goalText, grantLand, petition, nextAuctionSlot, sellLand, canBuild, build, sellBusiness, setPrice, setStaff, setHours, setStock, rushDelivery, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize };
+return { MAP, rand, yearOf, techOf, capacity, bizOpen, createGame, news, bizLabel, ledger, LEDGER_LABELS, operating, dayName, districtStats, landValue, setCount, ownsSet, setsOwned, rentFor, aptCost, aptRentFor, bizValue, playerAssets, netWorth, loanLimit, districtPopulation, allocate, newBizConfig, estimate, stepHour, deliver, autoTarget, runHour, bankrupt, goalProgress, goalText, humans, grantLand, petition, nextAuctionSlot, sellLand, canBuild, build, sellBusiness, setPrice, setStaff, setHours, setStock, rushDelivery, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize };
 })();
 
 /* ===== ai.js ===== */
@@ -2315,7 +2377,7 @@ function openAuction(s, lotId) {
     if (p.human || p.bankrupt) continue;
     bidders[p.id] = { max: aiAuctionMax(s, p, lot), wait: 1.2 + rand(s) * 2.4 };
   }
-  s.auction = { lotId, price: reserve, reserve, leader: -1, timer: AUCTION_SECONDS, bids: [], bidders, humanOut: false };
+  s.auction = { lotId, price: reserve, reserve, leader: -1, timer: AUCTION_SECONDS, bids: [], bidders, out: {} };
   news(s, `🔨 Auction: ${lot.name}, opening at ${money(reserve)}.`, 'auction');
 }
 
@@ -2359,10 +2421,30 @@ function auctionTick(s, dt) {
 // Finish the bidding instantly among the rivals (the human has stepped out,
 // or nobody is watching). English auction: the strongest bidder wins at one
 // increment over the runner-up.
+// A human steps out. When every human who isn't leading has stepped out
+// (or isn't connected), the rivals finish it among themselves.
+function auctionPass(s, pid, connected = null) {
+  const a = s.auction;
+  if (!a) return { ok: false, msg: 'The auction is over.' };
+  if (a.leader === pid) return { ok: false, msg: 'You are the top bidder.' };
+  a.out[pid] = true;
+  maybeSettle(s, connected);
+  return { ok: true };
+}
+function maybeSettle(s, connected = null) {
+  const a = s.auction;
+  if (!a) return;
+  const waiting = s.players.filter(p => p.human && !p.bankrupt && !a.out[p.id] && a.leader !== p.id &&
+    (!connected || connected.has(p.id)));
+  if (waiting.length) return;
+  settleRest(s);
+  a.timer = Math.min(a.timer, 1.5);
+}
+
 function settleRest(s) {
   const a = s.auction;
   if (!a) return;
-  a.humanOut = true;
+  a.allOut = true;
   const live = Object.entries(a.bidders).map(([k, b]) => ({ pid: +k, max: b.max }))
     .filter(x => x.max >= minBid(a) || x.pid === a.leader)
     .sort((x, y) => y.max - x.max);
@@ -2397,7 +2479,7 @@ function closeAuction(s) {
   return (s.lastAuction = { lotId: a.lotId, winner: -1 });
 }
 
-return { increment, reservePrice, minBid, maybeOpenAuction, openAuction, auctionBid, auctionTick, settleRest, closeAuction };
+return { increment, reservePrice, minBid, maybeOpenAuction, openAuction, auctionBid, auctionTick, auctionPass, maybeSettle, settleRest, closeAuction };
 })();
 
 /* ===== game.js ===== */
@@ -2430,6 +2512,131 @@ function advanceGame(s, hours) {
 }
 
 return { HOOKS, advanceGame };
+})();
+
+/* ===== actions.js ===== */
+__mods.actions = (() => {
+// Skyline Hustle - every player action by name. Single-player calls these
+// directly; in LAN games the phone sends { name, args } and the server runs
+// the same function for the sender's own company. Arguments are validated
+// here so a client can never act for someone else or pass junk.
+
+const {
+  build, sellBusiness, setPrice, setStaff, setHours, setStock, rushDelivery, upgradeFit, buildApt, sellApt,
+  sellLand, petition, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan,
+} = __mods.sim;
+const { auctionBid, auctionPass } = __mods.auction;
+
+// Bad arguments throw; perform() turns that into a failed action.
+const num = v => { if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error('bad number'); return v; };
+const opt = v => (v === undefined || v === null ? undefined : num(v));
+const lot = (s, v) => { if (!Number.isInteger(v) || v < 0 || v >= s.lots.length) throw new Error('bad lot'); return v; };
+
+const ACTIONS = {
+  build:     (s, p, [l, type]) => build(s, p, lot(s, l), String(type)),
+  sellBiz:   (s, p, [l]) => sellBusiness(s, p, lot(s, l)),
+  price:     (s, p, [l, v]) => setPrice(s, p, lot(s, l), num(v)),
+  staff:     (s, p, [l, v]) => setStaff(s, p, lot(s, l), Math.round(num(v))),
+  hours:     (s, p, [l, from, len]) => setHours(s, p, lot(s, l), Math.round(num(from)), Math.round(num(len))),
+  stock:     (s, p, [l, target, auto]) => setStock(s, p, lot(s, l), opt(target), typeof auto === 'boolean' ? auto : undefined),
+  rush:      (s, p, [l]) => rushDelivery(s, p, lot(s, l)),
+  refit:     (s, p, [l]) => upgradeFit(s, p, lot(s, l)),
+  apt:       (s, p, [l]) => buildApt(s, p, lot(s, l)),
+  sellApt:   (s, p, [l]) => sellApt(s, p, lot(s, l)),
+  sellLand:  (s, p, [l]) => sellLand(s, p, lot(s, l)),
+  petition:  (s, p, [l]) => petition(s, lot(s, l)),
+  offer:     (s, p, [l, amt]) => makeOffer(s, p, lot(s, l), num(amt)),
+  accept:    (s, p, [id]) => (s.offers.find(o => o.id === id)?.to === p ? acceptOffer(s, id) : { ok: false, msg: 'Not your offer.' }),
+  decline:   (s, p, [id]) => (s.offers.find(o => o.id === id)?.to === p ? declineOffer(s, id) : { ok: false, msg: 'Not your offer.' }),
+  loan:      (s, p, [amt]) => takeLoan(s, p, opt(amt)),
+  repay:     (s, p, [amt]) => repayLoan(s, p, opt(amt)),
+  bid:       (s, p, [amt]) => auctionBid(s, p, num(amt)),
+  pass:      (s, p) => auctionPass(s, p),
+};
+
+function perform(s, pid, name, args = []) {
+  const fn = ACTIONS[name];
+  if (!fn) return { ok: false, msg: 'Unknown action.' };
+  if (!s || s.over) return { ok: false, msg: 'The game is over.' };
+  const p = s.players[pid];
+  if (!p || !p.human || p.bankrupt) return { ok: false, msg: 'You have no company in this game.' };
+  if (!Array.isArray(args)) args = [];
+  try {
+    return fn(s, pid, args) || { ok: true };
+  } catch (e) {
+    return { ok: false, msg: 'That did not work.' };
+  }
+}
+
+return { perform };
+})();
+
+/* ===== net.js ===== */
+__mods.net = (() => {
+// Skyline Hustle - LAN client connection: one WebSocket to server.mjs that
+// reconnects by itself (phones lock, wifi blips). Messages are JSON.
+
+class Net {
+  constructor(onMessage, onStatus) {
+    this.onMessage = onMessage;
+    this.onStatus = onStatus;
+    this.ws = null;
+    this.hello = null;
+    this.closed = false;
+    this.queue = [];
+  }
+
+  connect(hello) {
+    this.hello = hello;
+    this.closed = false;
+    this.open();
+  }
+
+  open() {
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+    const ws = new WebSocket(url);
+    this.ws = ws;
+    ws.onopen = () => {
+      this.onStatus?.('online');
+      ws.send(JSON.stringify({ t: 'hello', ...this.hello }));
+      for (const m of this.queue.splice(0)) ws.send(m);
+    };
+    ws.onmessage = e => {
+      let m;
+      try { m = JSON.parse(e.data); } catch { return; }
+      this.onMessage(m);
+    };
+    ws.onclose = () => {
+      if (this.ws !== ws) return;
+      this.onStatus?.('offline');
+      if (!this.closed) setTimeout(() => this.open(), 1500);
+    };
+    ws.onerror = () => ws.close();
+  }
+
+  send(msg) {
+    const str = JSON.stringify(msg);
+    if (this.ws && this.ws.readyState === 1) this.ws.send(str);
+    else if (this.queue.length < 50) this.queue.push(str);
+  }
+
+  close() {
+    this.closed = true;
+    this.ws?.close();
+  }
+}
+
+async function lanAvailable() {
+  if (!/^https?:$/.test(location.protocol)) return null;
+  try {
+    const r = await fetch('/api/lan', { cache: 'no-store' });
+    return r.ok ? await r.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+return { Net, lanAvailable };
 })();
 
 /* ===== audio.js ===== */
@@ -3313,7 +3520,10 @@ const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const sign = v => (v >= 0 ? '+' : '') + money(v);
 const cls = v => v >= 0 ? 'pos' : 'neg';
 const hh = h => String(((h % 24) + 24) % 24).padStart(2, '0') + ':00';
-const ME = 0;
+// The company this phone controls (0 in single-player; its seat in LAN games).
+let ME = 0;
+function setMe(id) { ME = id; }
+const getMe = () => ME;
 
 class UI {
   constructor(app) {
@@ -3331,6 +3541,7 @@ class UI {
     $('sheet-body').addEventListener('click', e => this.onClick(e));
     $('modal-card').addEventListener('click', e => this.onClick(e));
     $('auction').addEventListener('click', e => this.onClick(e));
+    $('vote').addEventListener('click', e => this.onClick(e));
     $('sheet').addEventListener('pointerdown', () => { this.lastTouch = performance.now(); });
     $('sheet-close').addEventListener('click', () => { sfx.tap(); this.close(); });
     $('hud-cash').addEventListener('click', () => { sfx.tap(); this.openTab('bank'); });
@@ -3341,10 +3552,6 @@ class UI {
       if (t === 'map') { this.close(); this.app.renderer.fit(); return; }
       if (this.view?.kind === 'tab' && this.view.name === t) this.close();
       else this.openTab(t);
-    }));
-    document.querySelectorAll('#speeds button').forEach(b => b.addEventListener('click', () => {
-      sfx.tap();
-      this.app.setSpeed(+b.dataset.speed);
     }));
     document.querySelectorAll('#camctl button').forEach(b => b.addEventListener('click', () => {
       sfx.tap();
@@ -3408,8 +3615,12 @@ class UI {
     this.navState();
   }
 
+  // Refresh live numbers unless the player is mid-tap; at most ~1.5x a second.
   refresh() {
-    if (this.view && performance.now() - this.lastTouch > 900) this.render();
+    const now = performance.now();
+    if (!this.view || now - this.lastTouch < 900 || now - (this.lastRefresh || 0) < 650) return;
+    this.lastRefresh = now;
+    this.render();
   }
 
   // ------------------------------------------------------------ lot ----
@@ -3642,8 +3853,8 @@ class UI {
   // -------------------------------------------------------- citizen ----
   citizenHTML(id) {
     const s = this.s;
-    const c = s.cz.list.find(x => x.id === id);
-    if (!c) return '<p class="note">They have left town.</p>';
+    const c = s.cz.list.find(x => x.id === id) || this.app.citizenCache?.get(id);
+    if (!c) return this.app.mp ? '<p class="note">Looking them up…</p>' : '<p class="note">They have left town.</p>';
     const D = DISTRICTS[c.d];
     const fav = c.fav >= 0 && s.lots[c.fav].business ? s.lots[c.fav] : null;
     const bars = NEEDS.map((n, i) => {
@@ -3735,10 +3946,12 @@ class UI {
     const year = yearOf(s);
     let h = `<div class="sh-head"><div class="chip" style="background:#ffd23f">🏆</div><div><div class="sh-title">${esc(sc.name)}</div>
       <div class="sh-sub">${esc(sc.blurb)}</div></div></div>`;
+    const mine = s.players[ME].goals || [];
     if (s.goals.length) {
-      h += '<h3>Milestones</h3>';
-      for (const g of s.goals) {
-        const v = goalProgress(s, g);
+      h += `<h3>Milestones ${s.players[ME].failed ? '<em class="neg">missed one: out of the running</em>' : ''}</h3>`;
+      for (const [gi, tmpl] of s.goals.entries()) {
+        const g = { ...tmpl, ...(mine[gi] || {}) };
+        const v = goalProgress(s, g, ME);
         const left = g.by - s.day + 1;
         const pct = Math.min(100, Math.round(v / g.n * 100));
         h += `<div class="card goalrow ${g.done ? 'done' : left <= 3 ? 'urgent' : ''}">
@@ -3756,7 +3969,7 @@ class UI {
       const sets = setsOwned(s, p.id);
       h += `<div class="card rival"><span class="bar" style="background:${p.color}"></span>
         <div><b>${i + 1}. ${esc(p.company)}</b> ${p.bankrupt ? '<span class="neg">BANKRUPT</span>' : ''}
-          <div class="note" style="margin:2px 0">${p.human ? 'You' : esc(p.name) + ' · ' + esc(RIVALS[p.id - 1].blurb)}</div>
+          <div class="note" style="margin:2px 0">${p.id === ME ? 'You' : p.human ? esc(p.name) + ' · human player' : esc(p.name) + ' · ' + esc(p.blurb || '')}</div>
           <div class="note" style="margin:0">${lots} lots · ${shops} shops · ${sets} set${sets === 1 ? '' : 's'} · cash ${money(p.cash)}${p.loan ? ` · owes ${money(p.loan)}` : ''}</div>
           ${this.spark(p)}</div>
         <div class="amt" style="text-align:right;font-weight:900">${money(w)}</div></div>`;
@@ -3813,7 +4026,10 @@ class UI {
       <div class="sh-sub">Saved automatically every midnight</div></div></div>
       <div class="row"><button class="btn" data-act="sound">${soundOn() ? '🔊 Sound on' : '🔇 Sound off'}</button><button class="btn" data-act="quality">${q === 'high' ? '✨ Graphics: high' : '🔋 Graphics: battery'}</button></div>
       <div class="row"><button class="btn" data-act="save">💾 Save now</button><button class="btn" data-act="help">❓ How to play</button></div>
-      <div class="row"><button class="btn danger" data-act="quit">🚪 Quit to title</button></div>
+      ${this.app.mp ? `<div class="card"><b>📶 LAN game</b><div class="note">${this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
+        Speed changes need everyone's agreement. You can propose once every 60 seconds.</div>
+        ${this.app.mp.host ? '<div class="row"><button class="btn danger small" data-act="end-lan">End the game for everyone</button></div>' : ''}</div>` : ''}
+      <div class="row"><button class="btn danger" data-act="quit">🚪 ${this.app.mp ? 'Leave (your company keeps trading)' : 'Quit to title'}</button></div>
       <p class="note"><b>Camera:</b> drag to pan · pinch to zoom · twist two fingers to rotate · drag two fingers up/down to tilt.
       On a computer: drag to pan, right-drag to rotate and tilt, wheel to zoom. The ⟲ ⟳ ⛰ ⌂ buttons do the same.</p>`;
   }
@@ -3827,58 +4043,104 @@ class UI {
     if (!a) {
       if (!el.classList.contains('hidden')) el.classList.add('hidden');
       this.auctionSeen = null;
-      this.aucKey = null;
       return;
     }
     const lot = s.lots[a.lotId];
     const me = s.players[ME];
-    if (this.auctionSeen !== a) {
-      this.auctionSeen = a;
+    const total = 9;
+    // Build the panel once per auction (LAN updates arrive as new objects,
+    // so identify it by lot + reserve), then update it in place: the bid
+    // buttons never get replaced under a finger.
+    const id = `${a.lotId}:${a.reserve}`;
+    if (this.auctionSeen !== id) {
+      this.auctionSeen = id;
       this.auctionLeader = -2;
       el.classList.remove('hidden');
       this.close();
       sfx.offer();
       this.app.renderer.focusLot(lot, 300);
+      let setNote = '';
+      if (lot.kind === 'prop') {
+        const n = MAP.districtLots[lot.district].length;
+        for (const p of s.players) if (setCount(s, p.id, lot.district) === n - 1)
+          setNote += `<div class="warn">${p.id === ME ? '⭐ Winning this completes <b>your</b> set!' : `⚠ This completes <b style="color:${p.color}">${esc(p.company)}</b>'s set!`}</div>`;
+      }
+      const D = lot.kind === 'prop' ? DISTRICTS[lot.district] : null;
+      el.innerHTML = `<div class="auc-head"><span class="pill">🔨 LIVE AUCTION</span><span class="dim">clock paused</span></div>
+        <div class="sh-head" style="margin:6px 0"><div class="chip" style="background:${D ? D.color : lot.kind === 'station' ? '#2f80ed' : '#8c8c80'}">${D ? '' : lot.kind === 'station' ? '🚇' : '⚡'}</div>
+          <div><div class="sh-title">${esc(lot.name)}</div><div class="sh-sub">${D ? esc(D.name) + ' · ' : ''}land value ${money(landValue(s, lot))}</div></div></div>
+        ${lot.kind === 'prop' ? this.setBarHTML(lot.district, lot.id) : ''}${setNote}
+        <div class="auc-bid"><div><small data-r="label"></small><b data-r="price"></b></div>
+          <div style="text-align:right"><small>Leader</small><b data-r="leader"></b></div></div>
+        <div class="meter auc-timer"><i></i></div>
+        <div class="auc-log" data-r="log"></div>
+        <div data-r="live">
+          <div class="row">
+            <button class="btn buy" data-act="bid" data-v="0"></button>
+            <button class="btn go" data-act="bid" data-v="2"></button>
+          </div>
+          <div class="row"><button class="btn small wide" data-act="pass">Pass, let them fight it out</button></div>
+          <p class="note" data-r="loan"></p>
+        </div>
+        <div class="row" data-r="out"><button class="btn wide" disabled>You stepped out. Going, going…</button></div>`;
     }
-    // Only rebuild the panel when the bidding changes; animate the timer.
-    const key = `${a.price}|${a.leader}|${a.humanOut}|${Math.round(me.cash)}`;
-    const total = 9;
-    if (key === this.aucKey) {
-      const bar = el.querySelector('.auc-timer i');
-      if (bar) { bar.style.width = Math.max(0, Math.min(100, a.timer / total * 100)) + '%'; bar.classList.toggle('hot', a.timer < 3); }
-      return;
-    }
+    const q = r => el.querySelector(`[data-r="${r}"]`);
+    const bar = el.querySelector('.auc-timer i');
+    bar.style.width = Math.max(0, Math.min(100, a.timer / total * 100)) + '%';
+    bar.classList.toggle('hot', a.timer < 3);
+    const key = `${a.price}|${a.leader}|${a.allOut}|${a.out && a.out[ME]}|${Math.round(me.cash)}`;
+    if (key === this.aucKey) return;
     this.aucKey = key;
+    const out = a.allOut || (a.out && a.out[ME]);
     const leader = a.leader >= 0 ? s.players[a.leader] : null;
     const next = minBid(a);
     const inc = increment(a.price);
     const room = loanLimit(s, ME) - me.loan;
-    let setNote = '';
-    if (lot.kind === 'prop') {
-      const n = MAP.districtLots[lot.district].length;
-      for (const p of s.players) if (setCount(s, p.id, lot.district) === n - 1)
-        setNote += `<div class="warn">${p.id === ME ? '⭐ Winning this completes <b>your</b> set!' : `⚠ This completes <b style="color:${p.color}">${esc(p.company)}</b>'s set!`}</div>`;
-    }
+    const who = p => (p.id === ME ? 'You' : p.human ? p.company : p.name.split(' ')[0]);
     if (this.auctionLeader !== a.leader) {
       this.auctionLeader = a.leader;
-      if (a.leader > 0) sfx.tap();
+      if (a.leader >= 0 && a.leader !== ME) sfx.tap();
     }
-    const D = lot.kind === 'prop' ? DISTRICTS[lot.district] : null;
-    el.innerHTML = `<div class="auc-head"><span class="pill">🔨 LIVE AUCTION</span><span class="dim">clock paused</span></div>
-      <div class="sh-head" style="margin:6px 0"><div class="chip" style="background:${D ? D.color : lot.kind === 'station' ? '#2f80ed' : '#8c8c80'}">${D ? '' : lot.kind === 'station' ? '🚇' : '⚡'}</div>
-        <div><div class="sh-title">${esc(lot.name)}</div><div class="sh-sub">${D ? esc(D.name) + ' · ' : ''}land value ${money(landValue(s, lot))}</div></div></div>
-      ${lot.kind === 'prop' ? this.setBarHTML(lot.district, lot.id) : ''}${setNote}
-      <div class="auc-bid"><div><small>${leader ? 'Top bid' : 'Opening bid'}</small><b>${money(a.price)}</b></div>
-        <div style="text-align:right"><small>Leader</small><b style="color:${leader ? leader.color : 'var(--dim)'}">${leader ? (leader.human ? 'You!' : esc(leader.name)) : 'no bids'}</b></div></div>
-      <div class="meter auc-timer"><i class="${a.timer < 3 ? 'hot' : ''}" style="width:${Math.max(0, Math.min(100, a.timer / total * 100))}%"></i></div>
-      <div class="auc-log">${a.bids.slice(0, 4).map(b => `<span style="color:${s.players[b.pid].color}">${esc(s.players[b.pid].human ? 'You' : s.players[b.pid].name.split(' ')[0])} ${money(b.amount)}</span>`).join(' · ') || '<span class="dim">Waiting for an opening bid…</span>'}</div>
-      ${a.humanOut ? '<div class="row"><button class="btn wide" disabled>You stepped out. Going, going…</button></div>' :
-      `<div class="row">
-        <button class="btn buy" data-act="bid" data-v="0" ${a.leader === ME || me.cash + room < next ? 'disabled' : ''}>${a.leader === ME ? 'You lead' : `Bid ${money(next)}`}</button>
-        <button class="btn go" data-act="bid" data-v="2" ${a.leader === ME || me.cash + room < next + inc * 2 ? 'disabled' : ''}>Jump ${money(next + inc * 2)}</button>
-      </div>
-      <div class="row"><button class="btn small wide" data-act="pass" ${a.leader === ME ? 'disabled' : ''}>Pass, let them fight it out</button></div>
-      ${me.cash < next ? `<p class="note">Bids above your cash (${money(me.cash)}) are covered by a bank loan.</p>` : ''}`}`;
+    q('label').textContent = leader ? 'Top bid' : 'Opening bid';
+    q('price').textContent = money(a.price);
+    q('leader').textContent = leader ? (leader.id === ME ? 'You!' : who(leader)) : 'no bids';
+    q('leader').style.color = leader ? leader.color : 'var(--dim)';
+    q('log').innerHTML = a.bids.slice(0, 4).map(b => `<span style="color:${s.players[b.pid].color}">${esc(who(s.players[b.pid]))} ${money(b.amount)}</span>`).join(' · ') || '<span class="dim">Waiting for an opening bid…</span>';
+    q('live').classList.toggle('hidden', !!out);
+    q('out').classList.toggle('hidden', !out);
+    const [b0, b2] = el.querySelectorAll('[data-act=bid]');
+    const leading = a.leader === ME;
+    b0.textContent = leading ? 'You lead' : `Bid ${money(next)}`;
+    b0.disabled = leading || me.cash + room < next;
+    b2.textContent = `Jump ${money(next + inc * 2)}`;
+    b2.disabled = leading || me.cash + room < next + inc * 2;
+    el.querySelector('[data-act=pass]').disabled = leading;
+    q('loan').textContent = me.cash < next ? `Bids above your cash (${money(me.cash)}) are covered by a bank loan.` : '';
+  }
+
+
+  // ----------------------------------------------------- speed vote ----
+  // LAN games: one player proposes a speed, everyone else must agree.
+  voteFrame(mp) {
+    const el = $('vote');
+    const v = mp && mp.vote;
+    if (!v || !this.s) { el.classList.add('hidden'); document.body.classList.remove('voting'); this.voteKey = null; return; }
+    // Rebuild only when the vote itself changes; tick the countdown in place
+    // so the buttons never move under a finger.
+    const key = `${v.id}|${v.yes.length}`;
+    const info = `${v.yes.length}/${v.need.length} agreed · ${Math.max(0, v.left)}s`;
+    if (key === this.voteKey) { const sm = el.querySelector('small'); if (sm) sm.textContent = info; return; }
+    this.voteKey = key;
+    document.body.classList.add('voting');
+    el.classList.remove('hidden');
+    const who = this.s.players[v.from];
+    const label = v.speed === 0 ? 'pause the game' : `play at ${['', '1×', '2.5×', '6×'][v.speed]}`;
+    const mine = v.from === ME;
+    const asked = v.need.includes(ME) && !v.yes.includes(ME);
+    el.innerHTML = `<div class="vote-row"><span><b style="color:${who.color}">${esc(mine ? 'You' : who.company)}</b> ${mine ? 'proposed' : 'want'} to <b>${label}</b>.
+      <small>${info}</small></span>
+      ${asked ? `<span class="vote-btns"><button class="btn small buy" data-act="vote-yes" data-id="${v.id}">Agree</button><button class="btn small danger" data-act="vote-no" data-id="${v.id}">No</button></span>` : ''}</div>`;
+    if (asked && this.voteBuzz !== v.id) { this.voteBuzz = v.id; sfx.offer(); }
   }
 
   // -------------------------------------------------------- actions ----
@@ -3890,61 +4152,70 @@ class UI {
     const lotId = this.view?.kind === 'lot' ? this.view.id : -1;
     const b = lotId >= 0 ? s.lots[lotId].business : null;
     const act = el.dataset.act;
+    // Every game action goes through app.act: run locally in single-player,
+    // sent to the server in LAN games. Results come back as a promise.
+    const done = () => { this.render(); this.app.hud(); };
     const res = r => {
-      if (!r) return;
+      if (!r) return false;
       if (r.ok) { if (r.msg) this.toast(r.msg, r.setComplete ? 'set' : 'good'); }
       else if (r.msg) { this.toast(r.msg, 'bad'); sfx.error(); }
+      done();
       return r.ok;
     };
+    const act$ = (name, ...args) => this.app.act(name, ...args);
     switch (act) {
-      case 'petition': if (res(petition(s, lotId))) sfx.buy(); break;
-      case 'sell-land': this.confirm('Sell this land back to the city?', 'You get 70% of its value plus half of what you spent on apartments. Apartments are demolished and the lot goes back up for auction.', () => { res(sellLand(s, ME, lotId)); sfx.buy(); }); return;
+      case 'petition': act$('petition', lotId).then(r => res(r) && sfx.buy()); return;
+      case 'sell-land': this.confirm('Sell this land back to the city?', 'You get 70% of its value plus half of what you spent on apartments. Apartments are demolished and the lot goes back up for auction.', () => act$('sellLand', lotId).then(r => res(r) && sfx.buy())); return;
       case 'build': {
         const type = el.dataset.type;
-        if (res(build(s, ME, lotId, type))) { sfx.build(); this.app.renderer.floater(s.lots[lotId], `−${money(BIZ[type].cost)}`, '#ff8a8a'); }
-        break;
+        act$('build', lotId, type).then(r => { if (res(r)) { sfx.build(); this.app.renderer.floater(this.s.lots[lotId], `−${money(BIZ[type].cost)}`, '#ff8a8a'); } });
+        return;
       }
-      case 'price': setPrice(s, ME, lotId, b.price + PRICE_STEP * +el.dataset.v); sfx.tap(); break;
-      case 'staff': setStaff(s, ME, lotId, b.staff + +el.dataset.v); sfx.tap(); break;
-      case 'open': setHours(s, ME, lotId, b.from + +el.dataset.v, b.len); sfx.tap(); break;
-      case 'len': setHours(s, ME, lotId, b.from, b.len + +el.dataset.v); sfx.tap(); break;
-      case 'auto': setStock(s, ME, lotId, b.autoStock ? autoTarget(b) : b.stockTarget, el.dataset.v === '1'); sfx.tap(); break;
-      case 'stock': setStock(s, ME, lotId, b.stockTarget + Math.max(4, Math.round(b.stockTarget * 0.1 / 4) * 4) * +el.dataset.v); sfx.tap(); break;
-      case 'rush': if (res(rushDelivery(s, ME, lotId))) sfx.buy(); break;
-      case 'refit': if (res(upgradeFit(s, ME, lotId))) sfx.build(); break;
-      case 'sell-biz': this.confirm('Close this business?', `You recover half of what you invested, plus half the value of the stock.`, () => { res(sellBusiness(s, ME, lotId)); sfx.buy(); }); return;
-      case 'apt': if (res(buildApt(s, ME, lotId))) { sfx.build(); if (s.lots[lotId].apt === MAX_APT) sfx.set(); } break;
-      case 'sell-apt': res(sellApt(s, ME, lotId)); break;
+      case 'price': act$('price', lotId, Math.round((b.price + PRICE_STEP * +el.dataset.v) * 100) / 100).then(res); sfx.tap(); return;
+      case 'staff': act$('staff', lotId, b.staff + +el.dataset.v).then(res); sfx.tap(); return;
+      case 'open': act$('hours', lotId, b.from + +el.dataset.v, b.len).then(res); sfx.tap(); return;
+      case 'len': act$('hours', lotId, b.from, b.len + +el.dataset.v).then(res); sfx.tap(); return;
+      case 'auto': act$('stock', lotId, b.autoStock ? autoTarget(b) : b.stockTarget, el.dataset.v === '1').then(res); sfx.tap(); return;
+      case 'stock': act$('stock', lotId, b.stockTarget + Math.max(4, Math.round(b.stockTarget * 0.1 / 4) * 4) * +el.dataset.v).then(res); sfx.tap(); return;
+      case 'rush': act$('rush', lotId).then(r => res(r) && sfx.buy()); return;
+      case 'refit': act$('refit', lotId).then(r => res(r) && sfx.build()); return;
+      case 'sell-biz': this.confirm('Close this business?', 'You recover half of what you invested, plus half the value of the stock.', () => act$('sellBiz', lotId).then(r => res(r) && sfx.buy())); return;
+      case 'apt': act$('apt', lotId).then(r => { if (res(r)) { sfx.build(); if (this.s.lots[lotId].apt === MAX_APT) sfx.set(); } }); return;
+      case 'sell-apt': act$('sellApt', lotId).then(res); return;
       case 'offer-adj': this.offerDraft[lotId] = Math.max(1000, (this.offerDraft[lotId] || 0) + +el.dataset.v); sfx.tap(); break;
       case 'offer': case 'offer-ask': {
         const amt = act === 'offer' ? this.offerDraft[lotId] : this.counter[lotId];
-        const r = makeOffer(s, ME, lotId, amt);
-        if (r.ok) { this.toast(r.msg, 'set'); delete this.counter[lotId]; this.celebrate(lotId); }
-        else { if (r.counter) this.counter[lotId] = r.counter; this.toast(r.msg, 'bad'); sfx.error(); }
-        break;
+        act$('offer', lotId, amt).then(r => {
+          if (r.ok) { this.toast(r.msg, 'set'); delete this.counter[lotId]; this.celebrate(lotId); }
+          else { if (r.counter) this.counter[lotId] = r.counter; this.toast(r.msg, 'bad'); sfx.error(); }
+          done();
+        });
+        return;
       }
       case 'bid': {
         const a = s.auction;
         if (!a) return;
         const amt = minBid(a) + increment(a.price) * +el.dataset.v;
-        const r = auctionBid(s, ME, amt);
-        if (r.ok) sfx.coin(); else { this.toast(r.msg, 'bad'); sfx.error(); }
+        act$('bid', amt).then(r => { if (r.ok) sfx.coin(); else { this.toast(r.msg, 'bad'); sfx.error(); } });
         return;
       }
-      case 'pass': if (s.auction) { settleRest(s); s.auction.timer = Math.min(s.auction.timer, 1.5); sfx.tap(); } return;
+      case 'pass': act$('pass').then(r => { if (!r.ok && r.msg) this.toast(r.msg, 'bad'); }); sfx.tap(); return;
       case 'goto': this.openLot(+el.dataset.id); sfx.tap(); return;
-      case 'loan': res(takeLoan(s, ME)); sfx.buy(); break;
-      case 'repay': res(repayLoan(s, ME)); sfx.tap(); break;
-      case 'repay-all': res(repayLoan(s, ME, s.players[ME].loan)); sfx.tap(); break;
+      case 'loan': act$('loan').then(r => res(r) && sfx.buy()); return;
+      case 'repay': act$('repay').then(res); sfx.tap(); return;
+      case 'repay-all': act$('repay', s.players[ME].loan).then(res); sfx.tap(); return;
       case 'sound': setSound(!soundOn()); localStorage.setItem('skyline-sound', soundOn() ? '1' : '0'); break;
       case 'quality': this.app.renderer.setQuality(this.app.renderer.quality === 'high' ? 'low' : 'high'); break;
-      case 'save': this.app.save(); this.toast('Game saved.', 'good'); break;
+      case 'save': this.app.save(); this.toast(this.app.mp ? 'The server saves the LAN game every midnight.' : 'Game saved.', 'good'); break;
       case 'help': this.help(); return;
       case 'quit': this.app.save(); this.app.toTitle(); return;
+      case 'end-lan': this.confirm('End the game for everyone?', 'Everyone goes back to the lobby. The game is saved and can be resumed.', () => this.app.mp?.net.send({ t: 'end' })); return;
+      case 'claim': this.app.mp?.net.send({ t: 'claim', pid: +el.dataset.pid }); return;
       case 'accept-offer': case 'decline-offer': case 'view-offer': this.resolveOffer(act, +el.dataset.id); return;
+      case 'vote-yes': case 'vote-no': this.app.mp?.net.send({ t: 'vote', id: +el.dataset.id, yes: act === 'vote-yes' }); sfx.tap(); return;
       case 'modal-ok': this.hideModal(); this._ok && this._ok(); return;
       case 'modal-cancel': this.hideModal(); return;
-      case 'new-game': this.hideModal(); this.app.toTitle(); return;
+      case 'new-game': this.hideModal(); this.app.mp?.host ? this.app.mp.net.send({ t: 'end' }) : this.app.toTitle(); return;
     }
     this.render();
     this.app.hud();
@@ -3956,8 +4227,8 @@ class UI {
     if (r.winner === ME) {
       this.toast(`🔨 Sold to you! ${lot.name} for ${money(r.price)}.`, 'set');
       this.celebrate(lotId);
-    } else if (r.winner > 0) {
-      this.toast(`🔨 ${s.players[r.winner].name} won ${lot.name} for ${money(r.price)}.`, r.setComplete ? 'bad' : '');
+    } else if (r.winner >= 0) {
+      this.toast(`🔨 ${s.players[r.winner].company} won ${lot.name} for ${money(r.price)}.`, r.setComplete ? 'bad' : '');
       sfx.tap();
     } else this.toast(`No buyer for ${lot.name}. It will return cheaper.`);
   }
@@ -4006,7 +4277,7 @@ class UI {
     this.shownOffers.add(o.id);
     const lot = s.lots[o.lotId], p = s.players[o.from];
     const completes = lot.kind === 'prop' && setCount(s, o.from, lot.district) === MAP.districtLots[lot.district].length - 1;
-    this.app.pauseFor('offer');
+    if (!this.app.mp) this.app.pauseFor('offer');       // LAN games keep running
     sfx.offer();
     this.modal(`<h2><span style="color:${p.color}">●</span> Offer from ${esc(p.name)}</h2>
       <p>${esc(p.company)} wants to buy <b>${esc(lot.name)}</b>${lot.kind === 'prop' ? ` (${esc(DISTRICTS[lot.district].name)})` : ''}.</p>
@@ -4024,8 +4295,8 @@ class UI {
     this.hideModal();
     this.app.resume('offer');
     if (!o) return;
-    if (act === 'accept-offer') { const r = acceptOffer(s, id); this.toast(r.msg, r.ok ? 'good' : 'bad'); r.ok ? sfx.buy() : sfx.error(); }
-    else if (act === 'decline-offer') { declineOffer(s, id); this.toast('Offer declined.'); }
+    if (act === 'accept-offer') this.app.act('accept', id).then(r => { this.toast(r.msg, r.ok ? 'good' : 'bad'); r.ok ? sfx.buy() : sfx.error(); this.render(); });
+    else if (act === 'decline-offer') { this.app.act('decline', id); this.toast('Offer declined.'); }
     else { this.shownOffers.delete(id); this.openLot(o.lotId); this.toast('The offer stands until it expires. It will pop up again.'); }
     this.render();
   }
@@ -4067,23 +4338,35 @@ class UI {
   }
 }
 
-return { UI };
+return { ME, setMe, getMe, UI };
 })();
 
 /* ===== main.js ===== */
 __mods.main = (() => {
-// Skyline Hustle - entry point: title screen, game loop, auctions, saves.
+// Skyline Hustle - entry point: title screen, LAN lobby, game loop, saves.
+//
+// Single-player runs the simulation right here. In a LAN game the server
+// (server.mjs) owns the city: this phone shows the state it receives, sends
+// actions, and proposes speed changes that the other players vote on.
 
 const { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, eraName } = __mods.data;
 const { createGame, serialize, deserialize, money, netWorth, dayName, yearOf, operating, goalProgress, goalText } = __mods.sim;
 const { advanceGame } = __mods.game;
 const { auctionTick } = __mods.auction;
+const { perform } = __mods.actions;
 const { Renderer3D } = __mods.render3d;
-const { UI } = __mods.ui;
+const { UI, getMe, setMe } = __mods.ui;
+const { Net, lanAvailable } = __mods.net;
 const { sfx, setSound } = __mods.audio;
 
-const SAVE_KEY = 'skyline-hustle-save-v2';
+const SAVE_KEY = 'skyline-hustle-save-v3';
 const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const token = localStorage.getItem('skyline-token') || (() => {
+  const t = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  localStorage.setItem('skyline-token', t);
+  return t;
+})();
 
 const app = {
   s: null,
@@ -4092,17 +4375,48 @@ const app = {
   renderer: null,
   ui: null,
   lastDay: 0,
+  mp: null,                 // LAN session: { net, pid, host, vote, cooldowns, pending, ... }
+  citizenCache: new Map(),
 
+  // ---------------------------------------------------------- actions ----
+  act(name, ...args) {
+    if (!this.mp) return Promise.resolve(perform(this.s, getMe(), name, args));
+    const id = ++this.mp.seq;
+    return new Promise(resolve => {
+      this.mp.pending.set(id, resolve);
+      this.mp.net.send({ t: 'act', id, name, args });
+      setTimeout(() => { if (this.mp?.pending.delete(id)) resolve({ ok: false, msg: 'No answer from the server.' }); }, 6000);
+    });
+  },
+
+  // Speed buttons: instant in single-player, a proposal in LAN games.
+  requestSpeed(i) {
+    if (!this.mp) return this.setSpeed(i);
+    this.mp.net.send({ t: 'speed', speed: i });
+  },
   setSpeed(i) {
     this.speed = i;
-    document.querySelectorAll('#speeds button').forEach(b => b.classList.toggle('on', +b.dataset.speed === i));
+    this.speedButtons();
+  },
+  speedButtons() {
+    const cd = this.mp ? (this.mp.cooldowns[getMe()] || 0) : 0;
+    const voting = this.mp?.vote;
+    document.querySelectorAll('#speeds button').forEach(b => {
+      b.classList.toggle('on', +b.dataset.speed === this.speed);
+      b.classList.toggle('wait', !!(cd || voting) && +b.dataset.speed !== this.speed);
+    });
+    $('speed-cd').textContent = cd ? `${cd}s` : '';
+    $('speed-cd').classList.toggle('hidden', !cd);
   },
   pauseFor(why) { this.holds.add(why); },
   resume(why) { this.holds.delete(why); },
-  running() { return this.s && !this.s.over && this.speed > 0 && !this.holds.size && !this.ui.modalOpen() && !this.s.auction; },
+  running() {
+    if (!this.s || this.s.over || this.s.auction || this.speed === 0) return false;
+    return this.mp ? true : !this.holds.size && !this.ui.modalOpen();
+  },
 
   save() {
-    if (!this.s || this.s.over) return;
+    if (this.mp || !this.s || this.s.over) return;
     try { localStorage.setItem(SAVE_KEY, serialize(this.s)); } catch (e) { /* storage full or blocked */ }
   },
 
@@ -4110,31 +4424,35 @@ const app = {
     this.s = s;
     s.liveAuctions = true;
     this.lastDay = s.day;
+    this.overShown = false;
     this.ui.seenNews = 0;
     this.ui.shownOffers.clear();
     this.ui.tickerQueue = [];
-    $('title').classList.add('hidden');
+    ['title', 'lobby'].forEach(id => $(id).classList.add('hidden'));
     ['hud', 'nav', 'camctl'].forEach(id => $(id).classList.remove('hidden'));
     this.renderer.fit();
     this.ui.close();
-    this.setSpeed(1);
+    this.ui.hideModal();
+    if (!this.mp) { setMe(0); this.setSpeed(1); }
     this.ui.onHour();
     this.hud();
   },
 
   toTitle() {
+    if (this.mp) { this.mp.net.close(); this.mp = null; }
     this.s = null;
     this.ui.close();
-    ['hud', 'nav', 'sheet', 'auction', 'camctl'].forEach(id => $(id).classList.add('hidden'));
+    ['hud', 'nav', 'sheet', 'auction', 'camctl', 'vote', 'lobby'].forEach(id => $(id).classList.add('hidden'));
     $('modal').classList.add('hidden');
     $('btn-continue').classList.toggle('hidden', !localStorage.getItem(SAVE_KEY));
     $('title').classList.remove('hidden');
+    $('net-status').classList.add('hidden');
   },
 
   hud() {
     const s = this.s;
-    if (!s) return;
-    const me = s.players[0];
+    if (!s || getMe() < 0) return;
+    const me = s.players[getMe()];
     $('cash').textContent = money(me.cash);
     $('cash').className = me.cash < 0 ? 'neg' : '';
     const today = operating(me.today);
@@ -4143,12 +4461,14 @@ const app = {
     $('clock-time').textContent = `${String(s.hour).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
     $('clock-day').textContent = `${dayName(s)} · Day ${s.day} · ${yearOf(s)}`;
     const sc = SCENARIOS[s.scenario];
-    const w = netWorth(s, 0);
+    const w = netWorth(s, getMe());
     let pct = 0, text;
     if (sc.mode === 'goals') {
-      const g = s.goals.find(x => !x.done);
-      if (g) {
-        const v = goalProgress(s, g);
+      const gi = (me.goals || []).findIndex(x => !x.done);
+      const g = s.goals[gi];
+      if (me.failed) text = 'You missed a milestone: out of the running';
+      else if (g) {
+        const v = goalProgress(s, g, getMe());
         pct = v / g.n * 100;
         const left = g.by - s.day + 1;
         text = `🎯 ${goalText(g)} · ${left} day${left === 1 ? '' : 's'} left`;
@@ -4161,6 +4481,7 @@ const app = {
     $('goal-text').textContent = text;
   },
 
+  // Called whenever the clock has moved on by whole hours.
   afterHour(steps) {
     const s = this.s;
     const r = this.renderer;
@@ -4169,7 +4490,7 @@ const app = {
       for (const id in s.lastHour) {
         const lot = s.lots[id];
         const v = s.lastHour[id];
-        if (!lot.business || lot.business.owner !== 0) continue;
+        if (!lot.business || lot.business.owner !== getMe()) continue;
         if (v > 4) { r.floater(lot, '+' + money(v), '#5dff9e'); earned = true; }
         else if (v < -4) r.floater(lot, money(v), '#ff8a8a');
       }
@@ -4177,7 +4498,7 @@ const app = {
     }
     if (s.day !== this.lastDay) {
       this.lastDay = s.day;
-      const y = s.players[0].yesterday;
+      const y = s.players[getMe()].yesterday;
       const op = operating(y);
       if (Object.keys(y).length) this.ui.toast(`Day ${s.day - 1} closed: ${op >= 0 ? '+' : ''}${money(op)} operating profit.`, op >= 0 ? 'good' : 'bad');
       this.save();
@@ -4188,7 +4509,7 @@ const app = {
   checkOver() {
     if (this.s.over && !this.overShown) {
       this.overShown = true;
-      localStorage.removeItem(SAVE_KEY);
+      if (!this.mp) localStorage.removeItem(SAVE_KEY);
       this.ui.gameOver();
     }
   },
@@ -4200,13 +4521,139 @@ app.renderer.onTap = (x, y) => {
   const hit = app.renderer.pick(x, y);
   if (!hit) { if (app.ui.view) app.ui.close(); return; }
   sfx.tap();
-  if (hit.kind === 'citizen') app.ui.openCitizen(hit.id);
+  if (hit.kind === 'citizen') { app.ui.openCitizen(hit.id); app.fetchCitizen(hit.id); }
   else app.ui.openLot(hit.id);
 };
+app.fetchCitizen = id => { if (app.mp) app.mp.net.send({ t: 'citizen', id }); };
+document.querySelectorAll('#speeds button').forEach(b => b.addEventListener('click', () => app.requestSpeed(+b.dataset.speed)));
+
+// ---------------------------------------------------------------- LAN ----
+function joinLan() {
+  const company = $('in-company').value.trim() || 'Your Company';
+  const name = $('in-name').value.trim() || 'Player';
+  localStorage.setItem('skyline-company', company);
+  localStorage.setItem('skyline-name', name);
+  const mp = {
+    net: null, pid: -1, host: false, vote: null, cooldowns: {}, pending: new Map(), seq: 0,
+    lobby: null, seats: [], addresses: app.lan?.addresses || [], lastState: 0,
+  };
+  app.mp = mp;
+  mp.net = new Net(onNet, status => {
+    $('net-status').textContent = status === 'online' ? '' : '📶 Reconnecting…';
+    $('net-status').classList.toggle('hidden', status === 'online');
+  });
+  mp.net.connect({ token, name, company });
+  $('title').classList.add('hidden');
+  $('lobby').classList.remove('hidden');
+  $('lobby-body').innerHTML = '<p class="note">Connecting…</p>';
+}
+
+function onNet(m) {
+  const mp = app.mp;
+  if (!mp) return;
+  switch (m.t) {
+    case 'lobby':
+      mp.lobby = m;
+      mp.host = m.host;
+      if (app.s) {                               // the host ended the game
+        app.s = null;
+        app.ui.close();
+        ['hud', 'nav', 'sheet', 'auction', 'camctl', 'vote'].forEach(id => $(id).classList.add('hidden'));
+        app.ui.hideModal();
+      }
+      $('lobby').classList.remove('hidden');
+      renderLobby();
+      break;
+    case 'you':
+      mp.pid = m.pid;
+      mp.host = m.host;
+      mp.seats = m.seats;
+      setMe(Math.max(0, m.pid));
+      if (m.pid < 0) showClaim();
+      break;
+    case 'state': applyState(m); break;
+    case 'clock':
+      if (app.s && app.s.day === m.day && app.s.hour === m.hour) app.s.t = Math.max(app.s.t, m.tt);
+      if (m.speed !== app.speed) app.setSpeed(m.speed);
+      mp.vote = m.vote;
+      app.ui.voteFrame(mp);
+      break;
+    case 'result': {
+      const r = mp.pending.get(m.id);
+      if (r) { mp.pending.delete(m.id); r(m.res || { ok: false }); }
+      break;
+    }
+    case 'notice': app.ui.toast(m.text, m.kind || ''); break;
+    case 'citizen':
+      if (m.c) app.citizenCache.set(m.id, m.c);
+      if (app.ui.view?.kind === 'citizen' && app.ui.view.id === m.id) app.ui.render();
+      break;
+  }
+}
+
+function applyState(m) {
+  const mp = app.mp;
+  const prev = app.s;
+  const s = m.s;
+  s.cz = { list: [], trips: m.trips, visitsToday: 0 };
+  mp.vote = m.vote;
+  mp.cooldowns = m.cooldowns || {};
+  mp.seatInfo = m.seats;
+  app.s = s;
+  if (!prev) {
+    $('lobby').classList.add('hidden');
+    app.start(s);
+    app.ui.toast(mp.pid >= 0 ? `You are ${s.players[mp.pid].company}. Speed changes need everyone's agreement.` : 'Watching.', 'good');
+  }
+  if (m.speed !== app.speed) app.setSpeed(m.speed);
+  app.speedButtons();
+  app.ui.voteFrame(mp);
+  // Did the clock move?
+  const steps = prev ? (s.day - prev.day) * 24 + (s.hour - prev.hour) : 0;
+  if (steps > 0) app.afterHour(steps);
+  else { app.ui.onHour(); app.checkOver(); }
+  if (s.auction) app.ui.auctionFrame();
+  else if (prev?.auction && s.lastAuction) { app.ui.auctionFrame(); app.ui.auctionResult(s.lastAuction, s.lastAuction.lotId); }
+}
+
+function renderLobby() {
+  const mp = app.mp, L = mp.lobby;
+  const sc = SCENARIOS[L.settings.scenario];
+  const full = L.players.length > L.max;
+  $('lobby-body').innerHTML = `
+    <p class="note">${mp.addresses.length ? `Friends on the same wifi open <b>${esc(mp.addresses[0])}</b> and tap <b>LAN multiplayer</b>.` : 'Friends on the same wifi open this same address.'}</p>
+    <h3>Players <em>${Math.min(L.players.length, L.max)} / ${L.max}${L.players.length < L.max ? ' · rivals fill the rest' : ''}</em></h3>
+    ${L.players.map((p, i) => `<div class="list-item"><span class="rank">${i + 1}</span><span class="grow"><b>${esc(p.company)}</b><small>${esc(p.name)}${p.host ? ' · host' : ''}${p.token === L.you ? ' · you' : ''}${i >= L.max ? ' · no seat (game full)' : ''}</small></span></div>`).join('')}
+    ${full ? '<p class="note warn">Only the first 4 players get a company.</p>' : ''}
+    <h3>Game</h3>
+    ${mp.host ? `
+      <div class="seg wrap" id="lob-scenario">${Object.entries(SCENARIOS).map(([k, v]) => `<button data-v="${k}" class="${k === L.settings.scenario ? 'on' : ''}">${v.name}<small>${v.year}</small></button>`).join('')}</div>
+      <p class="note">${esc(sc.blurb)}</p>
+      <div class="seg" id="lob-diff">${[['easy', 'Relaxed'], ['normal', 'Sharp'], ['hard', 'Ruthless']].map(([k, n]) => `<button data-v="${k}" class="${k === L.settings.difficulty ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <div class="row"><button class="btn go wide" id="lob-start">Start game for everyone</button></div>
+      ${L.canResume ? '<div class="row"><button class="btn wide" id="lob-resume">Resume the saved LAN game</button></div>' : ''}`
+    : `<p class="note"><b>${esc(sc.name)}</b> (${sc.year}) · ${esc(sc.blurb)}<br>Waiting for the host to start…</p>`}
+    <div class="row"><button class="btn small" id="lob-leave">Back to title</button></div>`;
+  const bind = (sel, fn) => document.querySelectorAll(sel).forEach(b => b.addEventListener('click', () => { sfx.tap(); fn(b); }));
+  bind('#lob-scenario button', b => mp.net.send({ t: 'setup', scenario: b.dataset.v }));
+  bind('#lob-diff button', b => mp.net.send({ t: 'setup', difficulty: b.dataset.v }));
+  bind('#lob-start', () => mp.net.send({ t: 'start' }));
+  bind('#lob-resume', () => mp.net.send({ t: 'start', resume: true }));
+  bind('#lob-leave', () => app.toTitle());
+}
+
+// Joined a game already under way without a seat: take over a free one.
+function showClaim() {
+  const seats = app.mp.seats.filter(st => !st.taken);
+  app.ui.modal(`<h2>Game in progress</h2>
+    ${seats.length ? `<p>Take over a company whose player isn't here:</p>${seats.map(st => `<div class="row"><button class="btn go wide" data-act="claim" data-pid="${st.pid}">${esc(st.company)}</button></div>`).join('')}`
+      : '<p>Every seat is taken. You can watch the city; ask the host to start a new game to join in.</p>'}
+    <div class="row"><button class="btn small wide" data-act="modal-cancel">Just watch</button></div>`);
+}
 
 // --------------------------------------------------------------- loop ----
 let last = performance.now();
-let hudAt = 0, citAt = 0;
+let hudAt = 0, citAt = 0, cdAt = 0;
 function frame(now) {
   const real = Math.min(1, (now - last) / 1000);
   const dt = Math.min(0.1, real);
@@ -4215,8 +4662,17 @@ function frame(now) {
   const s = app.s;
   if (s) {
     let steps = 0;
-    if (s.auction) {
-      // Auctions run in real time while the city clock waits.
+    if (app.mp) {
+      // The server runs the city; glide the clock between its updates.
+      if (app.running()) s.t = Math.min(0.97, s.t + dt * SPEEDS[app.speed] / SECONDS_PER_HOUR);
+      if (s.auction) app.ui.auctionFrame();
+      if (now > cdAt) {
+        cdAt = now + 1000;
+        for (const k in app.mp.cooldowns) if (--app.mp.cooldowns[k] <= 0) delete app.mp.cooldowns[k];
+        if (app.mp.vote) { app.mp.vote.left--; app.ui.voteFrame(app.mp); }
+        app.speedButtons();
+      }
+    } else if (s.auction) {
       auctionTick(s, real);       // real seconds, even on a slow device
       app.ui.auctionFrame();
       if (!s.auction && s.lastAuction) {
@@ -4226,12 +4682,14 @@ function frame(now) {
       }
     } else if (app.running()) steps = advanceGame(s, dt * SPEEDS[app.speed] / SECONDS_PER_HOUR);
     if (steps) app.afterHour(steps);
-    if (s.auction) app.ui.auctionFrame();
+    if (!app.mp && s.auction) app.ui.auctionFrame();
     if (now > hudAt) { app.hud(); hudAt = now + 150; }
-    if (app.ui.view?.kind === 'citizen' && now > citAt) { app.ui.refresh(); citAt = now + 500; }
+    if (app.ui.view?.kind === 'citizen' && now > citAt) {
+      citAt = now + (app.mp ? 1000 : 500);
+      if (app.mp) app.fetchCitizen(app.ui.view.id); else app.ui.refresh();
+    }
     app.ui.tickTicker(now);
-    const flowing = app.running() ? SPEEDS[app.speed] : 0;
-    app.renderer.draw(s, s.hour + s.t, dt, flowing);
+    app.renderer.draw(s, s.hour + s.t, dt, app.running() ? SPEEDS[app.speed] : 0);
   } else {
     // Title screen: a slowly turning city behind the menu.
     if (!app.demo) { app.demo = createGame({ scenario: 'sandbox', seed: 4 }); app.demo.hour = 17; }
@@ -4247,8 +4705,8 @@ requestAnimationFrame(frame);
 window.addEventListener('resize', () => { app.renderer.resize(); });
 window.addEventListener('keydown', e => {
   if (!app.s || e.target.tagName === 'INPUT') return;
-  if (e.key === ' ') { e.preventDefault(); app.setSpeed(app.speed ? 0 : 1); }
-  else if (e.key >= '0' && e.key <= '3') app.setSpeed(+e.key);
+  if (e.key === ' ') { e.preventDefault(); app.requestSpeed(app.speed ? 0 : 1); }
+  else if (e.key >= '0' && e.key <= '3') app.requestSpeed(+e.key);
   else if (e.key === 'q') app.renderer.rotate(Math.PI / 4);
   else if (e.key === 'e') app.renderer.rotate(-Math.PI / 4);
   else if (e.key === 'Escape' && app.ui.view) app.ui.close();
@@ -4271,20 +4729,26 @@ segPick('seg-scenario', v => { scenario = v; blurb(); });
 segPick('seg-difficulty', v => { difficulty = v; });
 blurb();
 $('in-company').value = localStorage.getItem('skyline-company') || '';
+$('in-name').value = localStorage.getItem('skyline-name') || '';
 $('btn-new').addEventListener('click', () => {
   const company = $('in-company').value.trim() || 'Your Company';
   localStorage.setItem('skyline-company', company);
   sfx.build();
-  app.overShown = false;
   app.start(createGame({ scenario, difficulty, company, name: 'You' }));
   setTimeout(() => app.ui.toast('Tap any empty lot to open a shop. Land goes on sale at 9:00.', 'good'), 600);
 });
 $('btn-continue').addEventListener('click', () => {
-  try { app.overShown = false; app.start(deserialize(localStorage.getItem(SAVE_KEY))); sfx.tap(); }
+  try { app.start(deserialize(localStorage.getItem(SAVE_KEY))); sfx.tap(); }
   catch (e) { localStorage.removeItem(SAVE_KEY); app.toTitle(); }
 });
+$('btn-lan').addEventListener('click', () => { sfx.tap(); joinLan(); });
 setSound(localStorage.getItem('skyline-sound') !== '0');
 app.toTitle();
+// The LAN button only appears when the page comes from server.mjs.
+lanAvailable().then(info => {
+  app.lan = info;
+  if (info) $('lan-box').classList.remove('hidden');
+});
 
 window.__SH = app;
 

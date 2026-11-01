@@ -23,7 +23,10 @@ const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const sign = v => (v >= 0 ? '+' : '') + money(v);
 const cls = v => v >= 0 ? 'pos' : 'neg';
 const hh = h => String(((h % 24) + 24) % 24).padStart(2, '0') + ':00';
-const ME = 0;
+// The company this phone controls (0 in single-player; its seat in LAN games).
+export let ME = 0;
+export function setMe(id) { ME = id; }
+export const getMe = () => ME;
 
 export class UI {
   constructor(app) {
@@ -41,6 +44,7 @@ export class UI {
     $('sheet-body').addEventListener('click', e => this.onClick(e));
     $('modal-card').addEventListener('click', e => this.onClick(e));
     $('auction').addEventListener('click', e => this.onClick(e));
+    $('vote').addEventListener('click', e => this.onClick(e));
     $('sheet').addEventListener('pointerdown', () => { this.lastTouch = performance.now(); });
     $('sheet-close').addEventListener('click', () => { sfx.tap(); this.close(); });
     $('hud-cash').addEventListener('click', () => { sfx.tap(); this.openTab('bank'); });
@@ -51,10 +55,6 @@ export class UI {
       if (t === 'map') { this.close(); this.app.renderer.fit(); return; }
       if (this.view?.kind === 'tab' && this.view.name === t) this.close();
       else this.openTab(t);
-    }));
-    document.querySelectorAll('#speeds button').forEach(b => b.addEventListener('click', () => {
-      sfx.tap();
-      this.app.setSpeed(+b.dataset.speed);
     }));
     document.querySelectorAll('#camctl button').forEach(b => b.addEventListener('click', () => {
       sfx.tap();
@@ -118,8 +118,12 @@ export class UI {
     this.navState();
   }
 
+  // Refresh live numbers unless the player is mid-tap; at most ~1.5x a second.
   refresh() {
-    if (this.view && performance.now() - this.lastTouch > 900) this.render();
+    const now = performance.now();
+    if (!this.view || now - this.lastTouch < 900 || now - (this.lastRefresh || 0) < 650) return;
+    this.lastRefresh = now;
+    this.render();
   }
 
   // ------------------------------------------------------------ lot ----
@@ -352,8 +356,8 @@ export class UI {
   // -------------------------------------------------------- citizen ----
   citizenHTML(id) {
     const s = this.s;
-    const c = s.cz.list.find(x => x.id === id);
-    if (!c) return '<p class="note">They have left town.</p>';
+    const c = s.cz.list.find(x => x.id === id) || this.app.citizenCache?.get(id);
+    if (!c) return this.app.mp ? '<p class="note">Looking them up…</p>' : '<p class="note">They have left town.</p>';
     const D = DISTRICTS[c.d];
     const fav = c.fav >= 0 && s.lots[c.fav].business ? s.lots[c.fav] : null;
     const bars = NEEDS.map((n, i) => {
@@ -445,10 +449,12 @@ export class UI {
     const year = yearOf(s);
     let h = `<div class="sh-head"><div class="chip" style="background:#ffd23f">🏆</div><div><div class="sh-title">${esc(sc.name)}</div>
       <div class="sh-sub">${esc(sc.blurb)}</div></div></div>`;
+    const mine = s.players[ME].goals || [];
     if (s.goals.length) {
-      h += '<h3>Milestones</h3>';
-      for (const g of s.goals) {
-        const v = goalProgress(s, g);
+      h += `<h3>Milestones ${s.players[ME].failed ? '<em class="neg">missed one: out of the running</em>' : ''}</h3>`;
+      for (const [gi, tmpl] of s.goals.entries()) {
+        const g = { ...tmpl, ...(mine[gi] || {}) };
+        const v = goalProgress(s, g, ME);
         const left = g.by - s.day + 1;
         const pct = Math.min(100, Math.round(v / g.n * 100));
         h += `<div class="card goalrow ${g.done ? 'done' : left <= 3 ? 'urgent' : ''}">
@@ -466,7 +472,7 @@ export class UI {
       const sets = setsOwned(s, p.id);
       h += `<div class="card rival"><span class="bar" style="background:${p.color}"></span>
         <div><b>${i + 1}. ${esc(p.company)}</b> ${p.bankrupt ? '<span class="neg">BANKRUPT</span>' : ''}
-          <div class="note" style="margin:2px 0">${p.human ? 'You' : esc(p.name) + ' · ' + esc(RIVALS[p.id - 1].blurb)}</div>
+          <div class="note" style="margin:2px 0">${p.id === ME ? 'You' : p.human ? esc(p.name) + ' · human player' : esc(p.name) + ' · ' + esc(p.blurb || '')}</div>
           <div class="note" style="margin:0">${lots} lots · ${shops} shops · ${sets} set${sets === 1 ? '' : 's'} · cash ${money(p.cash)}${p.loan ? ` · owes ${money(p.loan)}` : ''}</div>
           ${this.spark(p)}</div>
         <div class="amt" style="text-align:right;font-weight:900">${money(w)}</div></div>`;
@@ -523,7 +529,10 @@ export class UI {
       <div class="sh-sub">Saved automatically every midnight</div></div></div>
       <div class="row"><button class="btn" data-act="sound">${soundOn() ? '🔊 Sound on' : '🔇 Sound off'}</button><button class="btn" data-act="quality">${q === 'high' ? '✨ Graphics: high' : '🔋 Graphics: battery'}</button></div>
       <div class="row"><button class="btn" data-act="save">💾 Save now</button><button class="btn" data-act="help">❓ How to play</button></div>
-      <div class="row"><button class="btn danger" data-act="quit">🚪 Quit to title</button></div>
+      ${this.app.mp ? `<div class="card"><b>📶 LAN game</b><div class="note">${this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
+        Speed changes need everyone's agreement. You can propose once every 60 seconds.</div>
+        ${this.app.mp.host ? '<div class="row"><button class="btn danger small" data-act="end-lan">End the game for everyone</button></div>' : ''}</div>` : ''}
+      <div class="row"><button class="btn danger" data-act="quit">🚪 ${this.app.mp ? 'Leave (your company keeps trading)' : 'Quit to title'}</button></div>
       <p class="note"><b>Camera:</b> drag to pan · pinch to zoom · twist two fingers to rotate · drag two fingers up/down to tilt.
       On a computer: drag to pan, right-drag to rotate and tilt, wheel to zoom. The ⟲ ⟳ ⛰ ⌂ buttons do the same.</p>`;
   }
@@ -537,58 +546,104 @@ export class UI {
     if (!a) {
       if (!el.classList.contains('hidden')) el.classList.add('hidden');
       this.auctionSeen = null;
-      this.aucKey = null;
       return;
     }
     const lot = s.lots[a.lotId];
     const me = s.players[ME];
-    if (this.auctionSeen !== a) {
-      this.auctionSeen = a;
+    const total = 9;
+    // Build the panel once per auction (LAN updates arrive as new objects,
+    // so identify it by lot + reserve), then update it in place: the bid
+    // buttons never get replaced under a finger.
+    const id = `${a.lotId}:${a.reserve}`;
+    if (this.auctionSeen !== id) {
+      this.auctionSeen = id;
       this.auctionLeader = -2;
       el.classList.remove('hidden');
       this.close();
       sfx.offer();
       this.app.renderer.focusLot(lot, 300);
+      let setNote = '';
+      if (lot.kind === 'prop') {
+        const n = MAP.districtLots[lot.district].length;
+        for (const p of s.players) if (setCount(s, p.id, lot.district) === n - 1)
+          setNote += `<div class="warn">${p.id === ME ? '⭐ Winning this completes <b>your</b> set!' : `⚠ This completes <b style="color:${p.color}">${esc(p.company)}</b>'s set!`}</div>`;
+      }
+      const D = lot.kind === 'prop' ? DISTRICTS[lot.district] : null;
+      el.innerHTML = `<div class="auc-head"><span class="pill">🔨 LIVE AUCTION</span><span class="dim">clock paused</span></div>
+        <div class="sh-head" style="margin:6px 0"><div class="chip" style="background:${D ? D.color : lot.kind === 'station' ? '#2f80ed' : '#8c8c80'}">${D ? '' : lot.kind === 'station' ? '🚇' : '⚡'}</div>
+          <div><div class="sh-title">${esc(lot.name)}</div><div class="sh-sub">${D ? esc(D.name) + ' · ' : ''}land value ${money(landValue(s, lot))}</div></div></div>
+        ${lot.kind === 'prop' ? this.setBarHTML(lot.district, lot.id) : ''}${setNote}
+        <div class="auc-bid"><div><small data-r="label"></small><b data-r="price"></b></div>
+          <div style="text-align:right"><small>Leader</small><b data-r="leader"></b></div></div>
+        <div class="meter auc-timer"><i></i></div>
+        <div class="auc-log" data-r="log"></div>
+        <div data-r="live">
+          <div class="row">
+            <button class="btn buy" data-act="bid" data-v="0"></button>
+            <button class="btn go" data-act="bid" data-v="2"></button>
+          </div>
+          <div class="row"><button class="btn small wide" data-act="pass">Pass, let them fight it out</button></div>
+          <p class="note" data-r="loan"></p>
+        </div>
+        <div class="row" data-r="out"><button class="btn wide" disabled>You stepped out. Going, going…</button></div>`;
     }
-    // Only rebuild the panel when the bidding changes; animate the timer.
-    const key = `${a.price}|${a.leader}|${a.humanOut}|${Math.round(me.cash)}`;
-    const total = 9;
-    if (key === this.aucKey) {
-      const bar = el.querySelector('.auc-timer i');
-      if (bar) { bar.style.width = Math.max(0, Math.min(100, a.timer / total * 100)) + '%'; bar.classList.toggle('hot', a.timer < 3); }
-      return;
-    }
+    const q = r => el.querySelector(`[data-r="${r}"]`);
+    const bar = el.querySelector('.auc-timer i');
+    bar.style.width = Math.max(0, Math.min(100, a.timer / total * 100)) + '%';
+    bar.classList.toggle('hot', a.timer < 3);
+    const key = `${a.price}|${a.leader}|${a.allOut}|${a.out && a.out[ME]}|${Math.round(me.cash)}`;
+    if (key === this.aucKey) return;
     this.aucKey = key;
+    const out = a.allOut || (a.out && a.out[ME]);
     const leader = a.leader >= 0 ? s.players[a.leader] : null;
     const next = minBid(a);
     const inc = increment(a.price);
     const room = loanLimit(s, ME) - me.loan;
-    let setNote = '';
-    if (lot.kind === 'prop') {
-      const n = MAP.districtLots[lot.district].length;
-      for (const p of s.players) if (setCount(s, p.id, lot.district) === n - 1)
-        setNote += `<div class="warn">${p.id === ME ? '⭐ Winning this completes <b>your</b> set!' : `⚠ This completes <b style="color:${p.color}">${esc(p.company)}</b>'s set!`}</div>`;
-    }
+    const who = p => (p.id === ME ? 'You' : p.human ? p.company : p.name.split(' ')[0]);
     if (this.auctionLeader !== a.leader) {
       this.auctionLeader = a.leader;
-      if (a.leader > 0) sfx.tap();
+      if (a.leader >= 0 && a.leader !== ME) sfx.tap();
     }
-    const D = lot.kind === 'prop' ? DISTRICTS[lot.district] : null;
-    el.innerHTML = `<div class="auc-head"><span class="pill">🔨 LIVE AUCTION</span><span class="dim">clock paused</span></div>
-      <div class="sh-head" style="margin:6px 0"><div class="chip" style="background:${D ? D.color : lot.kind === 'station' ? '#2f80ed' : '#8c8c80'}">${D ? '' : lot.kind === 'station' ? '🚇' : '⚡'}</div>
-        <div><div class="sh-title">${esc(lot.name)}</div><div class="sh-sub">${D ? esc(D.name) + ' · ' : ''}land value ${money(landValue(s, lot))}</div></div></div>
-      ${lot.kind === 'prop' ? this.setBarHTML(lot.district, lot.id) : ''}${setNote}
-      <div class="auc-bid"><div><small>${leader ? 'Top bid' : 'Opening bid'}</small><b>${money(a.price)}</b></div>
-        <div style="text-align:right"><small>Leader</small><b style="color:${leader ? leader.color : 'var(--dim)'}">${leader ? (leader.human ? 'You!' : esc(leader.name)) : 'no bids'}</b></div></div>
-      <div class="meter auc-timer"><i class="${a.timer < 3 ? 'hot' : ''}" style="width:${Math.max(0, Math.min(100, a.timer / total * 100))}%"></i></div>
-      <div class="auc-log">${a.bids.slice(0, 4).map(b => `<span style="color:${s.players[b.pid].color}">${esc(s.players[b.pid].human ? 'You' : s.players[b.pid].name.split(' ')[0])} ${money(b.amount)}</span>`).join(' · ') || '<span class="dim">Waiting for an opening bid…</span>'}</div>
-      ${a.humanOut ? '<div class="row"><button class="btn wide" disabled>You stepped out. Going, going…</button></div>' :
-      `<div class="row">
-        <button class="btn buy" data-act="bid" data-v="0" ${a.leader === ME || me.cash + room < next ? 'disabled' : ''}>${a.leader === ME ? 'You lead' : `Bid ${money(next)}`}</button>
-        <button class="btn go" data-act="bid" data-v="2" ${a.leader === ME || me.cash + room < next + inc * 2 ? 'disabled' : ''}>Jump ${money(next + inc * 2)}</button>
-      </div>
-      <div class="row"><button class="btn small wide" data-act="pass" ${a.leader === ME ? 'disabled' : ''}>Pass, let them fight it out</button></div>
-      ${me.cash < next ? `<p class="note">Bids above your cash (${money(me.cash)}) are covered by a bank loan.</p>` : ''}`}`;
+    q('label').textContent = leader ? 'Top bid' : 'Opening bid';
+    q('price').textContent = money(a.price);
+    q('leader').textContent = leader ? (leader.id === ME ? 'You!' : who(leader)) : 'no bids';
+    q('leader').style.color = leader ? leader.color : 'var(--dim)';
+    q('log').innerHTML = a.bids.slice(0, 4).map(b => `<span style="color:${s.players[b.pid].color}">${esc(who(s.players[b.pid]))} ${money(b.amount)}</span>`).join(' · ') || '<span class="dim">Waiting for an opening bid…</span>';
+    q('live').classList.toggle('hidden', !!out);
+    q('out').classList.toggle('hidden', !out);
+    const [b0, b2] = el.querySelectorAll('[data-act=bid]');
+    const leading = a.leader === ME;
+    b0.textContent = leading ? 'You lead' : `Bid ${money(next)}`;
+    b0.disabled = leading || me.cash + room < next;
+    b2.textContent = `Jump ${money(next + inc * 2)}`;
+    b2.disabled = leading || me.cash + room < next + inc * 2;
+    el.querySelector('[data-act=pass]').disabled = leading;
+    q('loan').textContent = me.cash < next ? `Bids above your cash (${money(me.cash)}) are covered by a bank loan.` : '';
+  }
+
+
+  // ----------------------------------------------------- speed vote ----
+  // LAN games: one player proposes a speed, everyone else must agree.
+  voteFrame(mp) {
+    const el = $('vote');
+    const v = mp && mp.vote;
+    if (!v || !this.s) { el.classList.add('hidden'); document.body.classList.remove('voting'); this.voteKey = null; return; }
+    // Rebuild only when the vote itself changes; tick the countdown in place
+    // so the buttons never move under a finger.
+    const key = `${v.id}|${v.yes.length}`;
+    const info = `${v.yes.length}/${v.need.length} agreed · ${Math.max(0, v.left)}s`;
+    if (key === this.voteKey) { const sm = el.querySelector('small'); if (sm) sm.textContent = info; return; }
+    this.voteKey = key;
+    document.body.classList.add('voting');
+    el.classList.remove('hidden');
+    const who = this.s.players[v.from];
+    const label = v.speed === 0 ? 'pause the game' : `play at ${['', '1×', '2.5×', '6×'][v.speed]}`;
+    const mine = v.from === ME;
+    const asked = v.need.includes(ME) && !v.yes.includes(ME);
+    el.innerHTML = `<div class="vote-row"><span><b style="color:${who.color}">${esc(mine ? 'You' : who.company)}</b> ${mine ? 'proposed' : 'want'} to <b>${label}</b>.
+      <small>${info}</small></span>
+      ${asked ? `<span class="vote-btns"><button class="btn small buy" data-act="vote-yes" data-id="${v.id}">Agree</button><button class="btn small danger" data-act="vote-no" data-id="${v.id}">No</button></span>` : ''}</div>`;
+    if (asked && this.voteBuzz !== v.id) { this.voteBuzz = v.id; sfx.offer(); }
   }
 
   // -------------------------------------------------------- actions ----
@@ -600,61 +655,70 @@ export class UI {
     const lotId = this.view?.kind === 'lot' ? this.view.id : -1;
     const b = lotId >= 0 ? s.lots[lotId].business : null;
     const act = el.dataset.act;
+    // Every game action goes through app.act: run locally in single-player,
+    // sent to the server in LAN games. Results come back as a promise.
+    const done = () => { this.render(); this.app.hud(); };
     const res = r => {
-      if (!r) return;
+      if (!r) return false;
       if (r.ok) { if (r.msg) this.toast(r.msg, r.setComplete ? 'set' : 'good'); }
       else if (r.msg) { this.toast(r.msg, 'bad'); sfx.error(); }
+      done();
       return r.ok;
     };
+    const act$ = (name, ...args) => this.app.act(name, ...args);
     switch (act) {
-      case 'petition': if (res(petition(s, lotId))) sfx.buy(); break;
-      case 'sell-land': this.confirm('Sell this land back to the city?', 'You get 70% of its value plus half of what you spent on apartments. Apartments are demolished and the lot goes back up for auction.', () => { res(sellLand(s, ME, lotId)); sfx.buy(); }); return;
+      case 'petition': act$('petition', lotId).then(r => res(r) && sfx.buy()); return;
+      case 'sell-land': this.confirm('Sell this land back to the city?', 'You get 70% of its value plus half of what you spent on apartments. Apartments are demolished and the lot goes back up for auction.', () => act$('sellLand', lotId).then(r => res(r) && sfx.buy())); return;
       case 'build': {
         const type = el.dataset.type;
-        if (res(build(s, ME, lotId, type))) { sfx.build(); this.app.renderer.floater(s.lots[lotId], `−${money(BIZ[type].cost)}`, '#ff8a8a'); }
-        break;
+        act$('build', lotId, type).then(r => { if (res(r)) { sfx.build(); this.app.renderer.floater(this.s.lots[lotId], `−${money(BIZ[type].cost)}`, '#ff8a8a'); } });
+        return;
       }
-      case 'price': setPrice(s, ME, lotId, b.price + PRICE_STEP * +el.dataset.v); sfx.tap(); break;
-      case 'staff': setStaff(s, ME, lotId, b.staff + +el.dataset.v); sfx.tap(); break;
-      case 'open': setHours(s, ME, lotId, b.from + +el.dataset.v, b.len); sfx.tap(); break;
-      case 'len': setHours(s, ME, lotId, b.from, b.len + +el.dataset.v); sfx.tap(); break;
-      case 'auto': setStock(s, ME, lotId, b.autoStock ? autoTarget(b) : b.stockTarget, el.dataset.v === '1'); sfx.tap(); break;
-      case 'stock': setStock(s, ME, lotId, b.stockTarget + Math.max(4, Math.round(b.stockTarget * 0.1 / 4) * 4) * +el.dataset.v); sfx.tap(); break;
-      case 'rush': if (res(rushDelivery(s, ME, lotId))) sfx.buy(); break;
-      case 'refit': if (res(upgradeFit(s, ME, lotId))) sfx.build(); break;
-      case 'sell-biz': this.confirm('Close this business?', `You recover half of what you invested, plus half the value of the stock.`, () => { res(sellBusiness(s, ME, lotId)); sfx.buy(); }); return;
-      case 'apt': if (res(buildApt(s, ME, lotId))) { sfx.build(); if (s.lots[lotId].apt === MAX_APT) sfx.set(); } break;
-      case 'sell-apt': res(sellApt(s, ME, lotId)); break;
+      case 'price': act$('price', lotId, Math.round((b.price + PRICE_STEP * +el.dataset.v) * 100) / 100).then(res); sfx.tap(); return;
+      case 'staff': act$('staff', lotId, b.staff + +el.dataset.v).then(res); sfx.tap(); return;
+      case 'open': act$('hours', lotId, b.from + +el.dataset.v, b.len).then(res); sfx.tap(); return;
+      case 'len': act$('hours', lotId, b.from, b.len + +el.dataset.v).then(res); sfx.tap(); return;
+      case 'auto': act$('stock', lotId, b.autoStock ? autoTarget(b) : b.stockTarget, el.dataset.v === '1').then(res); sfx.tap(); return;
+      case 'stock': act$('stock', lotId, b.stockTarget + Math.max(4, Math.round(b.stockTarget * 0.1 / 4) * 4) * +el.dataset.v).then(res); sfx.tap(); return;
+      case 'rush': act$('rush', lotId).then(r => res(r) && sfx.buy()); return;
+      case 'refit': act$('refit', lotId).then(r => res(r) && sfx.build()); return;
+      case 'sell-biz': this.confirm('Close this business?', 'You recover half of what you invested, plus half the value of the stock.', () => act$('sellBiz', lotId).then(r => res(r) && sfx.buy())); return;
+      case 'apt': act$('apt', lotId).then(r => { if (res(r)) { sfx.build(); if (this.s.lots[lotId].apt === MAX_APT) sfx.set(); } }); return;
+      case 'sell-apt': act$('sellApt', lotId).then(res); return;
       case 'offer-adj': this.offerDraft[lotId] = Math.max(1000, (this.offerDraft[lotId] || 0) + +el.dataset.v); sfx.tap(); break;
       case 'offer': case 'offer-ask': {
         const amt = act === 'offer' ? this.offerDraft[lotId] : this.counter[lotId];
-        const r = makeOffer(s, ME, lotId, amt);
-        if (r.ok) { this.toast(r.msg, 'set'); delete this.counter[lotId]; this.celebrate(lotId); }
-        else { if (r.counter) this.counter[lotId] = r.counter; this.toast(r.msg, 'bad'); sfx.error(); }
-        break;
+        act$('offer', lotId, amt).then(r => {
+          if (r.ok) { this.toast(r.msg, 'set'); delete this.counter[lotId]; this.celebrate(lotId); }
+          else { if (r.counter) this.counter[lotId] = r.counter; this.toast(r.msg, 'bad'); sfx.error(); }
+          done();
+        });
+        return;
       }
       case 'bid': {
         const a = s.auction;
         if (!a) return;
         const amt = minBid(a) + increment(a.price) * +el.dataset.v;
-        const r = auctionBid(s, ME, amt);
-        if (r.ok) sfx.coin(); else { this.toast(r.msg, 'bad'); sfx.error(); }
+        act$('bid', amt).then(r => { if (r.ok) sfx.coin(); else { this.toast(r.msg, 'bad'); sfx.error(); } });
         return;
       }
-      case 'pass': if (s.auction) { settleRest(s); s.auction.timer = Math.min(s.auction.timer, 1.5); sfx.tap(); } return;
+      case 'pass': act$('pass').then(r => { if (!r.ok && r.msg) this.toast(r.msg, 'bad'); }); sfx.tap(); return;
       case 'goto': this.openLot(+el.dataset.id); sfx.tap(); return;
-      case 'loan': res(takeLoan(s, ME)); sfx.buy(); break;
-      case 'repay': res(repayLoan(s, ME)); sfx.tap(); break;
-      case 'repay-all': res(repayLoan(s, ME, s.players[ME].loan)); sfx.tap(); break;
+      case 'loan': act$('loan').then(r => res(r) && sfx.buy()); return;
+      case 'repay': act$('repay').then(res); sfx.tap(); return;
+      case 'repay-all': act$('repay', s.players[ME].loan).then(res); sfx.tap(); return;
       case 'sound': setSound(!soundOn()); localStorage.setItem('skyline-sound', soundOn() ? '1' : '0'); break;
       case 'quality': this.app.renderer.setQuality(this.app.renderer.quality === 'high' ? 'low' : 'high'); break;
-      case 'save': this.app.save(); this.toast('Game saved.', 'good'); break;
+      case 'save': this.app.save(); this.toast(this.app.mp ? 'The server saves the LAN game every midnight.' : 'Game saved.', 'good'); break;
       case 'help': this.help(); return;
       case 'quit': this.app.save(); this.app.toTitle(); return;
+      case 'end-lan': this.confirm('End the game for everyone?', 'Everyone goes back to the lobby. The game is saved and can be resumed.', () => this.app.mp?.net.send({ t: 'end' })); return;
+      case 'claim': this.app.mp?.net.send({ t: 'claim', pid: +el.dataset.pid }); return;
       case 'accept-offer': case 'decline-offer': case 'view-offer': this.resolveOffer(act, +el.dataset.id); return;
+      case 'vote-yes': case 'vote-no': this.app.mp?.net.send({ t: 'vote', id: +el.dataset.id, yes: act === 'vote-yes' }); sfx.tap(); return;
       case 'modal-ok': this.hideModal(); this._ok && this._ok(); return;
       case 'modal-cancel': this.hideModal(); return;
-      case 'new-game': this.hideModal(); this.app.toTitle(); return;
+      case 'new-game': this.hideModal(); this.app.mp?.host ? this.app.mp.net.send({ t: 'end' }) : this.app.toTitle(); return;
     }
     this.render();
     this.app.hud();
@@ -666,8 +730,8 @@ export class UI {
     if (r.winner === ME) {
       this.toast(`🔨 Sold to you! ${lot.name} for ${money(r.price)}.`, 'set');
       this.celebrate(lotId);
-    } else if (r.winner > 0) {
-      this.toast(`🔨 ${s.players[r.winner].name} won ${lot.name} for ${money(r.price)}.`, r.setComplete ? 'bad' : '');
+    } else if (r.winner >= 0) {
+      this.toast(`🔨 ${s.players[r.winner].company} won ${lot.name} for ${money(r.price)}.`, r.setComplete ? 'bad' : '');
       sfx.tap();
     } else this.toast(`No buyer for ${lot.name}. It will return cheaper.`);
   }
@@ -716,7 +780,7 @@ export class UI {
     this.shownOffers.add(o.id);
     const lot = s.lots[o.lotId], p = s.players[o.from];
     const completes = lot.kind === 'prop' && setCount(s, o.from, lot.district) === MAP.districtLots[lot.district].length - 1;
-    this.app.pauseFor('offer');
+    if (!this.app.mp) this.app.pauseFor('offer');       // LAN games keep running
     sfx.offer();
     this.modal(`<h2><span style="color:${p.color}">●</span> Offer from ${esc(p.name)}</h2>
       <p>${esc(p.company)} wants to buy <b>${esc(lot.name)}</b>${lot.kind === 'prop' ? ` (${esc(DISTRICTS[lot.district].name)})` : ''}.</p>
@@ -734,8 +798,8 @@ export class UI {
     this.hideModal();
     this.app.resume('offer');
     if (!o) return;
-    if (act === 'accept-offer') { const r = acceptOffer(s, id); this.toast(r.msg, r.ok ? 'good' : 'bad'); r.ok ? sfx.buy() : sfx.error(); }
-    else if (act === 'decline-offer') { declineOffer(s, id); this.toast('Offer declined.'); }
+    if (act === 'accept-offer') this.app.act('accept', id).then(r => { this.toast(r.msg, r.ok ? 'good' : 'bad'); r.ok ? sfx.buy() : sfx.error(); this.render(); });
+    else if (act === 'decline-offer') { this.app.act('decline', id); this.toast('Offer declined.'); }
     else { this.shownOffers.delete(id); this.openLot(o.lotId); this.toast('The offer stands until it expires. It will pop up again.'); }
     this.render();
   }

@@ -26,6 +26,7 @@
       <span id="clock-day">Day 1 · Mon</span>
     </div>
     <div class="speeds" id="speeds">
+      <span id="speed-cd" class="hidden"></span>
       <button data-speed="0" aria-label="Pause">❚❚</button>
       <button data-speed="1" aria-label="Play">▶</button>
       <button data-speed="2" aria-label="Fast">▶▶</button>
@@ -34,6 +35,8 @@
   </div>
   <div class="goal" id="goal"><div class="goal-fill" id="goal-fill"></div><span id="goal-text"></span></div>
   <div id="ticker"></div>
+  <div id="vote" class="hidden"></div>
+  <div id="net-status" class="hidden"></div>
 </header>
 
 <div id="floaters"></div>
@@ -64,6 +67,13 @@
 
 <div id="toasts"></div>
 <div id="modal" class="hidden"><div class="modal-card" id="modal-card"></div></div>
+
+<section id="lobby" class="screen hidden">
+  <div class="title-card">
+    <div class="logo"><span class="logo-sky" style="font-size:30px">LAN</span><span class="logo-hustle" style="font-size:36px">LOBBY</span></div>
+    <div id="lobby-body"></div>
+  </div>
+</section>
 
 <section id="title" class="screen">
   <div class="title-card">
@@ -99,6 +109,14 @@
     </div>
 
     <button id="btn-new" class="btn go">New Game</button>
+
+    <div id="lan-box" class="card hidden">
+      <b>📶 LAN multiplayer</b>
+      <p class="note">Play with friends on the same wifi. Up to 4 players; rivals fill empty seats.
+        Speed changes need everyone to agree.</p>
+      <label class="field"><span>Your name</span><input id="in-name" maxlength="20" placeholder="Player" autocomplete="off"></label>
+      <div class="row"><button id="btn-lan" class="btn wide">Join LAN lobby</button></div>
+    </div>
 
     <details class="howto">
       <summary>How to play</summary>

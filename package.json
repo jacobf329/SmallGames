@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js --port 8080",
-    "skyline": "node skyline/serve.mjs",
+    "skyline": "node skyline/server.mjs",
     "skyline:bundle": "node skyline/tools/bundle.mjs",
     "skyline:simtest": "node skyline/tools/simtest.mjs"
   },

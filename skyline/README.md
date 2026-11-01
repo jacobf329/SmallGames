@@ -9,12 +9,37 @@ taller buildings unlock as the years pass.
 ## Play
 
 ```bash
-node skyline/serve.mjs          # zero dependencies, Node 18+
+node skyline/server.mjs         # zero dependencies, Node 18+
 ```
 
 Open the printed `http://<your-ip>:8090` on a phone on the same wifi (or
-`http://localhost:8090` on the computer). The game saves itself every
-midnight in the browser.
+`http://localhost:8090` on the computer). Single-player games save
+themselves every midnight in the browser.
+
+### LAN multiplayer
+
+Up to **4 players** on the same wifi, with AI rivals filling any empty seats.
+Everyone opens the address the server prints, enters a name and taps
+**Join LAN lobby**. The first person in is the host and picks the scenario
+and difficulty. The server runs the one shared city: everyone bids in the
+same live auctions, rents your land, and competes for the same customers.
+
+- **Shared speed, by agreement.** Tapping a speed button (pause included)
+  *proposes* it. Every other connected player gets a banner with **Agree / No**
+  and has 20 seconds to answer. One "no", or silence, cancels it. After
+  proposing you must wait **60 seconds** before proposing again (this stops
+  anyone spamming requests). Playing alone on the server? Changes apply instantly.
+- **Auctions** pause everyone's clock. When every player who isn't leading
+  has tapped *Pass*, the rivals settle it at once.
+- **Offers** from rivals don't pause the shared game; they wait until they expire.
+- **Drop out and back in** any time: your phone remembers its seat, and your
+  company keeps trading while you're away. Someone new can take over a seat
+  whose player has left.
+- **Milestone scenarios** become a race: the first player to hit every goal
+  wins. Miss a deadline and you're out of the running, but you can keep playing.
+- The server saves the LAN game every midnight to `skyline/saves/`; the host
+  can **resume** it from the lobby. *Menu → End the game for everyone* (host
+  only) sends everybody back to the lobby.
 
 There is also a single self-contained file (three.js included, ~860 KB)
 that needs no server:
@@ -122,8 +147,9 @@ battery* turns off shadows and lowers the resolution for older phones.
 
 ```
 skyline/
-  index.html, style.css   screens, HUD and phone-first UI
-  serve.mjs               tiny static server for LAN play
+  index.html, style.css   screens, HUD, lobby and phone-first UI
+  server.mjs              static server + LAN multiplayer: lobby, the shared
+                          city, speed votes, saves (reuses ../server/ws.js)
   vendor/three.module.min.js   three.js r160 (MIT)
   js/data.js       every number: districts, businesses, eras, tech, scenarios, events
   js/map.js        the city grid, road network (BFS distances / paths), seeded RNG
@@ -133,6 +159,8 @@ skyline/
   js/auction.js    live land auctions
   js/ai.js         rival tycoons (build, tune, trade, bid)
   js/game.js       the clock: advances the sim, wakes the AI, opens auctions
+  js/actions.js    every player action by name, validated (single-player and server)
+  js/net.js        LAN WebSocket client with auto-reconnect
   js/render3d.js   three.js city, people, cars, day/night, free camera, picking
   js/ui.js         bottom sheet, auction panel, tabs, toasts, modals
   js/main.js       game loop and title screen

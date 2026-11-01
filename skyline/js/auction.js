@@ -36,7 +36,7 @@ export function openAuction(s, lotId) {
     if (p.human || p.bankrupt) continue;
     bidders[p.id] = { max: aiAuctionMax(s, p, lot), wait: 1.2 + rand(s) * 2.4 };
   }
-  s.auction = { lotId, price: reserve, reserve, leader: -1, timer: AUCTION_SECONDS, bids: [], bidders, humanOut: false };
+  s.auction = { lotId, price: reserve, reserve, leader: -1, timer: AUCTION_SECONDS, bids: [], bidders, out: {} };
   news(s, `🔨 Auction: ${lot.name}, opening at ${money(reserve)}.`, 'auction');
 }
 
@@ -80,10 +80,30 @@ export function auctionTick(s, dt) {
 // Finish the bidding instantly among the rivals (the human has stepped out,
 // or nobody is watching). English auction: the strongest bidder wins at one
 // increment over the runner-up.
+// A human steps out. When every human who isn't leading has stepped out
+// (or isn't connected), the rivals finish it among themselves.
+export function auctionPass(s, pid, connected = null) {
+  const a = s.auction;
+  if (!a) return { ok: false, msg: 'The auction is over.' };
+  if (a.leader === pid) return { ok: false, msg: 'You are the top bidder.' };
+  a.out[pid] = true;
+  maybeSettle(s, connected);
+  return { ok: true };
+}
+export function maybeSettle(s, connected = null) {
+  const a = s.auction;
+  if (!a) return;
+  const waiting = s.players.filter(p => p.human && !p.bankrupt && !a.out[p.id] && a.leader !== p.id &&
+    (!connected || connected.has(p.id)));
+  if (waiting.length) return;
+  settleRest(s);
+  a.timer = Math.min(a.timer, 1.5);
+}
+
 export function settleRest(s) {
   const a = s.auction;
   if (!a) return;
-  a.humanOut = true;
+  a.allOut = true;
   const live = Object.entries(a.bidders).map(([k, b]) => ({ pid: +k, max: b.max }))
     .filter(x => x.max >= minBid(a) || x.pid === a.leader)
     .sort((x, y) => y.max - x.max);

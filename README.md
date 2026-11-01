@@ -3,7 +3,7 @@
 | Game | What it is | Play |
 | --- | --- | --- |
 | **Turbo Surfers** | LAN multiplayer endless-runner kart racer (this page) | `node server/index.js` |
-| **[Skyline Hustle](skyline/README.md)** | 3D city business tycoon: live land auctions, colour sets, simulated citizens, eras from the 1930s, three AI rivals | `node skyline/serve.mjs` or open `dist/skyline-hustle.html` |
+| **[Skyline Hustle](skyline/README.md)** | 3D city business tycoon: live land auctions, colour sets, simulated citizens, eras from the 1930s, AI rivals, LAN multiplayer for up to 4 | `node skyline/server.mjs` or open `dist/skyline-hustle.html` (single-player) |
 
 ---
 

@@ -12,7 +12,7 @@ import {
   APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, DEMAND_SCALE,
   OUTSIDE_WEIGHT, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE,
   LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP,
-  LOAN_LTV, START_CASH, RIVALS, HUMAN_COLOR, SCENARIOS, DIFFICULTY, EVENTS, PRICE_MIN, PRICE_MAX,
+  LOAN_LTV, START_CASH, RIVALS, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, DIFFICULTY, EVENTS, PRICE_MIN, PRICE_MAX,
   DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, TECH, YEAR_DAYS, GOAL_TEXT, bizName, eraName,
 } from './data.js';
 import { MAP, rand } from './map.js';
@@ -22,11 +22,12 @@ import { buildCitizens, syncResidents, syncTourists, touristsIn, citizensHour } 
 export { MAP, rand, yearOf, techOf, capacity, bizOpen };
 
 // ------------------------------------------------------------ setup ----
-export function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You', company = 'Your Company', seed } = {}) {
+// humans: [{ name, company }] for LAN games; otherwise one player from name/company.
+export function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You', company = 'Your Company', seed, humans } = {}) {
   const diff = DIFFICULTY[difficulty] || DIFFICULTY.normal;
   const sc = SCENARIOS[scenario];
   const s = {
-    v: 2,
+    v: 3,
     rng: (seed ?? Math.floor(Math.random() * 2 ** 32)) >>> 0,
     day: 1, hour: 7, t: 0,
     scenario, difficulty,
@@ -37,18 +38,27 @@ export function createGame({ scenario = 'boomtown', difficulty = 'normal', name 
     chatter: DISTRICTS.map(() => ({})),
     cityCustomersToday: 0, cityCustomersYesterday: 0,
     auction: null, auctionQueue: [], liveAuctions: false,
-    goals: (sc.goals || []).map(g => ({ ...g, done: false, doneDay: 0 })),
+    goals: sc.goals || [],
     over: false, winner: -1, endReason: '',
   };
-  s.players.push(makePlayer(0, name || 'You', company || 'Your Company', HUMAN_COLOR, true, 'human', START_CASH));
-  RIVALS.forEach((r, i) => s.players.push(makePlayer(i + 1, r.name, r.company, r.color, false, r.style,
-    Math.round(START_CASH * diff.aiCash))));
+  const people = (humans && humans.length ? humans : [{ name, company }]).slice(0, MAX_COMPANIES);
+  people.forEach((h, i) => {
+    const p = makePlayer(i, h.name || `Player ${i + 1}`, h.company || `Company ${i + 1}`, HUMAN_COLORS[i], true, 'human', START_CASH);
+    p.goals = s.goals.map(g => ({ done: false, doneDay: 0 }));
+    p.failed = false;
+    s.players.push(p);
+  });
+  RIVALS.slice(0, MAX_COMPANIES - people.length).forEach(r => {
+    const p = makePlayer(s.players.length, r.name, r.company, r.color, false, r.style, Math.round(START_CASH * diff.aiCash));
+    p.blurb = r.blurb;
+    s.players.push(p);
+  });
   // The city auctions its land roughly cheapest first, with some shuffle.
   s.auctionQueue = s.lots.map(l => ({ id: l.id, k: l.basePrice * (0.6 + rand(s) * 0.9) }))
     .sort((a, b) => a.k - b.k).map(x => x.id);
   refreshMods(s);
   buildCitizens(s);
-  news(s, `Welcome to ${yearOf(s)}, ${s.players[0].company}. ${sc.blurb}`, 'info');
+  news(s, `Welcome to ${yearOf(s)}, ${people.length > 1 ? people.map(h => h.company).join(', ') : s.players[0].company}. ${sc.blurb}`, 'info');
   news(s, 'The city sells its land at live auctions at 9:00, 13:00 and 17:00. Open shops anywhere meanwhile.', 'info');
   return s;
 }
@@ -455,8 +465,8 @@ function tickEvents(s) {
 }
 
 // ------------------------------------------------------------ goals ----
-export function goalProgress(s, g) {
-  const me = 0;
+// Scenario goals are shared templates; each human tracks their own progress.
+export function goalProgress(s, g, me = 0) {
   const own = s.lots.filter(l => l.owner === me);
   const v = ({
     biz: () => s.lots.filter(l => l.business && l.business.owner === me).length,
@@ -473,25 +483,38 @@ export function goalProgress(s, g) {
   return Math.round(v);
 }
 export const goalText = g => GOAL_TEXT[g.type](g.n);
+export const humans = s => s.players.filter(p => p.human);
 
 function checkGoals(s) {
   if (s.over || !s.goals.length) return;
-  for (const g of s.goals) {
-    if (g.done) continue;
-    if (goalProgress(s, g) >= g.n) {
-      g.done = true; g.doneDay = s.day;
-      news(s, `🎯 Goal complete: ${goalText(g)}!`, 'goal');
-    } else if (s.day > g.by) {
-      return finish(s, -1, `You missed a goal: "${goalText(g)}" by day ${g.by}.`);
+  const people = humans(s);
+  for (const p of people) {
+    if (p.failed || p.bankrupt) continue;
+    s.goals.forEach((g, i) => {
+      const st = p.goals[i];
+      if (st.done || p.failed) return;
+      if (goalProgress(s, g, p.id) >= g.n) {
+        st.done = true; st.doneDay = s.day;
+        news(s, `🎯 ${people.length > 1 ? p.company + ': ' : 'Goal complete: '}${goalText(g)}!`, 'goal', people.length > 1 ? -1 : p.id);
+      } else if (s.day > g.by) {
+        p.failed = true;
+        if (people.length > 1) news(s, `${p.company} missed "${goalText(g)}" and is out of the running.`, 'bad', p.id);
+        else p.failReason = `You missed a goal: "${goalText(g)}" by day ${g.by}.`;
+      }
+    });
+    if (!p.failed && p.goals.every(x => x.done)) {
+      return finish(s, p.id, people.length > 1 ? `${p.company} met every milestone first!` : `Every milestone met. ${SCENARIOS[s.scenario].name} complete!`);
     }
   }
-  if (s.goals.every(g => g.done)) finish(s, 0, `Every milestone met. ${SCENARIOS[s.scenario].name} complete!`);
+  if (people.every(p => p.failed || p.bankrupt)) {
+    finish(s, -1, people.length > 1 ? 'Every player missed a milestone.' : people[0].failReason || 'You missed a milestone.');
+  }
 }
 
 function checkEnd(s) {
   const sc = SCENARIOS[s.scenario];
-  const me = s.players[0];
-  if (me.bankrupt) return finish(s, -1, 'You went bankrupt.');
+  const people = humans(s);
+  if (people.every(p => p.bankrupt)) return finish(s, -1, people.length > 1 ? 'Every player went bankrupt.' : 'You went bankrupt.');
   const alive = s.players.filter(p => !p.bankrupt);
   if (alive.length === 1 && sc.mode === 'race') return finish(s, alive[0].id, 'Every rival has gone bust.');
   if (sc.mode !== 'race') return;
@@ -768,7 +791,7 @@ export function serialize(s) {
 }
 export function deserialize(json) {
   const s = JSON.parse(json);
-  if (!s || s.v !== 2 || !Array.isArray(s.lots)) throw new Error('bad save');
+  if (!s || s.v !== 3 || !Array.isArray(s.lots)) throw new Error('bad save');
   buildCitizens(s);
   return s;
 }

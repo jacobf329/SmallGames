@@ -235,6 +235,9 @@ export const RIVALS = [
     blurb: 'Smart fit-outs, premium prices, wealthy streets.' },
 ];
 export const HUMAN_COLOR = '#2ee6ff';
+// Colours for human players in LAN games (player 1 keeps the classic cyan).
+export const HUMAN_COLORS = ['#2ee6ff', '#3ddc84', '#f5f7ff', '#ff7ae0'];
+export const MAX_COMPANIES = 4;
 
 // Scenarios. 'goals' scenarios are won by meeting every goal before its
 // deadline (miss one and you lose); 'race' scenarios by being first to a

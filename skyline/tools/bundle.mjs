@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
-const ORDER = ['data', 'map', 'demand', 'citizens', 'sim', 'ai', 'auction', 'game', 'audio', 'render3d', 'ui', 'main'];
+const ORDER = ['data', 'map', 'demand', 'citizens', 'sim', 'ai', 'auction', 'game', 'actions', 'net', 'audio', 'render3d', 'ui', 'main'];
 
 // three.js ships as one module ending in `export{a as B, ...}`.
 function wrapThree() {
@@ -34,7 +34,7 @@ function wrap(name) {
   src = src.replace(/^import\s*\{([\s\S]*?)\}\s*from\s*'\.\/(\w+)\.js';?/gm,
     (_, names, mod) => `const {${names.replace(/\s+as\s+/g, ': ')}} = __mods.${mod};`);
   src = src.replace(/^export\s*\{([^}]*)\};?/gm, (_, names) => { exported.push(...names.split(',').map(n => n.trim()).filter(Boolean)); return ''; });
-  src = src.replace(/^export\s+(const|let|function|class)\s+(\w+)/gm, (_, kw, id) => { exported.push(id); return `${kw} ${id}`; });
+  src = src.replace(/^export\s+(const|let|function|class|async function)\s+(\w+)/gm, (_, kw, id) => { exported.push(id); return `${kw} ${id}`; });
   if (/^\s*(import|export)\s/m.test(src)) throw new Error(`${name}.js has syntax the bundler does not handle`);
   return `/* ===== ${name}.js ===== */\n__mods.${name} = (() => {\n${src}\nreturn { ${[...new Set(exported)].join(', ')} };\n})();\n`;
 }
