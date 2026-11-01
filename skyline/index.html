@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Skyline Hustle</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1424">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏙️</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<canvas id="city"></canvas>
+
+<header id="hud" class="hidden">
+  <div class="hud-row">
+    <button id="hud-cash" class="cash" aria-label="Bank">
+      <b id="cash">$0</b>
+      <span id="cash-delta">today +$0</span>
+    </button>
+    <div class="clock">
+      <b id="clock-time">07:00</b>
+      <span id="clock-day">Day 1 · Mon</span>
+    </div>
+    <div class="speeds" id="speeds">
+      <button data-speed="0" aria-label="Pause">❚❚</button>
+      <button data-speed="1" aria-label="Play">▶</button>
+      <button data-speed="2" aria-label="Fast">▶▶</button>
+      <button data-speed="3" aria-label="Fastest">▶▶▶</button>
+    </div>
+  </div>
+  <div class="goal" id="goal"><div class="goal-fill" id="goal-fill"></div><span id="goal-text"></span></div>
+  <div id="ticker"></div>
+</header>
+
+<section id="sheet" class="hidden" aria-live="polite">
+  <div class="grab" id="sheet-grab"></div>
+  <button class="sheet-close" id="sheet-close" aria-label="Close">✕</button>
+  <div id="sheet-body"></div>
+</section>
+
+<nav id="nav" class="hidden">
+  <button data-tab="map"><i>🗺️</i><span>City</span></button>
+  <button data-tab="empire"><i>💼</i><span>Empire</span></button>
+  <button data-tab="sets"><i>🎨</i><span>Sets</span></button>
+  <button data-tab="rivals"><i>🏆</i><span>Rivals</span></button>
+  <button data-tab="bank"><i>🏦</i><span>Bank</span></button>
+  <button data-tab="menu"><i>☰</i><span>Menu</span></button>
+</nav>
+
+<div id="toasts"></div>
+<div id="modal" class="hidden"><div class="modal-card" id="modal-card"></div></div>
+
+<section id="title" class="screen">
+  <div class="title-card">
+    <div class="logo"><span class="logo-sky">SKYLINE</span><span class="logo-hustle">HUSTLE</span></div>
+    <p class="tag">Buy the block. Paint the town your colour. Build to the clouds.</p>
+
+    <button id="btn-continue" class="btn go hidden">Continue</button>
+
+    <label class="field">
+      <span>Company name</span>
+      <input id="in-company" maxlength="22" placeholder="Your Company" autocomplete="off">
+    </label>
+
+    <div class="field">
+      <span>Scenario</span>
+      <div class="seg" id="seg-scenario">
+        <button data-v="quick">Quick</button>
+        <button data-v="standard" class="on">Mogul</button>
+        <button data-v="sandbox">Free Play</button>
+      </div>
+      <small id="scenario-blurb"></small>
+    </div>
+
+    <div class="field">
+      <span>Rivals</span>
+      <div class="seg" id="seg-difficulty">
+        <button data-v="easy">Relaxed</button>
+        <button data-v="normal" class="on">Sharp</button>
+        <button data-v="hard">Ruthless</button>
+      </div>
+    </div>
+
+    <button id="btn-new" class="btn go">New Game</button>
+
+    <details class="howto">
+      <summary>How to play</summary>
+      <ul>
+        <li><b>Tap a lot</b> to buy land, open a business or manage it. Drag to pan, pinch to zoom.</li>
+        <li>The city is split into <b>8 colour districts</b>. Own <b>every lot of a colour</b> to complete the set:
+          ground rent on it <b>doubles</b> and you can stack <b>apartments</b> all the way to a <b>Skyline Tower</b>.</li>
+        <li>Apartments bring residents, and residents are customers. Build them evenly across the set.</li>
+        <li>You can open a business on anyone's land, but you'll pay them rent every night. Rivals do the same to you.</li>
+        <li>Set each shop's <b>price</b> and <b>staff</b>. Rich streets tolerate luxury prices; budget streets flee them.
+          If the shop's queue is out of the door, hire. If it's empty, cut staff.</li>
+        <li><b>Metro stations</b> pay fares (more the more you own) and bring tourists to nearby blocks.
+          <b>Utilities</b> take a cut of every business's bills.</li>
+        <li>Rivals will bid for the lot that completes their set. You can bid for theirs too.</li>
+      </ul>
+    </details>
+  </div>
+</section>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

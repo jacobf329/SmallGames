@@ -1,3 +1,12 @@
+# SmallGames
+
+| Game | What it is | Play |
+| --- | --- | --- |
+| **Turbo Surfers** | LAN multiplayer endless-runner kart racer (this page) | `node server/index.js` |
+| **[Skyline Hustle](skyline/README.md)** | City business tycoon: collect colour sets, build towers, beat three AI rivals | `node skyline/serve.mjs` or open `dist/skyline-hustle.html` |
+
+---
+
 # Turbo Surfers
 
 An endless-runner kart racer for phones. Subway-Surfers movement — three-lane

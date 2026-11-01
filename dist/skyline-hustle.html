@@ -1,0 +1,3090 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Skyline Hustle</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1424">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏙️</text></svg>">
+<style>
+/* Skyline Hustle - phone-first UI. Portrait is the main target; landscape and
+   desktop get the same layout with a wider canvas. */
+
+:root {
+  --bg: #0d1424;
+  --panel: rgba(16, 23, 40, 0.94);
+  --panel2: rgba(255, 255, 255, 0.05);
+  --line: rgba(160, 190, 255, 0.16);
+  --ink: #eef3ff;
+  --dim: #93a3c4;
+  --you: #2ee6ff;
+  --good: #3ddc84;
+  --bad: #ff5a6e;
+  --gold: #ffd23f;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.35 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  overscroll-behavior: none; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+
+#city { position: fixed; inset: 0; display: block; z-index: 0; }
+.hidden { display: none !important; }
+button { font: inherit; color: inherit; cursor: pointer; }
+
+/* ------------------------------------------------------------- HUD -- */
+#hud {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 5;
+  padding: calc(6px + var(--safe-t)) calc(8px + var(--safe-r)) 0 calc(8px + var(--safe-l));
+  pointer-events: none;
+}
+.hud-row { display: flex; align-items: stretch; gap: 6px; }
+.hud-row > * { pointer-events: auto; }
+.cash, .clock, .speeds {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.cash { flex: 1.3; text-align: left; padding: 5px 10px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.cash b { font-size: 19px; letter-spacing: 0.2px; font-variant-numeric: tabular-nums; }
+.cash span { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.clock { flex: 1; padding: 5px 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+.clock b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.clock span { font-size: 11px; color: var(--dim); white-space: nowrap; }
+.speeds { display: flex; padding: 3px; gap: 2px; }
+.speeds button {
+  border: 0; background: transparent; border-radius: 10px; min-width: 34px; padding: 0 4px;
+  font-size: 11px; letter-spacing: -2px; color: var(--dim);
+}
+.speeds button.on { background: var(--you); color: #04212a; font-weight: 800; }
+
+.goal {
+  position: relative; margin-top: 5px; height: 16px; border-radius: 8px; overflow: hidden;
+  background: var(--panel); border: 1px solid var(--line); pointer-events: auto;
+}
+.goal-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #1aa6c4, var(--you)); transition: width .4s; }
+.goal span { position: relative; display: block; text-align: center; font-size: 10.5px; line-height: 14px; font-weight: 600; text-shadow: 0 1px 2px #000; }
+
+#ticker {
+  margin-top: 5px; display: inline-block; max-width: 100%;
+  font-size: 12px; padding: 4px 10px; border-radius: 10px; background: rgba(10, 14, 28, 0.72);
+  color: #dfe8ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto;
+  transition: opacity .3s;
+}
+#ticker:empty { opacity: 0; }
+
+/* ------------------------------------------------------------- nav -- */
+#nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 7;
+  display: flex; justify-content: space-around;
+  padding: 4px calc(4px + var(--safe-r)) calc(4px + var(--safe-b)) calc(4px + var(--safe-l));
+  background: var(--panel); border-top: 1px solid var(--line);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+#nav button {
+  flex: 1; border: 0; background: transparent; padding: 4px 0; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--dim);
+}
+#nav button i { font-style: normal; font-size: 20px; line-height: 1.1; }
+#nav button span { font-size: 10.5px; font-weight: 600; }
+#nav button.on { color: var(--ink); background: rgba(46, 230, 255, 0.12); }
+#nav button .dot { position: absolute; }
+
+/* ----------------------------------------------------------- sheet -- */
+#sheet {
+  position: fixed; left: 0; right: 0; z-index: 6;
+  bottom: calc(58px + var(--safe-b));
+  max-height: min(58vh, 560px); overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: var(--panel); border-top: 1px solid var(--line);
+  border-radius: 20px 20px 0 0; padding: 6px 14px 14px;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  touch-action: pan-y; box-shadow: 0 -10px 30px rgba(0,0,0,0.35);
+  animation: rise .18s ease-out;
+}
+@keyframes rise { from { transform: translateY(30px); opacity: 0; } }
+@media (min-width: 720px) {
+  #sheet { left: auto; right: 12px; width: 400px; bottom: calc(66px + var(--safe-b)); border-radius: 20px; border: 1px solid var(--line); max-height: calc(100vh - 170px); }
+}
+.grab { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); margin: 2px auto 8px; }
+.sheet-close {
+  position: absolute; right: 10px; top: 8px; width: 32px; height: 32px; border-radius: 50%;
+  border: 0; background: var(--panel2); color: var(--dim); font-size: 14px;
+}
+
+.sh-head { display: flex; align-items: center; gap: 10px; padding-right: 36px; margin-bottom: 8px; }
+.chip { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; font-size: 17px; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.25); }
+.sh-title { font-size: 18px; font-weight: 800; line-height: 1.1; }
+.sh-sub { font-size: 12px; color: var(--dim); }
+h3 { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); display: flex; justify-content: space-between; }
+h3 em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(--ink); font-weight: 600; }
+
+.card { background: var(--panel2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin: 6px 0; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stat { background: var(--panel2); border-radius: 10px; padding: 6px 8px; min-width: 0; }
+.stat small { display: block; font-size: 10.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.pos { color: var(--good); }
+.neg { color: var(--bad); }
+.dim { color: var(--dim); }
+.note { font-size: 12.5px; color: var(--dim); margin: 6px 0; }
+.note b { color: var(--ink); }
+.warn { color: var(--gold); }
+
+.setbar { display: flex; align-items: center; gap: 8px; }
+.setdots { display: flex; gap: 5px; }
+.setdot { width: 22px; height: 22px; border-radius: 7px; border: 2px solid rgba(255,255,255,0.18); display: grid; place-items: center; font-size: 10px; font-weight: 800; color: #000a; }
+.setdot.me { box-shadow: 0 0 0 2px var(--you); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 0; border-radius: 12px; padding: 11px 14px; font-weight: 700; font-size: 15px;
+  background: rgba(255,255,255,0.1); color: var(--ink); min-height: 44px;
+}
+.btn.go { background: linear-gradient(180deg, #34e3ff, #12b5d6); color: #032530; }
+.btn.buy { background: linear-gradient(180deg, #4ff09a, #24c46e); color: #03250f; }
+.btn.danger { background: rgba(255, 90, 110, 0.16); color: #ff9aa8; }
+.btn.gold { background: linear-gradient(180deg, #ffe167, #f2b81d); color: #2b1d00; }
+.btn[disabled] { opacity: 0.4; pointer-events: none; }
+.btn.small { min-height: 36px; padding: 7px 10px; font-size: 13.5px; }
+.btn.wide { width: 100%; }
+.row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.row > .btn { flex: 1; }
+.btn small { font-weight: 600; opacity: 0.8; }
+
+.seg { display: flex; background: rgba(0,0,0,0.25); border-radius: 12px; padding: 3px; gap: 3px; }
+.seg button { flex: 1; border: 0; border-radius: 9px; background: transparent; padding: 8px 2px; font-size: 13px; font-weight: 600; color: var(--dim); min-height: 36px; }
+.seg button.on { background: var(--ink); color: #0d1424; }
+
+.stepper { display: flex; align-items: center; gap: 4px; }
+.stepper button { width: 40px; height: 40px; border-radius: 12px; border: 0; background: rgba(255,255,255,0.1); font-size: 20px; font-weight: 700; }
+.stepper b { min-width: 34px; text-align: center; font-size: 18px; }
+.ctl { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 8px 0; }
+.ctl > span { font-size: 13px; color: var(--dim); }
+
+.meter { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 4px; }
+.meter i { display: block; height: 100%; background: var(--good); }
+.meter i.hot { background: var(--bad); }
+
+.biz-list { display: grid; gap: 6px; }
+.biz-opt {
+  display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 8px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; text-align: left;
+}
+.biz-opt i { font-style: normal; font-size: 24px; text-align: center; }
+.biz-opt b { display: block; font-size: 14.5px; }
+.biz-opt small { color: var(--dim); font-size: 11.5px; }
+.biz-opt .est { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+.biz-opt .est small { display: block; font-weight: 500; }
+.biz-opt.best { border-color: rgba(61, 220, 132, 0.6); }
+.biz-opt[disabled] { opacity: 0.45; }
+
+.list-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 5px 0;
+}
+.list-item .grow { flex: 1; min-width: 0; }
+.list-item .grow b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-item .grow small { color: var(--dim); font-size: 11.5px; }
+.list-item .amt { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; font-size: 14px; }
+.list-item .amt small { display: block; font-weight: 500; color: var(--dim); font-size: 11px; }
+
+.rival { display: grid; grid-template-columns: 8px 1fr auto; gap: 10px; align-items: center; }
+.rival .bar { width: 8px; align-self: stretch; border-radius: 4px; }
+.rival svg { display: block; width: 100%; height: 34px; margin-top: 4px; }
+.rank { font-size: 22px; font-weight: 900; color: var(--dim); }
+
+.ledger { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.ledger td { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.ledger td:last-child { text-align: right; }
+.ledger tr.total td { font-weight: 800; border-bottom: 0; padding-top: 8px; }
+
+/* ---------------------------------------------------------- toasts -- */
+#toasts {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 20;
+  top: calc(128px + var(--safe-t)); width: min(92vw, 420px);
+  display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+}
+.toast {
+  background: rgba(14, 20, 36, 0.95); border: 1px solid var(--line); border-left: 4px solid var(--you);
+  border-radius: 12px; padding: 7px 11px; font-size: 13px; box-shadow: 0 8px 22px rgba(0,0,0,0.35);
+  animation: pop .22s ease-out; pointer-events: auto;
+}
+.toast.set { border-left-color: var(--gold); }
+.toast.bad { border-left-color: var(--bad); }
+.toast.good { border-left-color: var(--good); }
+.toast.event { border-left-color: #c77dff; }
+.toast.out { opacity: 0; transform: translateY(-8px); transition: all .3s; }
+@keyframes pop { from { transform: scale(0.94); opacity: 0; } }
+
+/* ----------------------------------------------------------- modal -- */
+#modal {
+  position: fixed; inset: 0; z-index: 30; display: grid; place-items: center;
+  background: rgba(4, 7, 16, 0.6); padding: 20px; backdrop-filter: blur(3px);
+}
+.modal-card {
+  width: min(92vw, 400px); max-height: 85vh; overflow-y: auto; touch-action: pan-y;
+  background: #121a2e; border: 1px solid var(--line); border-radius: 20px; padding: 18px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5); animation: pop .2s ease-out;
+}
+.modal-card h2 { margin: 0 0 6px; font-size: 21px; }
+.modal-card p { color: #c9d4ee; margin: 6px 0 12px; }
+.big-amt { font-size: 30px; font-weight: 900; text-align: center; margin: 6px 0; font-variant-numeric: tabular-nums; }
+
+/* ----------------------------------------------------------- title -- */
+.screen {
+  position: fixed; inset: 0; z-index: 40; overflow-y: auto; touch-action: pan-y;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: calc(24px + var(--safe-t)) 16px calc(24px + var(--safe-b));
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(46, 230, 255, 0.18), transparent 60%),
+    radial-gradient(80% 50% at 90% 100%, rgba(255, 79, 123, 0.15), transparent 60%),
+    linear-gradient(180deg, rgba(13,20,36,0.82), rgba(13,20,36,0.96));
+}
+.title-card { width: min(100%, 420px); display: flex; flex-direction: column; gap: 12px; margin: auto 0; }
+.logo { text-align: center; line-height: 0.92; margin-top: 8px; }
+.logo span { display: block; font-weight: 900; letter-spacing: 2px; }
+.logo-sky { font-size: 44px; background: linear-gradient(180deg, #ffffff, #8fdcff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.logo-hustle { font-size: 52px; background: linear-gradient(90deg, #ffd23f, #ff4f7b 50%, #a77bff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.tag { text-align: center; color: var(--dim); margin: 0 0 6px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > span { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); }
+.field small { color: var(--dim); font-size: 12px; }
+.field input {
+  font: inherit; font-size: 16px; color: var(--ink); background: rgba(0,0,0,0.3);
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px; user-select: text; -webkit-user-select: text;
+}
+.howto { background: var(--panel2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.howto summary { font-weight: 700; cursor: pointer; }
+.howto ul { padding-left: 18px; margin: 8px 0 0; color: #c9d4ee; font-size: 13.5px; }
+.howto li { margin: 5px 0; }
+
+/* Phones held sideways: compact HUD, icon-only nav, tall side sheet. */
+@media (max-height: 500px) {
+  .hud-row, .goal, #ticker { max-width: min(480px, calc(100vw - 440px)); }
+  .cash b { font-size: 16px; }
+  .clock b { font-size: 15px; }
+  .speeds button { min-width: 30px; }
+  .goal { height: 14px; margin-top: 4px; }
+  .goal span { line-height: 12px; font-size: 10px; }
+  #nav { left: auto; right: 0; top: 0; bottom: 0; width: calc(52px + var(--safe-r)); flex-direction: column; border-top: 0; border-left: 1px solid var(--line);
+    padding: calc(4px + var(--safe-t)) calc(2px + var(--safe-r)) calc(4px + var(--safe-b)) 2px; }
+  #nav button span { display: none; }
+  #sheet { left: auto; right: calc(56px + var(--safe-r)); width: min(350px, 46vw); top: 6px; bottom: 6px; max-height: none;
+    border-radius: 18px; border: 1px solid var(--line); }
+  #toasts { top: calc(84px + var(--safe-t)); left: 8px; transform: none; width: min(42vw, 360px); }
+  #hud { right: calc(56px + var(--safe-r)); }
+}
+
+</style>
+</head>
+<body>
+
+<canvas id="city"></canvas>
+
+<header id="hud" class="hidden">
+  <div class="hud-row">
+    <button id="hud-cash" class="cash" aria-label="Bank">
+      <b id="cash">$0</b>
+      <span id="cash-delta">today +$0</span>
+    </button>
+    <div class="clock">
+      <b id="clock-time">07:00</b>
+      <span id="clock-day">Day 1 · Mon</span>
+    </div>
+    <div class="speeds" id="speeds">
+      <button data-speed="0" aria-label="Pause">❚❚</button>
+      <button data-speed="1" aria-label="Play">▶</button>
+      <button data-speed="2" aria-label="Fast">▶▶</button>
+      <button data-speed="3" aria-label="Fastest">▶▶▶</button>
+    </div>
+  </div>
+  <div class="goal" id="goal"><div class="goal-fill" id="goal-fill"></div><span id="goal-text"></span></div>
+  <div id="ticker"></div>
+</header>
+
+<section id="sheet" class="hidden" aria-live="polite">
+  <div class="grab" id="sheet-grab"></div>
+  <button class="sheet-close" id="sheet-close" aria-label="Close">✕</button>
+  <div id="sheet-body"></div>
+</section>
+
+<nav id="nav" class="hidden">
+  <button data-tab="map"><i>🗺️</i><span>City</span></button>
+  <button data-tab="empire"><i>💼</i><span>Empire</span></button>
+  <button data-tab="sets"><i>🎨</i><span>Sets</span></button>
+  <button data-tab="rivals"><i>🏆</i><span>Rivals</span></button>
+  <button data-tab="bank"><i>🏦</i><span>Bank</span></button>
+  <button data-tab="menu"><i>☰</i><span>Menu</span></button>
+</nav>
+
+<div id="toasts"></div>
+<div id="modal" class="hidden"><div class="modal-card" id="modal-card"></div></div>
+
+<section id="title" class="screen">
+  <div class="title-card">
+    <div class="logo"><span class="logo-sky">SKYLINE</span><span class="logo-hustle">HUSTLE</span></div>
+    <p class="tag">Buy the block. Paint the town your colour. Build to the clouds.</p>
+
+    <button id="btn-continue" class="btn go hidden">Continue</button>
+
+    <label class="field">
+      <span>Company name</span>
+      <input id="in-company" maxlength="22" placeholder="Your Company" autocomplete="off">
+    </label>
+
+    <div class="field">
+      <span>Scenario</span>
+      <div class="seg" id="seg-scenario">
+        <button data-v="quick">Quick</button>
+        <button data-v="standard" class="on">Mogul</button>
+        <button data-v="sandbox">Free Play</button>
+      </div>
+      <small id="scenario-blurb"></small>
+    </div>
+
+    <div class="field">
+      <span>Rivals</span>
+      <div class="seg" id="seg-difficulty">
+        <button data-v="easy">Relaxed</button>
+        <button data-v="normal" class="on">Sharp</button>
+        <button data-v="hard">Ruthless</button>
+      </div>
+    </div>
+
+    <button id="btn-new" class="btn go">New Game</button>
+
+    <details class="howto">
+      <summary>How to play</summary>
+      <ul>
+        <li><b>Tap a lot</b> to buy land, open a business or manage it. Drag to pan, pinch to zoom.</li>
+        <li>The city is split into <b>8 colour districts</b>. Own <b>every lot of a colour</b> to complete the set:
+          ground rent on it <b>doubles</b> and you can stack <b>apartments</b> all the way to a <b>Skyline Tower</b>.</li>
+        <li>Apartments bring residents, and residents are customers. Build them evenly across the set.</li>
+        <li>You can open a business on anyone's land, but you'll pay them rent every night. Rivals do the same to you.</li>
+        <li>Set each shop's <b>price</b> and <b>staff</b>. Rich streets tolerate luxury prices; budget streets flee them.
+          If the shop's queue is out of the door, hire. If it's empty, cut staff.</li>
+        <li><b>Metro stations</b> pay fares (more the more you own) and bring tourists to nearby blocks.
+          <b>Utilities</b> take a cut of every business's bills.</li>
+        <li>Rivals will bid for the lot that completes their set. You can bid for theirs too.</li>
+      </ul>
+    </details>
+  </div>
+</section>
+
+<script>
+(() => {
+"use strict";
+const __mods = {};
+/* ===== data.js ===== */
+__mods.data = (() => {
+// Skyline Hustle - static game data and every tuning number.
+// Nothing in here touches the DOM, so the simulation can run headless in Node.
+
+// ---------------------------------------------------------------- map ----
+// The city is a 4 x 3 grid of blocks. Each block is 2 x 2 tiles with a
+// one-tile road between blocks, so the map is 13 x 10 tiles.
+const MAP_W = 13;
+const MAP_H = 10;
+const BLOCK_COLS = 4;
+const BLOCK_ROWS = 3;
+
+// What sits in each block slot, row by row.
+//   d:N  colour district N      transit  two metro stations
+//   park the central park       utility  power + water works
+const BLOCK_LAYOUT = [
+  ['d:0', 'd:1', 'd:2', 'd:3'],
+  ['transit', 'park', 'utility', 'transit'],
+  ['d:7', 'd:6', 'd:5', 'd:4'],
+];
+
+// ---------------------------------------------------------- districts ----
+// Each colour district is one block. Own every lot of a colour to complete
+// the set: rent doubles and you can build apartments (up to a tower).
+// mix = share of [budget, middle, wealthy] residents.
+const DISTRICTS = [
+  { name: 'Foundry Row',     short: 'Foundry',  color: '#b8662f', pop: 3600, mix: [0.70, 0.25, 0.05], price: 6000,  lots: 2 },
+  { name: 'Canalside',       short: 'Canal',    color: '#19b5a5', pop: 3300, mix: [0.55, 0.35, 0.10], price: 8000,  lots: 3 },
+  { name: 'Bazaar Quarter',  short: 'Bazaar',   color: '#ec5fa8', pop: 3100, mix: [0.42, 0.43, 0.15], price: 10500, lots: 3 },
+  { name: 'Stagelight',      short: 'Stage',    color: '#f28b2c', pop: 2900, mix: [0.30, 0.50, 0.20], price: 13500, lots: 3 },
+  { name: 'Exchange Square', short: 'Exchange', color: '#d93a3a', pop: 2800, mix: [0.20, 0.52, 0.28], price: 17000, lots: 3 },
+  { name: 'Greenway',        short: 'Greenway', color: '#7cc22e', pop: 2600, mix: [0.15, 0.48, 0.37], price: 21000, lots: 3 },
+  { name: 'Parkview',        short: 'Parkview', color: '#6d5df0', pop: 2400, mix: [0.10, 0.40, 0.50], price: 26000, lots: 3 },
+  { name: 'Regent Heights',  short: 'Regent',   color: '#f2c81d', pop: 2100, mix: [0.05, 0.30, 0.65], price: 33000, lots: 2 },
+];
+
+const SEGMENTS = ['Budget', 'Middle', 'Wealthy', 'Tourists'];
+// How hard each segment reacts to price (higher = flees expensive shops).
+const SEG_ELASTICITY = [2.8, 1.9, 0.9, 1.4];
+
+// ------------------------------------------------------------ special ----
+const STATION_PRICE = 22000;
+const UTILITY_PRICE = 16000;
+const STATION_NAMES = ['West Gate Station', 'Mill Street Station', 'Harbour Station', 'East Gate Station'];
+const UTILITY_NAMES = ['Volt Works', 'Clearwater Works'];
+// Daily fare per station, by how many stations the same owner holds.
+const STATION_FARE = [0, 420, 900, 1500, 2300];
+// Utilities collect a cut of every business's daily overhead bill.
+const UTILITY_CUT = [0, 0.30, 0.45];   // per utility, owning 1 / 2
+
+// Tourists a transit block / park sends into neighbouring districts.
+const TRANSIT_TOURISTS = 650;
+const PARK_TOURISTS = 300;
+
+// ---------------------------------------------------------- businesses ----
+// cost      build price             ticket  average spend per customer
+// stock     cost of goods / ticket  wage    per staff per open hour
+// cap       customers / staff / hr  open    [from, to) hours, may wrap
+// peaks     busiest hours           app     customers per 1000 people per
+//                                           peak hour: [budget, middle, wealthy, tourist]
+const BUSINESSES = [
+  { id: 'cafe',     name: 'Coffee House',    icon: '☕', cost: 9000,  ticket: 6,   stock: 0.30, wage: 19, cap: 20, open: [6, 20],  peaks: [8, 13, 16], app: [9, 13, 15, 16],  wall: '#8b5e3c', group: 'food' },
+  { id: 'burger',   name: 'Burger Bar',      icon: '🍔', cost: 12000, ticket: 11,  stock: 0.36, wage: 19, cap: 16, open: [10, 24], peaks: [12, 19],    app: [15, 10, 4, 12],  wall: '#e0533d', group: 'food' },
+  { id: 'grocer',   name: 'Corner Grocer',   icon: '🛒', cost: 14000, ticket: 19,  stock: 0.60, wage: 18, cap: 18, open: [7, 22],  peaks: [9, 18],     app: [11, 10, 6, 3],   wall: '#3f9a4a', group: 'retail' },
+  { id: 'pharmacy', name: 'Pharmacy',        icon: '💊', cost: 16000, ticket: 24,  stock: 0.52, wage: 24, cap: 12, open: [8, 21],  peaks: [11, 17],    app: [4.5, 4.5, 4.5, 2], wall: '#2f9bd6', group: 'retail' },
+  { id: 'gym',      name: 'Fitness Club',    icon: '🏋️', cost: 24000, ticket: 14,  stock: 0.08, wage: 22, cap: 24, open: [6, 23],  peaks: [7, 18],     app: [3, 6.5, 8, 1.5], wall: '#5b6475', group: 'leisure' },
+  { id: 'boutique', name: 'Fashion Boutique', icon: '👗', cost: 22000, ticket: 58, stock: 0.48, wage: 24, cap: 6,  open: [10, 20], peaks: [14, 17],    app: [1, 3, 6.5, 5],   wall: '#c2418f', group: 'retail' },
+  { id: 'gadget',   name: 'Gadget Store',    icon: '📱', cost: 30000, ticket: 115, stock: 0.66, wage: 27, cap: 4,  open: [10, 20], peaks: [15, 18],    app: [0.8, 1.7, 2.6, 1.6], wall: '#334a7d', group: 'retail' },
+  { id: 'cinema',   name: 'Cinema',          icon: '🎬', cost: 38000, ticket: 14,  stock: 0.22, wage: 19, cap: 32, open: [12, 24], peaks: [19, 21],    app: [5, 6.5, 5, 6.5], wall: '#7a2b2b', group: 'leisure' },
+  { id: 'bistro',   name: 'Bistro',          icon: '🍷', cost: 32000, ticket: 46,  stock: 0.40, wage: 27, cap: 8,  open: [17, 24], peaks: [20],        app: [1, 4.5, 10, 8],  wall: '#5a2e4f', group: 'food' },
+  { id: 'club',     name: 'Night Club',      icon: '🪩', cost: 36000, ticket: 28,  stock: 0.30, wage: 24, cap: 28, open: [21, 4],  peaks: [0],         app: [5, 6, 4, 11],    wall: '#2a1d4f', group: 'leisure' },
+  { id: 'hotel',    name: 'Boutique Hotel',  icon: '🏨', cost: 58000, ticket: 150, stock: 0.22, wage: 24, cap: 3,  open: [0, 24],  peaks: [15, 21],    app: [0, 0.1, 0.4, 3.2], wall: '#a88a52', group: 'leisure' },
+];
+const BIZ = Object.fromEntries(BUSINESSES.map(b => [b.id, b]));
+
+// Price tiers the owner can pick. mult scales the ticket.
+const PRICE_TIERS = [
+  { name: 'Bargain', mult: 0.72 },
+  { name: 'Cheap',   mult: 0.86 },
+  { name: 'Fair',    mult: 1.00 },
+  { name: 'Premium', mult: 1.20 },
+  { name: 'Luxury',  mult: 1.45 },
+];
+// Fit-out level: nicer shops draw more customers and serve them faster.
+const FIT_LEVELS = [
+  null,
+  { name: 'Basic',    appeal: 1.00, cap: 1.00, costMult: 0 },
+  { name: 'Smart',    appeal: 1.28, cap: 1.15, costMult: 0.35 },
+  { name: 'Flagship', appeal: 1.60, cap: 1.30, costMult: 0.70 },
+];
+const MAX_STAFF = 8;
+
+// -------------------------------------------------------- apartments ----
+// Only on a lot whose owner holds the whole colour set, built evenly.
+const APT_NAMES = ['Ground only', '2 floors', '4 floors', '6 floors', '8 floors', 'Skyline Tower'];
+const APT_RESIDENTS = [0, 150, 300, 450, 600, 1000];
+const APT_RENT = [0, 1, 2, 3.2, 4.5, 8];       // x lot base price x APT_RENT_RATE per day
+const APT_RENT_RATE = 0.007;
+const APT_COST_RATE = 0.55;                    // per level, x lot base price
+const MAX_APT = 5;
+
+// ----------------------------------------------------------- economy ----
+const DEMAND_SCALE = 0.62;
+const OUTSIDE_WEIGHT = 0.30;     // customers who just go home instead
+const NEIGHBOUR_W = 0.32;        // pull of a shop on a neighbouring block
+const DIAGONAL_W = 0.14;
+const ELASTICITY_BASE = 1.0;
+const RENT_RATE = 0.022;         // ground rent per day as a share of land value
+const SET_RENT_MULT = 2;
+const APT_SHOP_RENT = 0.20;      // + per apartment level to ground rent
+const OVERHEAD_BASE = 35;        // per business per day
+const OVERHEAD_RATE = 0.006;     // x build cost per day
+const LAND_GROWTH_DAY = 0.006;
+const LAND_GROWTH_BIZ = 0.035;   // per business on the block
+const LAND_GROWTH_APT = 0.025;   // per apartment level on the block
+const SELL_LAND_RATE = 0.70;
+const SELL_BIZ_RATE = 0.50;
+const LOAN_RATE = 0.008;         // interest per day
+const LOAN_STEP = 10000;
+const LOAN_LTV = 0.5;            // borrow up to this share of assets
+
+// ------------------------------------------------------------- time ----
+const SECONDS_PER_HOUR = 1.6;    // at 1x
+const SPEEDS = [0, 1, 2.5, 6];
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+// ---------------------------------------------------------- players ----
+const START_CASH = 60000;
+const RIVALS = [
+  { name: 'Margo Vance', company: 'Vance Estates',  color: '#ff4f7b', style: 'baron',
+    blurb: 'Hoards land and finishes colour sets. Towers follow.' },
+  { name: 'Rex Dupree',  company: 'Dupree & Sons',  color: '#ffae1f', style: 'cutter',
+    blurb: 'Cheap food everywhere. Will undercut you on principle.' },
+  { name: 'Ines Kato',   company: 'Kato Collective', color: '#a77bff', style: 'premium',
+    blurb: 'Smart fit-outs, premium prices, wealthy streets.' },
+];
+const HUMAN_COLOR = '#2ee6ff';
+
+const SCENARIOS = {
+  quick:    { name: 'Quick Deal',   goal: 500000,  days: 40,  blurb: 'First to a $500K net worth within 40 days.' },
+  standard: { name: 'City Mogul',   goal: 2000000, days: 100, blurb: 'First to a $2M net worth within 100 days.' },
+  sandbox:  { name: 'Free Play',    goal: 0,       days: 0,   blurb: 'No deadline. Build the skyline you want.' },
+};
+const DIFFICULTY = {
+  easy:   { aiCash: 0.7,  think: 8, margin: 1.3,  minRoi: 0.045, tune: 0.35, borrow: false },
+  normal: { aiCash: 1.0,  think: 4, margin: 1.0,  minRoi: 0.03,  tune: 0.75, borrow: true },
+  hard:   { aiCash: 1.3,  think: 2, margin: 0.85, minRoi: 0.02,  tune: 1.0,  borrow: true },
+};
+
+// ------------------------------------------------------------ events ----
+// Rolled each morning. type mods multiply demand for business ids / groups.
+const EVENTS = [
+  { id: 'festival',  days: [1, 2], weight: 3, district: true,  text: d => `Street festival in ${d}! Crowds pour in.`, tourists: 1800 },
+  { id: 'heat',      days: [2, 3], weight: 2, text: () => 'Heatwave: cafés and grocers are mobbed, gyms empty.', mods: { cafe: 1.4, grocer: 1.25, gym: 0.75 } },
+  { id: 'rain',      days: [1, 2], weight: 3, text: () => 'Rainstorm: people head for cinemas and stay off the high street.', mods: { cinema: 1.5, boutique: 0.7, gadget: 0.85, all: 0.9 } },
+  { id: 'convention',days: [2, 3], weight: 2, text: () => 'Trade convention in town: tourist numbers jump citywide.', touristMult: 1.8 },
+  { id: 'fitness',   days: [3, 4], weight: 2, text: () => 'A fitness craze sweeps the city. Burgers suffer.', mods: { gym: 1.6, burger: 0.8 } },
+  { id: 'gadget',    days: [2, 3], weight: 1, text: () => 'New phone launch! Gadget stores have queues round the block.', mods: { gadget: 1.9 } },
+  { id: 'fashion',   days: [2, 2], weight: 1, text: () => 'Fashion week: boutiques and bistros boom.', mods: { boutique: 1.7, bistro: 1.25 } },
+  { id: 'boom',      days: [1, 1], weight: 1, text: () => 'Property boom: land values up 8%.', land: 1.08 },
+  { id: 'slump',     days: [1, 1], weight: 1, text: () => 'Market jitters: land values down 6%.', land: 0.94 },
+  { id: 'concert',   days: [1, 1], weight: 2, district: true, text: d => `Open-air concert near ${d}: late-night crowds expected.`, tourists: 1200, mods: { club: 1.5, bistro: 1.2, burger: 1.2 } },
+];
+
+return { MAP_W, MAP_H, BLOCK_COLS, BLOCK_ROWS, BLOCK_LAYOUT, DISTRICTS, SEGMENTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE, STATION_NAMES, UTILITY_NAMES, STATION_FARE, UTILITY_CUT, TRANSIT_TOURISTS, PARK_TOURISTS, BUSINESSES, BIZ, PRICE_TIERS, FIT_LEVELS, MAX_STAFF, APT_NAMES, APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, MAX_APT, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV, SECONDS_PER_HOUR, SPEEDS, DAY_NAMES, START_CASH, RIVALS, HUMAN_COLOR, SCENARIOS, DIFFICULTY, EVENTS };
+})();
+
+/* ===== sim.js ===== */
+__mods.sim = (() => {
+// Skyline Hustle - the city simulation. Pure data in, pure data out: no DOM,
+// so it runs identically in the browser and in headless Node tests.
+//
+// Time advances one game hour at a time. Every hour each district generates
+// customers for every kind of business; they split between the open shops of
+// that kind on the block and its neighbours by fit-out, price and distance.
+// At midnight rents, fares, utility cuts, apartment rents and interest settle.
+
+const {
+  MAP_W, MAP_H, BLOCK_LAYOUT, DISTRICTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE,
+  STATION_NAMES, UTILITY_NAMES, STATION_FARE, UTILITY_CUT, TRANSIT_TOURISTS, PARK_TOURISTS,
+  BUSINESSES, BIZ, PRICE_TIERS, FIT_LEVELS, MAX_STAFF, APT_RESIDENTS, APT_RENT, APT_RENT_RATE,
+  APT_COST_RATE, MAX_APT, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE,
+  RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY,
+  LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV,
+  START_CASH, RIVALS, HUMAN_COLOR, SCENARIOS, DIFFICULTY, EVENTS,
+} = __mods.data;
+
+// ------------------------------------------------------------- rng ----
+// mulberry32 with its state kept inside the save game.
+function rand(s) {
+  let t = (s.rng = (s.rng + 0x6D2B79F5) >>> 0);
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const pick = (s, arr) => arr[Math.floor(rand(s) * arr.length)];
+
+// ------------------------------------------------------- static map ----
+// Built once from BLOCK_LAYOUT; never saved.
+const MAP = (() => {
+  const tiles = [];
+  for (let y = 0; y < MAP_H; y++) {
+    tiles.push([]);
+    for (let x = 0; x < MAP_W; x++) {
+      const road = x % 3 === 0 || y % 3 === 0;
+      tiles[y].push({ x, y, kind: road ? 'road' : 'plaza', block: -1, district: -1, lot: -1 });
+    }
+  }
+  const blocks = [];
+  const lotDefs = [];
+  let station = 0, utility = 0;
+  BLOCK_LAYOUT.forEach((row, br) => row.forEach((slot, bc) => {
+    const bx = 1 + bc * 3, by = 1 + br * 3;
+    const block = { id: blocks.length, bc, br, bx, by, kind: slot, district: -1 };
+    if (slot.startsWith('d:')) { block.kind = 'district'; block.district = +slot.slice(2); }
+    blocks.push(block);
+    const at = (dx, dy) => tiles[by + dy][bx + dx];
+    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+      at(dx, dy).block = block.id;
+      at(dx, dy).district = block.district;
+      if (block.kind === 'park') at(dx, dy).kind = 'park';
+    }
+    const addLot = (dx, dy, def) => {
+      const t = at(dx, dy);
+      t.kind = 'lot';
+      t.lot = lotDefs.length;
+      lotDefs.push({ id: lotDefs.length, tx: bx + dx, ty: by + dy, block: block.id, ...def });
+    };
+    if (block.kind === 'district') {
+      const D = DISTRICTS[block.district];
+      const spots = D.lots === 3 ? [[0, 0], [1, 0], [0, 1]] : [[0, 0], [1, 1]];
+      spots.forEach(([dx, dy], i) => addLot(dx, dy, {
+        kind: 'prop', district: block.district, index: i,
+        name: `${D.short} Lot ${i + 1}`,
+        basePrice: Math.round(D.price * (1 + 0.09 * i) / 100) * 100,
+      }));
+    } else if (block.kind === 'transit') {
+      [[0, 0], [1, 1]].forEach(([dx, dy]) => addLot(dx, dy, {
+        kind: 'station', district: -1, name: STATION_NAMES[station++], basePrice: STATION_PRICE,
+      }));
+    } else if (block.kind === 'utility') {
+      [[0, 0], [1, 1]].forEach(([dx, dy]) => addLot(dx, dy, {
+        kind: 'utility', district: -1, name: UTILITY_NAMES[utility++], basePrice: UTILITY_PRICE,
+      }));
+    }
+  }));
+
+  // District adjacency: who shops where, and where tourists come from.
+  const distBlock = DISTRICTS.map((_, d) => blocks.find(b => b.district === d));
+  const neighbours = DISTRICTS.map((_, d) => {
+    const a = distBlock[d];
+    const out = [];
+    DISTRICTS.forEach((_, e) => {
+      const b = distBlock[e];
+      const dx = Math.abs(a.bc - b.bc), dy = Math.abs(a.br - b.br);
+      if (d === e) out.push({ d: e, w: 1 });
+      else if (dx + dy === 1) out.push({ d: e, w: NEIGHBOUR_W });
+      else if (dx === 1 && dy === 1) out.push({ d: e, w: DIAGONAL_W });
+    });
+    return out;
+  });
+  const tourists = DISTRICTS.map((_, d) => {
+    const a = distBlock[d];
+    let t = 0;
+    for (const b of blocks) {
+      if (Math.max(Math.abs(a.bc - b.bc), Math.abs(a.br - b.br)) !== 1) continue;
+      const ortho = a.bc === b.bc || a.br === b.br;
+      if (b.kind === 'transit') t += TRANSIT_TOURISTS * (ortho ? 1 : 0.5);
+      if (b.kind === 'park') t += PARK_TOURISTS * (ortho ? 1 : 0.5);
+    }
+    return t;
+  });
+  const districtLots = DISTRICTS.map((_, d) => lotDefs.filter(l => l.district === d).map(l => l.id));
+  return { tiles, blocks, lotDefs, neighbours, tourists, districtLots, distBlock };
+})();
+
+// Precomputed demand curve per business per hour (0 when closed).
+function isOpen(def, h) {
+  const [a, z] = def.open;
+  return a < z ? h >= a && h < z : h >= a || h < z;
+}
+const PROFILE = Object.fromEntries(BUSINESSES.map(def => {
+  const arr = [];
+  for (let h = 0; h < 24; h++) {
+    if (!isOpen(def, h)) { arr.push(0); continue; }
+    let v = 0.22;
+    for (const p of def.peaks) {
+      const d = Math.min(Math.abs(h - p), 24 - Math.abs(h - p));
+      v += 0.8 * Math.exp(-(d * d) / (2 * 2.2 * 2.2));
+    }
+    arr.push(Math.min(v, 1.15));
+  }
+  return [def.id, arr];
+}));
+const openHours = def => PROFILE[def.id].filter(v => v > 0).length;
+
+// ------------------------------------------------------------ setup ----
+function createGame({ scenario = 'standard', difficulty = 'normal', name = 'You', company = 'Your Company', seed } = {}) {
+  const diff = DIFFICULTY[difficulty] || DIFFICULTY.normal;
+  const s = {
+    v: 1,
+    rng: (seed ?? Math.floor(Math.random() * 2 ** 32)) >>> 0,
+    day: 1, hour: 7, t: 0,
+    scenario, difficulty,
+    players: [],
+    lots: MAP.lotDefs.map(l => ({ ...l, owner: -1, apt: 0, aptInvested: 0, business: null })),
+    events: [], news: [], newsSeq: 0, offers: [], offerSeq: 0,
+    landMod: 1, mods: {}, touristMult: 1,
+    cityCustomersToday: 0, cityCustomersYesterday: 0,
+    over: false, winner: -1, endReason: '',
+  };
+  s.players.push(makePlayer(0, name || 'You', company || 'Your Company', HUMAN_COLOR, true, 'human', START_CASH));
+  RIVALS.forEach((r, i) => s.players.push(makePlayer(i + 1, r.name, r.company, r.color, false, r.style,
+    Math.round(START_CASH * diff.aiCash))));
+  refreshMods(s);
+  news(s, `Welcome to the city, ${s.players[0].company}. ${SCENARIOS[scenario].blurb}`, 'info');
+  news(s, 'Tip: own every lot of one colour to double its rents and unlock apartment towers.', 'info');
+  return s;
+}
+
+function makePlayer(id, name, company, color, human, style, cash) {
+  return {
+    id, name, company, color, human, style, cash, loan: 0,
+    bankrupt: false, debtDays: 0,
+    today: {}, yesterday: {}, hist: [], worthHist: [],
+  };
+}
+
+function news(s, text, kind = 'info', who = -1) {
+  s.news.unshift({ seq: ++s.newsSeq, day: s.day, hour: s.hour, text, kind, who });
+  if (s.news.length > 60) s.news.length = 60;
+}
+
+// ------------------------------------------------------- money book ----
+function ledger(p, cat, amt) {
+  p.cash += amt;
+  p.today[cat] = (p.today[cat] || 0) + amt;
+}
+const LEDGER_LABELS = {
+  sales: 'Sales', goods: 'Stock & goods', wages: 'Wages', rentPaid: 'Ground rent paid',
+  rentIn: 'Ground rent received', overhead: 'Overheads & bills', fares: 'Station fares',
+  utility: 'Utility income', aptRent: 'Apartment rents', interest: 'Loan interest',
+  trade: 'Land trades', capex: 'Building & land',
+};
+
+// ------------------------------------------------------ valuations ----
+const isWeekend = s => (s.day - 1) % 7 >= 5;
+const dayName = s => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(s.day - 1) % 7];
+
+function districtStats(s, d) {
+  let biz = 0, apt = 0;
+  for (const id of MAP.districtLots[d]) {
+    const l = s.lots[id];
+    if (l.business) biz++;
+    apt += l.apt;
+  }
+  return { biz, apt };
+}
+
+function landValue(s, lot) {
+  if (lot.kind !== 'prop') return Math.round(lot.basePrice * (1 + 0.004 * (s.day - 1)) * s.landMod);
+  const { biz, apt } = districtStats(s, lot.district);
+  return Math.round(lot.basePrice * (1 + LAND_GROWTH_DAY * (s.day - 1)) *
+    (1 + LAND_GROWTH_BIZ * biz + LAND_GROWTH_APT * apt) * s.landMod);
+}
+
+function setCount(s, pid, d) {
+  return MAP.districtLots[d].filter(id => s.lots[id].owner === pid).length;
+}
+function ownsSet(s, pid, d) {
+  return pid >= 0 && d >= 0 && setCount(s, pid, d) === MAP.districtLots[d].length;
+}
+
+function rentFor(s, lot) {
+  if (lot.kind !== 'prop') return 0;
+  const set = ownsSet(s, lot.owner, lot.district) ? SET_RENT_MULT : 1;
+  return Math.round(landValue(s, lot) * RENT_RATE * set * (1 + APT_SHOP_RENT * lot.apt));
+}
+
+function aptCost(lot, level) {
+  return Math.round(lot.basePrice * APT_COST_RATE * (level === MAX_APT ? 2.4 : 1) / 100) * 100;
+}
+function aptRentFor(s, lot) {
+  return Math.round(lot.basePrice * APT_RENT_RATE * APT_RENT[lot.apt] * (1 + 0.004 * (s.day - 1)));
+}
+
+function bizValue(b) { return Math.round(b.invested * 0.6); }
+
+function playerAssets(s, pid) {
+  let land = 0, biz = 0, apt = 0;
+  for (const l of s.lots) {
+    if (l.owner === pid) { land += landValue(s, l); apt += Math.round(l.aptInvested * 0.75); }
+    if (l.business && l.business.owner === pid) biz += bizValue(l.business);
+  }
+  return { land, biz, apt, total: land + biz + apt };
+}
+function netWorth(s, pid) {
+  const p = s.players[pid];
+  return Math.round(p.cash - p.loan + playerAssets(s, pid).total);
+}
+function loanLimit(s, pid) {
+  const cap = Math.floor(playerAssets(s, pid).total * LOAN_LTV / LOAN_STEP) * LOAN_STEP;
+  return Math.max(0, cap + 20000);      // the bank always fronts a small line
+}
+
+// --------------------------------------------------------- demand ----
+function districtPopulation(s, d) {
+  let residents = DISTRICTS[d].pop;
+  for (const id of MAP.districtLots[d]) residents += APT_RESIDENTS[s.lots[id].apt];
+  let tourists = MAP.tourists[d] * s.touristMult;
+  for (const e of s.events) if (e.district === d && e.tourists) tourists += e.tourists;
+  return { residents, tourists };
+}
+
+function segments(s, d) {
+  const { residents, tourists } = districtPopulation(s, d);
+  const m = DISTRICTS[d].mix;
+  return [residents * m[0], residents * m[1], residents * m[2], tourists];
+}
+
+function capacity(b) {
+  return b.staff * BIZ[b.type].cap * FIT_LEVELS[b.fit].cap;
+}
+
+// Splits one hour of demand between open businesses.
+// pools: optional Set of districts to evaluate; onlyType: optional business id.
+// Returns Map lotId -> customers (before the capacity cap).
+function allocate(s, h, pools = null, onlyType = null) {
+  const byType = {};
+  for (const l of s.lots) {
+    const b = l.business;
+    if (!b || (onlyType && b.type !== onlyType)) continue;
+    if (!PROFILE[b.type][h]) continue;
+    (byType[b.type] ||= []).push(l);
+  }
+  const out = new Map();
+  for (let d = 0; d < DISTRICTS.length; d++) {
+    if (pools && !pools.has(d)) continue;
+    const seg = segments(s, d);
+    const total = seg[0] + seg[1] + seg[2] + seg[3];
+    const el = ELASTICITY_BASE * (seg[0] * SEG_ELASTICITY[0] + seg[1] * SEG_ELASTICITY[1] +
+      seg[2] * SEG_ELASTICITY[2] + seg[3] * SEG_ELASTICITY[3]) / total;
+    const neigh = MAP.neighbours[d];
+    for (const type in byType) {
+      const def = BIZ[type];
+      const demand = (seg[0] * def.app[0] + seg[1] * def.app[1] + seg[2] * def.app[2] + seg[3] * def.app[3]) /
+        1000 * DEMAND_SCALE * PROFILE[type][h] * modFor(s, def);
+      if (demand <= 0) continue;
+      let sum = 0;
+      const ws = [];
+      for (const l of byType[type]) {
+        const n = neigh.find(x => x.d === l.district);
+        if (!n) { ws.push(0); continue; }
+        const b = l.business;
+        const a = n.w * FIT_LEVELS[b.fit].appeal * Math.pow(1 / PRICE_TIERS[b.tier].mult, el);
+        ws.push(a);
+        sum += a;
+      }
+      if (sum <= 0) continue;
+      const denom = OUTSIDE_WEIGHT + sum;
+      byType[type].forEach((l, i) => {
+        if (ws[i] > 0) out.set(l.id, (out.get(l.id) || 0) + demand * ws[i] / denom);
+      });
+    }
+  }
+  return out;
+}
+
+function modFor(s, def) {
+  const m = s.mods;
+  return (m.all || 1) * (m[def.id] || 1) * (m[def.group] || 1);
+}
+
+function refreshMods(s) {
+  const m = {};
+  const mul = (k, v) => { m[k] = (m[k] || 1) * v; };
+  const dow = (s.day - 1) % 7;
+  if (dow >= 5) { mul('club', 1.35); mul('bistro', 1.25); mul('cinema', 1.3); mul('boutique', 1.2); mul('gadget', 1.15); mul('gym', 0.85); mul('cafe', 0.95); }
+  if (dow === 4) { mul('club', 1.2); mul('bistro', 1.12); }
+  let tm = 1;
+  for (const e of s.events) {
+    const def = EVENTS.find(x => x.id === e.id);
+    if (def.mods) for (const k in def.mods) mul(k, def.mods[k]);
+    if (def.touristMult) tm *= def.touristMult;
+  }
+  s.mods = m;
+  s.touristMult = tm;
+}
+
+// What would this business make per day, right now?
+// Temporarily installs it on the lot, runs 24 hours of allocation, restores.
+function estimate(s, lotId, type, ownerId, cfg = {}) {
+  const lot = s.lots[lotId];
+  const saved = lot.business;
+  const def = BIZ[type];
+  const b = {
+    type, owner: ownerId,
+    tier: cfg.tier ?? saved?.tier ?? 2,
+    staff: cfg.staff ?? saved?.staff ?? 3,
+    fit: cfg.fit ?? saved?.fit ?? 1,
+  };
+  lot.business = b;
+  const pools = new Set(MAP.neighbours[lot.district].map(n => n.d));
+  const cap = capacity(b);
+  let cust = 0, lost = 0, hours = 0;
+  for (let h = 0; h < 24; h++) {
+    if (!PROFILE[type][h]) continue;
+    hours++;
+    const c = allocate(s, h, pools, type).get(lotId) || 0;
+    cust += Math.min(c, cap);
+    lost += Math.max(0, c - cap);
+  }
+  lot.business = saved;
+  const rev = cust * def.ticket * PRICE_TIERS[b.tier].mult;
+  const goods = cust * def.ticket * def.stock;
+  const wages = b.staff * def.wage * hours;
+  const rent = lot.owner === ownerId ? 0 : rentFor(s, lot);
+  const overhead = OVERHEAD_BASE + def.cost * OVERHEAD_RATE;
+  return { cust, lost, rev, goods, wages, rent, overhead, profit: rev - goods - wages - rent - overhead };
+}
+
+// ------------------------------------------------------------ clock ----
+// Advances one game hour. hooks.onHour / hooks.onDay let the AI act.
+function stepHour(s, hooks = {}) {
+  if (s.over) return;
+  runHour(s, s.hour);
+  s.hour = (s.hour + 1) % 24;
+  if (s.hour === 0) endOfDay(s, hooks);
+  if (!s.over && hooks.onHour) hooks.onHour(s);
+}
+
+function runHour(s, h) {
+  const alloc = allocate(s, h);
+  s.lastHour = {};
+  for (const l of s.lots) {
+    const b = l.business;
+    if (!b || !PROFILE[b.type][h]) continue;
+    const def = BIZ[b.type];
+    const p = s.players[b.owner];
+    const cap = capacity(b);
+    const want = alloc.get(l.id) || 0;
+    const c = Math.min(want, cap);
+    const rev = c * def.ticket * PRICE_TIERS[b.tier].mult;
+    const goods = c * def.ticket * def.stock;
+    const wages = b.staff * def.wage;
+    ledger(p, 'sales', rev);
+    ledger(p, 'goods', -goods);
+    ledger(p, 'wages', -wages);
+    const t = b.today;
+    t.cust += c; t.lost += Math.max(0, want - c);
+    t.rev += rev; t.cost += goods + wages;
+    t.peak = Math.max(t.peak, want / cap);
+    s.cityCustomersToday += c;
+    s.lastHour[l.id] = rev - goods - wages;
+  }
+}
+
+function freshBizDay() { return { cust: 0, lost: 0, rev: 0, cost: 0, peak: 0, rent: 0 }; }
+
+function endOfDay(s, hooks) {
+  const P = s.players;
+  // Ground rent, overheads.
+  let overheadPool = 0;
+  for (const l of s.lots) {
+    const b = l.business;
+    if (!b) continue;
+    const tenant = P[b.owner];
+    if (l.owner !== b.owner) {
+      const r = rentFor(s, l);
+      ledger(tenant, 'rentPaid', -r);
+      b.today.rent = r;
+      b.today.cost += r;
+      if (l.owner >= 0) ledger(P[l.owner], 'rentIn', r);
+    }
+    const o = OVERHEAD_BASE + BIZ[b.type].cost * OVERHEAD_RATE;
+    ledger(tenant, 'overhead', -o);
+    b.today.cost += o;
+    overheadPool += o;
+  }
+  // Utilities take a cut of everyone's bills; stations collect fares.
+  for (const p of P) {
+    if (p.bankrupt) continue;
+    const utils = s.lots.filter(l => l.kind === 'utility' && l.owner === p.id).length;
+    if (utils) ledger(p, 'utility', overheadPool * UTILITY_CUT[utils] * utils);
+    const stations = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
+    if (stations) ledger(p, 'fares', STATION_FARE[stations] * stations * (0.7 + 0.3 * s.touristMult) * (1 + 0.004 * (s.day - 1)));
+  }
+  // Apartment rents.
+  for (const l of s.lots) if (l.apt > 0 && l.owner >= 0) ledger(P[l.owner], 'aptRent', aptRentFor(s, l));
+  // Interest.
+  for (const p of P) if (p.loan > 0) ledger(p, 'interest', -p.loan * LOAN_RATE);
+
+  // Close the books on the day.
+  for (const l of s.lots) {
+    const b = l.business;
+    if (!b) continue;
+    b.yesterday = b.today;
+    b.hist.push(Math.round(b.today.rev - b.today.cost));
+    if (b.hist.length > 10) b.hist.shift();
+    b.today = freshBizDay();
+  }
+  s.cityCustomersYesterday = s.cityCustomersToday;
+  s.cityCustomersToday = 0;
+
+  if (hooks.onDay) hooks.onDay(s);   // AI reprices, trades, liquidates
+
+  for (const p of P) {
+    p.yesterday = p.today;
+    p.today = {};
+    const nw = netWorth(s, p.id);
+    p.worthHist.push(nw);
+    if (p.worthHist.length > 120) p.worthHist.shift();
+  }
+
+  s.day++;
+  solvency(s);
+  tickEvents(s);
+  refreshMods(s);
+  checkEnd(s);
+}
+
+function solvency(s) {
+  for (const p of s.players) {
+    if (p.bankrupt) continue;
+    if (p.cash >= 0) { p.debtDays = 0; continue; }
+    // The bank covers the gap if it can.
+    const room = loanLimit(s, p.id) - p.loan;
+    const need = Math.ceil(-p.cash / LOAN_STEP) * LOAN_STEP;
+    if (room >= need) {
+      p.loan += need; p.cash += need;
+      if (p.human) news(s, `Your account went negative: the bank advanced ${money(need)}.`, 'warn');
+      continue;
+    }
+    p.debtDays++;
+    if (p.human) news(s, `You are overdrawn with no credit left (day ${p.debtDays} of 3). Sell something!`, 'bad');
+    if (p.debtDays >= 3) bankrupt(s, p);
+  }
+}
+
+function bankrupt(s, p) {
+  p.bankrupt = true;
+  for (const l of s.lots) {
+    if (l.business && l.business.owner === p.id) l.business = null;
+    if (l.owner === p.id) { l.owner = -1; l.apt = 0; l.aptInvested = 0; }
+  }
+  s.offers = s.offers.filter(o => o.from !== p.id);
+  news(s, `${p.company} has gone bankrupt! Its land returns to the city.`, 'bad', p.id);
+}
+
+function tickEvents(s) {
+  for (const e of s.events) e.left--;
+  s.events = s.events.filter(e => e.left > 0);
+  if (s.events.length < 2 && rand(s) < 0.5) {
+    const total = EVENTS.reduce((a, e) => a + e.weight, 0);
+    let r = rand(s) * total, def = EVENTS[0];
+    for (const e of EVENTS) { r -= e.weight; if (r <= 0) { def = e; break; } }
+    if (s.events.some(e => e.id === def.id)) return;
+    const len = def.days[0] + Math.floor(rand(s) * (def.days[1] - def.days[0] + 1));
+    const e = { id: def.id, left: len, district: -1, tourists: def.tourists || 0 };
+    if (def.district) e.district = Math.floor(rand(s) * DISTRICTS.length);
+    if (def.land) s.landMod = Math.min(1.5, Math.max(0.75, s.landMod * def.land));
+    s.events.push(e);
+    news(s, def.text(e.district >= 0 ? DISTRICTS[e.district].name : ''), 'event');
+  }
+}
+
+function checkEnd(s) {
+  const sc = SCENARIOS[s.scenario];
+  const me = s.players[0];
+  if (me.bankrupt) return finish(s, -1, 'You went bankrupt.');
+  const alive = s.players.filter(p => !p.bankrupt);
+  if (alive.length === 1) return finish(s, alive[0].id, 'Every rival has gone bust.');
+  if (!sc.goal) return;
+  const worth = s.players.map(p => p.bankrupt ? -Infinity : netWorth(s, p.id));
+  const best = worth.indexOf(Math.max(...worth));
+  if (worth[best] >= sc.goal) return finish(s, best, `${s.players[best].company} reached ${money(sc.goal)} first.`);
+  if (s.day > sc.days) return finish(s, best, `Time is up after ${sc.days} days. Richest tycoon wins.`);
+}
+function finish(s, winner, reason) {
+  s.over = true; s.winner = winner; s.endReason = reason;
+}
+
+// ---------------------------------------------------------- actions ----
+// Every action returns { ok, msg } so the UI and the AI share the same rules.
+const fail = msg => ({ ok: false, msg });
+
+function buyLand(s, pid, lotId) {
+  const p = s.players[pid], lot = s.lots[lotId];
+  if (lot.owner !== -1) return fail('Not for sale by the city.');
+  const price = landValue(s, lot);
+  if (p.cash < price) return fail(`Need ${money(price)}.`);
+  ledger(p, 'capex', -price);
+  lot.owner = pid;
+  const done = lot.kind === 'prop' && ownsSet(s, pid, lot.district);
+  news(s, `${p.company} bought ${lot.name} for ${money(price)}.` +
+    (done ? ` That completes the ${DISTRICTS[lot.district].name} set!` : ''), done ? 'set' : 'deal', pid);
+  return { ok: true, msg: done ? `Set complete: ${DISTRICTS[lot.district].name}!` : `Bought ${lot.name}.`, setComplete: done };
+}
+
+function sellLand(s, pid, lotId) {
+  const p = s.players[pid], lot = s.lots[lotId];
+  if (lot.owner !== pid) return fail('You do not own this.');
+  const value = Math.round(landValue(s, lot) * SELL_LAND_RATE + lot.aptInvested * 0.5);
+  ledger(p, 'capex', value);
+  lot.owner = -1; lot.apt = 0; lot.aptInvested = 0;
+  s.offers = s.offers.filter(o => o.lotId !== lotId);
+  news(s, `${p.company} sold ${lot.name} back to the city.`, 'deal', pid);
+  return { ok: true, msg: `Sold for ${money(value)}.` };
+}
+
+function canBuild(s, lotId) {
+  const lot = s.lots[lotId];
+  return lot.kind === 'prop' && !lot.business;
+}
+
+function build(s, pid, lotId, type, cfg = {}) {
+  const p = s.players[pid], lot = s.lots[lotId], def = BIZ[type];
+  if (!canBuild(s, lotId)) return fail('Lot is not free.');
+  if (p.cash < def.cost) return fail(`Need ${money(def.cost)}.`);
+  ledger(p, 'capex', -def.cost);
+  lot.business = {
+    type, owner: pid, tier: cfg.tier ?? 2, staff: cfg.staff ?? 3, fit: 1,
+    invested: def.cost, opened: s.day, today: freshBizDay(), yesterday: null, hist: [],
+  };
+  news(s, `${p.company} opened a ${def.name} on ${lot.name}.`, 'build', pid);
+  return { ok: true, msg: `${def.name} is open for business!` };
+}
+
+function sellBusiness(s, pid, lotId) {
+  const p = s.players[pid], lot = s.lots[lotId], b = lot.business;
+  if (!b || b.owner !== pid) return fail('Not your business.');
+  const v = Math.round(b.invested * SELL_BIZ_RATE);
+  ledger(p, 'capex', v);
+  lot.business = null;
+  news(s, `${p.company} closed its ${BIZ[b.type].name} on ${lot.name}.`, 'deal', pid);
+  return { ok: true, msg: `Sold the fittings for ${money(v)}.` };
+}
+
+function setTier(s, pid, lotId, tier) {
+  const b = s.lots[lotId].business;
+  if (!b || b.owner !== pid) return fail('Not your business.');
+  b.tier = Math.max(0, Math.min(PRICE_TIERS.length - 1, tier));
+  return { ok: true };
+}
+function setStaff(s, pid, lotId, staff) {
+  const b = s.lots[lotId].business;
+  if (!b || b.owner !== pid) return fail('Not your business.');
+  b.staff = Math.max(1, Math.min(MAX_STAFF, staff));
+  return { ok: true };
+}
+function fitCost(b) {
+  if (b.fit >= FIT_LEVELS.length - 1) return 0;
+  const def = BIZ[b.type];
+  return Math.round(def.cost * (FIT_LEVELS[b.fit + 1].costMult - FIT_LEVELS[b.fit].costMult) / 100) * 100;
+}
+function upgradeFit(s, pid, lotId) {
+  const p = s.players[pid], b = s.lots[lotId].business;
+  if (!b || b.owner !== pid) return fail('Not your business.');
+  const c = fitCost(b);
+  if (!c) return fail('Already a flagship.');
+  if (p.cash < c) return fail(`Need ${money(c)}.`);
+  ledger(p, 'capex', -c);
+  b.fit++; b.invested += c;
+  return { ok: true, msg: `Refitted to ${FIT_LEVELS[b.fit].name}.` };
+}
+
+// Apartments: whole colour set required, built evenly across the set.
+function aptCheck(s, pid, lotId) {
+  const lot = s.lots[lotId];
+  if (lot.kind !== 'prop') return fail('Only district lots take apartments.');
+  if (lot.owner !== pid) return fail('You must own the land.');
+  if (!ownsSet(s, pid, lot.district)) return fail(`Own all of ${DISTRICTS[lot.district].name} first.`);
+  if (lot.apt >= MAX_APT) return fail('Already a Skyline Tower.');
+  const min = Math.min(...MAP.districtLots[lot.district].map(id => s.lots[id].apt));
+  if (lot.apt > min) return fail('Build evenly: raise the other lots in this colour first.');
+  return { ok: true, cost: aptCost(lot, lot.apt + 1) };
+}
+function buildApt(s, pid, lotId) {
+  const chk = aptCheck(s, pid, lotId);
+  if (!chk.ok) return chk;
+  const p = s.players[pid], lot = s.lots[lotId];
+  if (p.cash < chk.cost) return fail(`Need ${money(chk.cost)}.`);
+  ledger(p, 'capex', -chk.cost);
+  lot.apt++; lot.aptInvested += chk.cost;
+  if (lot.apt === MAX_APT) news(s, `${p.company} topped out a Skyline Tower on ${lot.name}!`, 'set', pid);
+  else if (!p.human) news(s, `${p.company} added apartments on ${lot.name}.`, 'build', pid);
+  return { ok: true, msg: lot.apt === MAX_APT ? 'Skyline Tower complete!' : `Now ${lot.apt * 2} floors of apartments.` };
+}
+function sellApt(s, pid, lotId) {
+  const p = s.players[pid], lot = s.lots[lotId];
+  if (lot.owner !== pid || lot.apt <= 0) return fail('Nothing to demolish.');
+  const max = Math.max(...MAP.districtLots[lot.district].map(id => s.lots[id].apt));
+  if (lot.apt < max) return fail('Demolish evenly: take the tallest lot down first.');
+  const c = aptCost(lot, lot.apt);
+  ledger(p, 'capex', Math.round(c * 0.5));
+  lot.apt--; lot.aptInvested = Math.max(0, lot.aptInvested - c);
+  return { ok: true, msg: `Sold one level for ${money(c * 0.5)}.` };
+}
+
+// How much an owner wants for a lot. AI sellers use this; it is also what
+// the UI shows as "they'd take about...".
+function askingPrice(s, sellerId, lotId, buyerId) {
+  const lot = s.lots[lotId];
+  let v = landValue(s, lot) + lot.aptInvested * 0.9;
+  if (lot.kind === 'prop') {
+    const n = MAP.districtLots[lot.district].length;
+    const mine = setCount(s, sellerId, lot.district);
+    if (mine === n) v *= 3.0;
+    else if (mine >= 2) v *= 1.6;
+    if (setCount(s, buyerId, lot.district) === n - 1) v *= 1.75;
+  } else if (lot.kind === 'station') {
+    v *= 1 + 0.3 * s.lots.filter(l => l.kind === 'station' && l.owner === sellerId).length;
+  }
+  if (lot.business && lot.business.owner === sellerId) v *= 1.15;
+  const margin = DIFFICULTY[s.difficulty].margin;
+  return Math.round(v * 1.2 * margin / 500) * 500;
+}
+
+function transfer(s, buyerId, sellerId, lotId, amount) {
+  const b = s.players[buyerId], se = s.players[sellerId], lot = s.lots[lotId];
+  ledger(b, 'trade', -amount);
+  ledger(se, 'trade', amount);
+  lot.owner = buyerId;
+  s.offers = s.offers.filter(o => o.lotId !== lotId);
+  const done = lot.kind === 'prop' && ownsSet(s, buyerId, lot.district);
+  news(s, `${b.company} bought ${lot.name} from ${se.company} for ${money(amount)}.` +
+    (done ? ` ${DISTRICTS[lot.district].name} set complete!` : ''), done ? 'set' : 'deal', buyerId);
+  return done;
+}
+
+// The human bids on a rival's lot.
+function makeOffer(s, buyerId, lotId, amount) {
+  const lot = s.lots[lotId], buyer = s.players[buyerId];
+  if (lot.owner < 0 || lot.owner === buyerId) return fail('Nobody to buy from.');
+  if (buyer.cash < amount) return fail(`You only have ${money(buyer.cash)}.`);
+  const ask = askingPrice(s, lot.owner, lotId, buyerId);
+  const seller = s.players[lot.owner];
+  if (amount >= ask) {
+    const done = transfer(s, buyerId, lot.owner, lotId, amount);
+    return { ok: true, msg: done ? `Deal! ${DISTRICTS[lot.district].name} set complete!` : `${seller.name} accepts. ${lot.name} is yours.` };
+  }
+  return { ok: false, counter: ask, msg: `${seller.name} declines. "I'd want ${money(ask)} for that."` };
+}
+
+function acceptOffer(s, offerId) {
+  const o = s.offers.find(x => x.id === offerId);
+  if (!o) return fail('Offer expired.');
+  const lot = s.lots[o.lotId];
+  if (lot.owner !== o.to || s.players[o.from].cash < o.amount) {
+    s.offers = s.offers.filter(x => x !== o);
+    return fail('The offer fell through.');
+  }
+  transfer(s, o.from, o.to, o.lotId, o.amount);
+  return { ok: true, msg: `Sold ${lot.name} for ${money(o.amount)}.` };
+}
+function declineOffer(s, offerId) {
+  s.offers = s.offers.filter(x => x.id !== offerId);
+  return { ok: true };
+}
+
+function takeLoan(s, pid, amount = LOAN_STEP) {
+  const p = s.players[pid];
+  if (p.loan + amount > loanLimit(s, pid)) return fail('The bank says no: not enough collateral.');
+  p.loan += amount; p.cash += amount;
+  return { ok: true, msg: `Borrowed ${money(amount)}.` };
+}
+function repayLoan(s, pid, amount = LOAN_STEP) {
+  const p = s.players[pid];
+  amount = Math.min(amount, p.loan);
+  if (amount <= 0) return fail('No loan to repay.');
+  if (p.cash < amount) return fail('Not enough cash.');
+  p.loan -= amount; p.cash -= amount;
+  return { ok: true, msg: `Repaid ${money(amount)}.` };
+}
+
+// ------------------------------------------------------------ misc ----
+function money(v) {
+  const neg = v < 0; v = Math.abs(v);
+  let str;
+  if (v >= 1e6) str = '$' + (v / 1e6).toFixed(v >= 1e7 ? 1 : 2) + 'M';
+  else if (v >= 1e4) str = '$' + (v / 1e3).toFixed(v >= 1e5 ? 0 : 1) + 'K';
+  else str = '$' + Math.round(v).toLocaleString('en-US');
+  return (neg ? '−' : '') + str;
+}
+
+function serialize(s) {
+  return JSON.stringify(s);
+}
+function deserialize(json) {
+  const s = JSON.parse(json);
+  if (!s || s.v !== 1 || !Array.isArray(s.lots)) throw new Error('bad save');
+  return s;
+}
+
+return { rand, MAP, isOpen, PROFILE, openHours, createGame, news, LEDGER_LABELS, isWeekend, dayName, districtStats, landValue, setCount, ownsSet, rentFor, aptCost, aptRentFor, bizValue, playerAssets, netWorth, loanLimit, districtPopulation, capacity, allocate, estimate, stepHour, runHour, bankrupt, buyLand, sellLand, canBuild, build, sellBusiness, setTier, setStaff, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize };
+})();
+
+/* ===== ai.js ===== */
+__mods.ai = (() => {
+// Skyline Hustle - rival tycoons. They play by exactly the same rules as
+// the human: every move goes through the action functions in sim.js.
+//
+// Each rival thinks every few game hours. It scores every move it could
+// make (open a business, buy land, finish a colour set, build apartments,
+// buy a station or utility) as expected daily return on the cash spent,
+// tilts the scores by personality and takes the best one it can afford.
+// Once a day it re-prices and re-staffs its shops, sells losers, and may
+// try to buy the last lot it needs to complete a colour set.
+
+const { BUSINESSES, BIZ, DISTRICTS, DIFFICULTY, PRICE_TIERS, FIT_LEVELS, MAX_STAFF, STATION_FARE, UTILITY_CUT,
+  OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, APT_RESIDENTS, LOAN_STEP } = __mods.data;
+const {
+  MAP, rand, estimate, landValue, rentFor, ownsSet, setCount, netWorth, buyLand, build, setTier, setStaff,
+  sellBusiness, upgradeFit, fitCost, aptCheck, buildApt, aptRentFor, askingPrice, transfer, sellLand,
+  loanLimit, takeLoan, repayLoan, stepHour, money, news,
+} = __mods.sim;
+
+const STYLE = {
+  baron:   { build: 0.85, land: 1.6, apt: 1.5, set: 1.6, tiers: [1, 2, 3], fit: 0.5, prefer: [] },
+  cutter:  { build: 1.15, land: 0.8, apt: 0.9, set: 1.0, tiers: [0, 1, 2], fit: 0.3, prefer: ['food'] },
+  premium: { build: 1.0,  land: 1.0, apt: 1.1, set: 1.1, tiers: [2, 3, 4], fit: 1.6, prefer: ['retail', 'leisure'] },
+};
+
+// Advances the whole game, AI included. This is what the UI calls.
+function advanceGame(s, hours) {
+  s.t += hours;
+  let steps = 0;
+  while (s.t >= 1 && !s.over && steps < 48) {
+    s.t -= 1; steps++;
+    stepHour(s, HOOKS);
+  }
+  if (steps >= 48) s.t = 0;
+  return steps;
+}
+const HOOKS = { onHour: aiHour, onDay: aiDay };
+
+function aiHour(s) {
+  const think = DIFFICULTY[s.difficulty].think;
+  for (const p of s.players) {
+    if (p.human || p.bankrupt) continue;
+    if ((s.hour + p.id * 3) % think === 0) think1(s, p);
+  }
+}
+
+function aiDay(s) {
+  for (const p of s.players) {
+    if (p.human || p.bankrupt) continue;
+    if (rand(s) < DIFFICULTY[s.difficulty].tune) tune(s, p);
+    liquidity(s, p);
+    if (rand(s) < 0.45) tradeForSets(s, p);
+  }
+  // Offers to the human expire after a day.
+  s.offers = s.offers.filter(o => o.expires > s.day);
+}
+
+// ------------------------------------------------------------ think ----
+function reserveFor(s, p) {
+  return 3000 + 0.04 * Math.max(0, netWorth(s, p.id));
+}
+
+function think1(s, p) {
+  const st = STYLE[p.style];
+  const reserve = reserveFor(s, p);
+  const moves = [];
+
+  // Open a business: every free lot x every business type.
+  const free = s.lots.filter(l => l.kind === 'prop' && !l.business);
+  for (const lot of free) {
+    for (const def of BUSINESSES) {
+      const tier = st.tiers[1];
+      const e = estimate(s, lot.id, def.id, p.id, { tier, staff: 3 });
+      if (e.profit <= 0) continue;
+      let roi = e.profit / def.cost * st.build;
+      if (st.prefer.includes(def.group)) roi *= 1.2;
+      // Building on your own land is worth a little extra (it lifts its value).
+      if (lot.owner === p.id) roi *= 1.1;
+      moves.push({ roi, cost: def.cost, run: () => build(s, p.id, lot.id, def.id, { tier, staff: 3 }) });
+    }
+  }
+
+  // Buy land from the city.
+  for (const lot of s.lots) {
+    if (lot.owner !== -1) continue;
+    const price = landValue(s, lot);
+    let gain = price * LAND_GROWTH_DAY;          // appreciation
+    if (lot.kind === 'prop') {
+      const n = MAP.districtLots[lot.district].length;
+      const mine = setCount(s, p.id, lot.district);
+      const others = MAP.districtLots[lot.district].some(id => s.lots[id].owner >= 0 && s.lots[id].owner !== p.id);
+      if (lot.business) gain += rentFor(s, lot);
+      if (mine === n - 1) gain += price * 0.05 * st.set;               // completes a set
+      else if (!others) gain += price * 0.012 * (mine + 1) * st.set;     // still collectable
+      // Block a rival who is one lot away from a set.
+      for (const q of s.players) if (q.id !== p.id && !q.bankrupt && setCount(s, q.id, lot.district) === n - 1) gain += price * 0.02;
+      gain *= st.land;
+    } else if (lot.kind === 'station') {
+      const k = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
+      gain += STATION_FARE[k + 1] * (k + 1) - STATION_FARE[k] * k;
+    } else {
+      const k = s.lots.filter(l => l.kind === 'utility' && l.owner === p.id).length;
+      const pool = s.lots.reduce((a, l) => a + (l.business ? OVERHEAD_BASE + BIZ[l.business.type].cost * OVERHEAD_RATE : 0), 0);
+      gain += pool * (UTILITY_CUT[k + 1] * (k + 1) - UTILITY_CUT[k] * k);
+    }
+    moves.push({ roi: gain / price, cost: price, run: () => buyLand(s, p.id, lot.id) });
+  }
+
+  // Apartments on completed sets.
+  for (const lot of s.lots) {
+    if (lot.owner !== p.id || lot.kind !== 'prop') continue;
+    const chk = aptCheck(s, p.id, lot.id);
+    if (!chk.ok) continue;
+    const before = aptRentFor(s, lot);
+    lot.apt++; const after = aptRentFor(s, lot); lot.apt--;
+    const residents = APT_RESIDENTS[lot.apt + 1] - APT_RESIDENTS[lot.apt];
+    const gain = (after - before) + residents * 0.25 + rentFor(s, lot) * 0.3 * (lot.business && lot.business.owner !== p.id ? 1 : 0);
+    moves.push({ roi: gain / chk.cost * st.apt, cost: chk.cost, run: () => buildApt(s, p.id, lot.id) });
+  }
+
+  // Refit a busy shop.
+  for (const lot of s.lots) {
+    const b = lot.business;
+    if (!b || b.owner !== p.id || !b.yesterday) continue;
+    const c = fitCost(b);
+    if (!c) continue;
+    const e0 = estimate(s, lot.id, b.type, p.id, {});
+    const e1 = estimate(s, lot.id, b.type, p.id, { fit: b.fit + 1 });
+    const gain = (e1.profit - e0.profit) * st.fit;
+    if (gain > 0) moves.push({ roi: gain / c, cost: c, run: () => upgradeFit(s, p.id, lot.id) });
+  }
+
+  const diff = DIFFICULTY[s.difficulty];
+  moves.sort((a, b) => b.roi - a.roi);
+  for (const m of moves.slice(0, 6)) {
+    if (m.roi < diff.minRoi) break;
+    if (p.cash - m.cost >= reserve) { m.run(); return; }
+    // Borrow for a really good move.
+    const short = m.cost + reserve - p.cash;
+    const room = loanLimit(s, p.id) - p.loan;
+    if (diff.borrow && m.roi > 0.06 && short <= room && p.loan < 0.35 * Math.max(1, netWorth(s, p.id))) {
+      takeLoan(s, p.id, Math.ceil(short / LOAN_STEP) * LOAN_STEP);
+      m.run();
+      return;
+    }
+  }
+  // Nothing worth doing: pay down debt with spare cash.
+  if (p.loan > 0 && p.cash > reserve * 2 + LOAN_STEP) repayLoan(s, p.id, LOAN_STEP);
+}
+
+// ------------------------------------------------------------- tune ----
+function tune(s, p) {
+  const st = STYLE[p.style];
+  for (const lot of s.lots) {
+    const b = lot.business;
+    if (!b || b.owner !== p.id || !b.yesterday) continue;
+    // Staffing: try one more / one fewer and keep the best.
+    let best = { staff: b.staff, tier: b.tier, profit: estimate(s, lot.id, b.type, p.id, {}).profit };
+    for (const ds of [-1, 1]) {
+      const staff = b.staff + ds;
+      if (staff < 1 || staff > MAX_STAFF) continue;
+      const e = estimate(s, lot.id, b.type, p.id, { staff });
+      if (e.profit > best.profit + 5) best = { staff, tier: b.tier, profit: e.profit };
+    }
+    for (const tier of st.tiers) {
+      if (tier === b.tier) continue;
+      const e = estimate(s, lot.id, b.type, p.id, { staff: best.staff, tier });
+      if (e.profit > best.profit + 5) best = { staff: best.staff, tier, profit: e.profit };
+    }
+    setStaff(s, p.id, lot.id, best.staff);
+    setTier(s, p.id, lot.id, best.tier);
+    // Close a shop that keeps losing money and is expected to keep doing so.
+    const h = b.hist;
+    if (h.length >= 4 && h.slice(-4).every(v => v < 0) && best.profit < 0) sellBusiness(s, p.id, lot.id);
+  }
+}
+
+// Raise cash if overdrawn: borrow, then sell the worst assets.
+function liquidity(s, p) {
+  if (p.cash >= 0) return;
+  const room = loanLimit(s, p.id) - p.loan;
+  const need = Math.ceil(-p.cash / LOAN_STEP) * LOAN_STEP;
+  if (room >= need) { takeLoan(s, p.id, need); return; }
+  const shops = s.lots.filter(l => l.business && l.business.owner === p.id)
+    .sort((a, b) => sum(a.business.hist) - sum(b.business.hist));
+  while (p.cash < 0 && shops.length) sellBusiness(s, p.id, shops.shift().id);
+  const land = s.lots.filter(l => l.owner === p.id && !(l.kind === 'prop' && ownsSet(s, p.id, l.district)));
+  while (p.cash < 0 && land.length) sellLand(s, p.id, land.shift().id);
+}
+const sum = a => a.reduce((x, y) => x + y, 0);
+
+// Try to buy the one lot standing between this rival and a full colour set.
+function tradeForSets(s, p) {
+  for (let d = 0; d < DISTRICTS.length; d++) {
+    const ids = MAP.districtLots[d];
+    if (setCount(s, p.id, d) !== ids.length - 1) continue;
+    const id = ids.find(i => s.lots[i].owner !== p.id);
+    const lot = s.lots[id];
+    if (lot.owner < 0) continue;            // city lot: think1 will just buy it
+    const seller = s.players[lot.owner];
+    const value = landValue(s, lot) + lot.aptInvested;
+    const budget = Math.min(p.cash - reserveFor(s, p), value * 3.2);
+    if (seller.human) {
+      if (s.offers.some(o => o.lotId === id)) continue;
+      const amount = Math.round(Math.min(budget, value * (1.5 + rand(s) * 0.9)) / 500) * 500;
+      if (amount < value * 1.3) continue;
+      s.offers.push({ id: ++s.offerSeq, from: p.id, to: seller.id, lotId: id, amount, expires: s.day + 2 });
+      news(s, `${p.name} wants to buy your ${lot.name} for ${money(amount)}.`, 'offer', p.id);
+    } else {
+      const ask = askingPrice(s, seller.id, id, p.id);
+      if (ask <= budget) transfer(s, p.id, seller.id, id, ask);
+    }
+    return;
+  }
+}
+
+return { advanceGame, HOOKS, aiHour, aiDay };
+})();
+
+/* ===== audio.js ===== */
+__mods.audio = (() => {
+// Skyline Hustle - tiny synthesised sound effects. No audio files.
+let ac = null;
+let enabled = true;
+
+function setSound(on) { enabled = on; }
+function soundOn() { return enabled; }
+
+function ctx() {
+  if (!ac) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    ac = new AC();
+  }
+  if (ac.state === 'suspended') ac.resume();
+  return ac;
+}
+
+function tone(freq, start, dur, type = 'sine', vol = 0.12, slide = 0) {
+  const a = ctx();
+  if (!a) return;
+  const t = a.currentTime + start;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(a.destination);
+  o.start(t);
+  o.stop(t + dur + 0.02);
+}
+
+const sfx = {
+  tap()    { if (enabled) tone(660, 0, 0.05, 'triangle', 0.05); },
+  buy()    { if (enabled) { tone(988, 0, 0.08, 'square', 0.06); tone(1319, 0.07, 0.18, 'square', 0.06); } },
+  build()  { if (enabled) { tone(220, 0, 0.08, 'sawtooth', 0.06); tone(330, 0.08, 0.08, 'sawtooth', 0.06); tone(440, 0.16, 0.16, 'triangle', 0.08); } },
+  set()    { if (enabled) [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.25, 'triangle', 0.09)); },
+  error()  { if (enabled) tone(180, 0, 0.18, 'sawtooth', 0.06, 0.7); },
+  offer()  { if (enabled) { tone(784, 0, 0.1, 'sine', 0.08); tone(587, 0.12, 0.16, 'sine', 0.08); } },
+  coin()   { if (enabled) tone(1568, 0, 0.06, 'square', 0.025); },
+  bad()    { if (enabled) { tone(300, 0, 0.2, 'triangle', 0.08, 0.6); } },
+  win()    { if (enabled) [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.12, 0.4, 'triangle', 0.1)); },
+};
+
+return { setSound, soundOn, sfx };
+})();
+
+/* ===== render.js ===== */
+__mods.render = (() => {
+// Skyline Hustle - isometric canvas renderer. No image assets: every tile,
+// building, tree, pedestrian and car is drawn from primitives.
+
+const { MAP_W, MAP_H, DISTRICTS, BIZ, MAX_APT } = __mods.data;
+const { MAP, PROFILE, ownsSet } = __mods.sim;
+
+const HW = 32, HH = 16;                     // half tile width / height
+const iso = (x, y) => [(x - y) * HW, (x + y) * HH];
+
+// ---------------------------------------------------------- colours ----
+function hex(c) {
+  const n = parseInt(c.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function mix(a, b, t) {
+  const A = hex(a), B = hex(b);
+  return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+const shade = (c, f) => f >= 0 ? mix(c, '#ffffff', f) : mix(c, '#000000', -f);
+const rgba = (c, a) => { const [r, g, b] = hex(c); return `rgba(${r},${g},${b},${a})`; };
+
+const ROAD_TILES = [];
+for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (MAP.tiles[y][x].kind === 'road') ROAD_TILES.push([x, y]);
+const isRoad = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && MAP.tiles[y][x].kind === 'road';
+
+// Deterministic per-tile noise for decoration.
+const noise = (x, y, k = 0) => {
+  let h = (x * 374761393 + y * 668265263 + k * 2147483647) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+
+function darkness(h) {
+  if (h < 5 || h >= 21) return 1;
+  if (h < 7.5) return (7.5 - h) / 2.5;
+  if (h >= 18.5) return (h - 18.5) / 2.5;
+  return 0;
+}
+
+class Renderer {
+  constructor(canvas) {
+    this.c = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.cam = { x: 48, y: 190, z: 1 };
+    this.target = null;                    // smooth camera glide
+    this.walkers = [];
+    this.cars = [];
+    this.floaters = [];
+    this.sel = -1;
+    this.hits = [];
+    this.lights = [];
+    this.tops = {};
+    this.clock = 0;
+    this.insetTop = 125;
+    this.insetBottom = 62;
+    this.resize();
+    this.fit();
+  }
+
+  resize() {
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.w = window.innerWidth;
+    this.h = window.innerHeight;
+    this.c.width = Math.round(this.w * this.dpr);
+    this.c.height = Math.round(this.h * this.dpr);
+    this.c.style.width = this.w + 'px';
+    this.c.style.height = this.h + 'px';
+  }
+
+  // Frame the whole city between the HUD and the nav bar.
+  fit() {
+    const short = this.h <= 500;
+    this.insetTop = short ? 90 : 125;
+    this.insetBottom = short ? 0 : 62;
+    const availH = this.h - this.insetTop - this.insetBottom;
+    const z = Math.min(this.w / 760, availH / 430);
+    this.cam.z = Math.max(0.45, Math.min(2.6, z * (this.w < this.h ? 1.6 : 1.05)));
+    this.cam.x = 48;
+    this.cam.y = 165 - (this.insetTop - this.insetBottom) / 2 / this.cam.z;
+  }
+
+  // ------------------------------------------------------- camera ----
+  toWorld(sx, sy) {
+    return [(sx - this.w / 2) / this.cam.z + this.cam.x, (sy - this.h / 2) / this.cam.z + this.cam.y];
+  }
+  pan(dx, dy) {
+    this.target = null;
+    this.cam.x -= dx / this.cam.z;
+    this.cam.y -= dy / this.cam.z;
+    this.clampCam();
+  }
+  zoomAt(sx, sy, f) {
+    this.target = null;
+    const [wx, wy] = this.toWorld(sx, sy);
+    this.cam.z = Math.max(0.45, Math.min(3.2, this.cam.z * f));
+    this.cam.x = wx - (sx - this.w / 2) / this.cam.z;
+    this.cam.y = wy - (sy - this.h / 2) / this.cam.z;
+    this.clampCam();
+  }
+  clampCam() {
+    this.cam.x = Math.max(-340, Math.min(440, this.cam.x));
+    this.cam.y = Math.max(-40, Math.min(420, this.cam.y));
+  }
+  // Glide so a lot sits in the visible strip above the bottom sheet.
+  focusLot(lot, sheetH = 0) {
+    const [wx, wy] = iso(lot.tx + 0.5, lot.ty + 0.5);
+    const z = Math.max(this.cam.z, 1.1);
+    if (this.h <= 500) {
+      // Side sheet: keep the lot in the strip left of it.
+      const visibleMidX = (this.w - Math.min(350, this.w * 0.46) - 56) / 2;
+      this.target = { x: wx - (visibleMidX - this.w / 2) / z, y: wy - 20 - (this.insetTop / 2) / z, z };
+      return;
+    }
+    const visibleMid = (this.insetTop + (this.h - sheetH)) / 2;
+    this.target = { x: wx, y: wy - 20 - (visibleMid - this.h / 2) / z, z };
+  }
+
+  // Which lot is under a screen point? Tall buildings win over ground.
+  pick(sx, sy) {
+    const [wx, wy] = this.toWorld(sx, sy);
+    const hit = this.hits.filter(h => wx >= h.x0 && wx <= h.x1 && wy >= h.y0 && wy <= h.y1)
+      .sort((a, b) => b.depth - a.depth);
+    if (hit.length) return hit[0].id;
+    const tx = Math.floor((wx / HW + wy / HH) / 2), ty = Math.floor((wy / HH - wx / HW) / 2);
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return -1;
+    return MAP.tiles[ty][tx].lot;
+  }
+
+  // ---------------------------------------------------- particles ----
+  floater(lot, text, color, force = false) {
+    // One pop per shop at a time, so fast-forward doesn't stack them up.
+    if (!force && this.floaters.some(f => f.lot === lot.id && f.t < 0.9)) return;
+    const [wx, wy] = iso(lot.tx + 0.5, lot.ty + 0.5);
+    this.floaters.push({ lot: lot.id, x: wx + (Math.random() - 0.5) * 10, y: wy - 20 - (this.tops[lot.id] || 20), text, color, t: 0 });
+    if (this.floaters.length > 40) this.floaters.shift();
+  }
+
+  syncCrowd(target, cars) {
+    while (this.walkers.length < target) this.walkers.push(this.spawnMover(0.55 + Math.random() * 0.35, true));
+    if (this.walkers.length > target) this.walkers.length = Math.max(0, target);
+    while (this.cars.length < cars) this.cars.push(this.spawnMover(1.7 + Math.random() * 0.6, false));
+    if (this.cars.length > cars) this.cars.length = Math.max(0, cars);
+  }
+  spawnMover(speed, walker) {
+    const [x, y] = ROAD_TILES[Math.floor(Math.random() * ROAD_TILES.length)];
+    const palette = ['#ffd166', '#ef476f', '#06d6a0', '#118ab2', '#f78c6b', '#c77dff', '#ffffff', '#ff9f1c'];
+    return {
+      x, y, px: x, py: y, nx: x, ny: y, t: 1, speed,
+      off: walker ? (Math.random() < 0.5 ? -0.36 : 0.36) + (Math.random() - 0.5) * 0.08 : (Math.random() < 0.5 ? -0.14 : 0.14),
+      color: palette[Math.floor(Math.random() * palette.length)], walker,
+    };
+  }
+  moveMover(m, dt) {
+    m.t += dt * m.speed;
+    while (m.t >= 1) {
+      m.t -= 1;
+      m.px = m.nx; m.py = m.ny;
+      const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => isRoad(m.px + dx, m.py + dy));
+      // Prefer going straight; avoid U-turns.
+      const dirx = m.px - m.x, diry = m.py - m.y;
+      let choice = opts.filter(([dx, dy]) => !(dx === -dirx && dy === -diry && (dirx || diry)));
+      if (!choice.length) choice = opts;
+      const straight = choice.find(([dx, dy]) => dx === dirx && dy === diry);
+      const [dx, dy] = straight && Math.random() < 0.7 ? straight : choice[Math.floor(Math.random() * choice.length)];
+      m.x = m.px; m.y = m.py;
+      m.nx = m.px + dx; m.ny = m.py + dy;
+    }
+  }
+  moverPos(m) {
+    const fx = m.px + (m.nx - m.px) * m.t + 0.5, fy = m.py + (m.ny - m.py) * m.t + 0.5;
+    const dx = m.nx - m.px, dy = m.ny - m.py;
+    // Lateral offset keeps walkers on the pavements and cars in lanes.
+    return [fx - dy * m.off, fy + dx * m.off, dx, dy];
+  }
+
+  // ---------------------------------------------------------- draw ----
+  draw(s, hourF, dt, simSpeed) {
+    const ctx = this.ctx;
+    this.clock += dt;
+    if (this.target) {
+      const k = Math.min(1, dt * 6);
+      this.cam.x += (this.target.x - this.cam.x) * k;
+      this.cam.y += (this.target.y - this.cam.y) * k;
+      this.cam.z += (this.target.z - this.cam.z) * k;
+      if (Math.abs(this.target.x - this.cam.x) < 0.5 && Math.abs(this.target.y - this.cam.y) < 0.5) this.target = null;
+    }
+    const dark = darkness(hourF);
+    this.dark = dark;
+    this.lights.length = 0;
+
+    // Sky.
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const sky = ctx.createLinearGradient(0, 0, 0, this.h);
+    const dusk = dark > 0 && dark < 1 ? 1 - Math.abs(dark - 0.5) * 2 : 0;
+    const top = mix(mix('#7cc6f2', '#0a0f2a', dark), '#ff8a5c', dusk * 0.35);
+    const bottom = mix(mix('#cfeefc', '#151a3a', dark), '#ffc09a', dusk * 0.45);
+    sky.addColorStop(0, top);
+    sky.addColorStop(1, bottom);
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, this.w, this.h);
+
+    const z = this.cam.z * this.dpr;
+    ctx.setTransform(z, 0, 0, z, (this.w / 2 - this.cam.x * this.cam.z) * this.dpr, (this.h / 2 - this.cam.y * this.cam.z) * this.dpr);
+
+    this.drawIsland(ctx);
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) this.drawTile(ctx, s, x, y);
+    this.drawSetBorders(ctx, s);
+    if (this.sel >= 0) this.drawSelection(ctx, s);
+
+    // Depth-sorted scene objects.
+    const items = [];
+    this.hits.length = 0;
+    for (const l of s.lots) items.push({ d: l.tx + l.ty + 0.6, f: () => this.drawLot(ctx, s, l) });
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      const t = MAP.tiles[y][x];
+      if (t.kind === 'plaza' || t.kind === 'park') {
+        const n = t.kind === 'park' ? 3 : 1 + (noise(x, y) < 0.4 ? 1 : 0);
+        for (let i = 0; i < n; i++) {
+          const ox = 0.25 + noise(x, y, i + 1) * 0.5, oy = 0.25 + noise(x, y, i + 9) * 0.5;
+          items.push({ d: x + y + ox + oy, f: () => this.drawTree(ctx, x + ox, y + oy, noise(x, y, i + 3)) });
+        }
+      }
+    }
+    const sp = simSpeed > 0 ? Math.min(simSpeed, 3) : 0;
+    for (const m of this.cars) {
+      if (sp) this.moveMover(m, dt * sp);
+      const [fx, fy, dx, dy] = this.moverPos(m);
+      items.push({ d: fx + fy, f: () => this.drawCar(ctx, fx, fy, dx, dy, m.color, dark) });
+    }
+    for (const m of this.walkers) {
+      if (sp) this.moveMover(m, dt * sp);
+      const [fx, fy] = this.moverPos(m);
+      items.push({ d: fx + fy, f: () => this.drawWalker(ctx, fx, fy, m) });
+    }
+    items.sort((a, b) => a.d - b.d);
+    for (const it of items) it.f();
+
+    // Night: darken the scene, then add the lights back on top.
+    if (dark > 0.01) {
+      ctx.save();
+      ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      ctx.fillStyle = `rgba(8, 12, 40, ${0.52 * dark})`;
+      ctx.fillRect(0, 0, this.w, this.h);
+      ctx.restore();
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const L of this.lights) L(ctx, dark);
+      this.drawStreetLamps(ctx, dark);
+      ctx.restore();
+    }
+
+    // Icons and money floaters stay readable at any zoom.
+    for (const l of s.lots) this.drawBadge(ctx, s, l);
+    this.drawFloaters(ctx, dt);
+  }
+
+  drawIsland(ctx) {
+    const a = iso(0, 0), b = iso(MAP_W, 0), c = iso(MAP_W, MAP_H), d = iso(0, MAP_H);
+    const depth = 22;
+    ctx.fillStyle = '#5b4a3a';
+    ctx.beginPath();
+    ctx.moveTo(d[0], d[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(c[0], c[1] + depth); ctx.lineTo(d[0], d[1] + depth);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#463729';
+    ctx.beginPath();
+    ctx.moveTo(c[0], c[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(b[0], b[1] + depth); ctx.lineTo(c[0], c[1] + depth);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#6aa84f';
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]);
+    ctx.closePath(); ctx.fill();
+  }
+
+  diamond(ctx, x, y, inset = 0) {
+    const p = [iso(x + inset, y + inset), iso(x + 1 - inset, y + inset), iso(x + 1 - inset, y + 1 - inset), iso(x + inset, y + 1 - inset)];
+    ctx.beginPath();
+    ctx.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < 4; i++) ctx.lineTo(p[i][0], p[i][1]);
+    ctx.closePath();
+  }
+
+  drawTile(ctx, s, x, y) {
+    const t = MAP.tiles[y][x];
+    if (t.kind === 'road') {
+      this.diamond(ctx, x, y);
+      ctx.fillStyle = '#4a505c';
+      ctx.fill();
+      // Pavement edges.
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      const h = y % 3 === 0, v = x % 3 === 0;
+      ctx.strokeStyle = 'rgba(255, 230, 140, 0.55)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      if (h && !v) { const a = iso(x, y + 0.5), b = iso(x + 1, y + 0.5); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
+      if (v && !h) { const a = iso(x + 0.5, y), b = iso(x + 0.5, y + 1); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (h && v) {                           // crossing
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        this.diamond(ctx, x, y, 0.3);
+        ctx.fill();
+      }
+      return;
+    }
+    const block = MAP.blocks[t.block];
+    let base = '#a9b0b8';
+    if (t.kind === 'park') base = '#5fa846';
+    else if (block.kind === 'district') base = mix(DISTRICTS[block.district].color, '#e9e4da', 0.72);
+    else if (block.kind === 'transit') base = '#b4bccb';
+    else if (block.kind === 'utility') base = '#a3a39a';
+    this.diamond(ctx, x, y);
+    ctx.fillStyle = base;
+    ctx.fill();
+    if (t.kind === 'park') {
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      this.diamond(ctx, x, y, 0.15); ctx.fill();
+      if ((x + y) % 2 === 0) {                 // pond
+        const [cx, cy] = iso(x + 0.5, y + 0.5);
+        ctx.fillStyle = '#5ab3e0';
+        ctx.beginPath(); ctx.ellipse(cx, cy, 13, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath(); ctx.ellipse(cx - 3, cy - 1, 5, 2, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      return;
+    }
+    if (t.kind === 'lot') {
+      const lot = s.lots[t.lot];
+      if (lot.kind === 'prop') {
+        // The colour plate: this is what sets are made of.
+        this.diamond(ctx, x, y, 0.05);
+        ctx.fillStyle = DISTRICTS[lot.district].color;
+        ctx.fill();
+        if (!lot.business && !lot.apt) {
+          this.diamond(ctx, x, y, 0.16);
+          ctx.fillStyle = lot.owner >= 0 ? '#8a6f52' : mix(DISTRICTS[lot.district].color, '#7dbb5b', 0.6);
+          ctx.fill();
+        }
+      } else {
+        this.diamond(ctx, x, y, 0.06);
+        ctx.fillStyle = lot.kind === 'station' ? '#8792a8' : '#8c8c80';
+        ctx.fill();
+      }
+      if (lot.owner >= 0) {
+        this.diamond(ctx, x, y, 0.06);
+        ctx.strokeStyle = s.players[lot.owner].color;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
+    } else {
+      // Plaza paving.
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.lineWidth = 0.6;
+      for (let i = 1; i < 4; i++) {
+        const a = iso(x + i / 4, y), b = iso(x + i / 4, y + 1);
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      }
+    }
+  }
+
+  // A whole colour set owned by one tycoon gets a thick border in their colour.
+  drawSetBorders(ctx, s) {
+    for (let d = 0; d < DISTRICTS.length; d++) {
+      const owner = s.players.find(p => ownsSet(s, p.id, d));
+      if (!owner) continue;
+      const b = MAP.distBlock[d];
+      const p = [iso(b.bx, b.by), iso(b.bx + 2, b.by), iso(b.bx + 2, b.by + 2), iso(b.bx, b.by + 2)];
+      ctx.beginPath();
+      ctx.moveTo(p[0][0], p[0][1]);
+      for (let i = 1; i < 4; i++) ctx.lineTo(p[i][0], p[i][1]);
+      ctx.closePath();
+      ctx.strokeStyle = owner.color;
+      ctx.lineWidth = 3.5;
+      ctx.shadowColor = owner.color;
+      ctx.shadowBlur = 10;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  drawSelection(ctx, s) {
+    const lot = s.lots[this.sel];
+    const pulse = 0.55 + 0.45 * Math.sin(this.clock * 5);
+    if (lot.kind === 'prop') {
+      const b = MAP.distBlock[lot.district];
+      const p = [iso(b.bx - 0.08, b.by - 0.08), iso(b.bx + 2.08, b.by - 0.08), iso(b.bx + 2.08, b.by + 2.08), iso(b.bx - 0.08, b.by + 2.08)];
+      ctx.beginPath();
+      ctx.moveTo(p[0][0], p[0][1]);
+      for (let i = 1; i < 4; i++) ctx.lineTo(p[i][0], p[i][1]);
+      ctx.closePath();
+      ctx.setLineDash([6, 5]);
+      ctx.strokeStyle = DISTRICTS[lot.district].color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    this.diamond(ctx, lot.tx, lot.ty, -0.02);
+    ctx.strokeStyle = `rgba(255,255,255,${pulse})`;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+
+  // ------------------------------------------------------ buildings ----
+  // Box on tile (tx,ty) with footprint inset m, from height z0 to z1.
+  box(ctx, tx, ty, m, z0, z1, top, left, right) {
+    const A = iso(tx + m, ty + m), B = iso(tx + 1 - m, ty + m), C = iso(tx + 1 - m, ty + 1 - m), D = iso(tx + m, ty + 1 - m);
+    const poly = (pts, col) => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = col;
+      ctx.fill();
+    };
+    poly([[D[0], D[1] - z0], [C[0], C[1] - z0], [C[0], C[1] - z1], [D[0], D[1] - z1]], left);
+    poly([[B[0], B[1] - z0], [C[0], C[1] - z0], [C[0], C[1] - z1], [B[0], B[1] - z1]], right);
+    if (top) poly([[A[0], A[1] - z1], [B[0], B[1] - z1], [C[0], C[1] - z1], [D[0], D[1] - z1]], top);
+    return { A, B, C, D };
+  }
+
+  // Rows of windows on both visible faces between heights z0..z1.
+  windows(ctx, tx, ty, m, z0, z1, rowH, cols, color, litSeed) {
+    const C = iso(tx + 1 - m, ty + 1 - m), D = iso(tx + m, ty + 1 - m), B = iso(tx + 1 - m, ty + m);
+    const faces = [[D, C], [C, B]];
+    const rows = Math.floor((z1 - z0) / rowH);
+    const lit = [];
+    for (const [P, Q] of faces) {
+      for (let r = 0; r < rows; r++) {
+        const zb = z0 + r * rowH + rowH * 0.3, zt = z0 + r * rowH + rowH * 0.8;
+        for (let c = 0; c < cols; c++) {
+          const u0 = (c + 0.25) / cols, u1 = (c + 0.75) / cols;
+          const x0 = P[0] + (Q[0] - P[0]) * u0, y0 = P[1] + (Q[1] - P[1]) * u0;
+          const x1 = P[0] + (Q[0] - P[0]) * u1, y1 = P[1] + (Q[1] - P[1]) * u1;
+          const pts = [[x0, y0 - zb], [x1, y1 - zb], [x1, y1 - zt], [x0, y0 - zt]];
+          ctx.beginPath();
+          ctx.moveTo(pts[0][0], pts[0][1]);
+          for (let i = 1; i < 4; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+          if (noise(r, c, litSeed + (P === D ? 0 : 7)) < 0.62) lit.push(pts);
+        }
+      }
+    }
+    if (this.dark > 0.05 && lit.length) this.lights.push((cx, dk) => {
+      cx.fillStyle = `rgba(255, 196, 92, ${0.75 * dk})`;
+      for (const pts of lit) {
+        cx.beginPath();
+        cx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < 4; i++) cx.lineTo(pts[i][0], pts[i][1]);
+        cx.closePath();
+        cx.fill();
+      }
+    });
+  }
+
+  drawLot(ctx, s, lot) {
+    const { tx, ty } = lot;
+    let height = 0;
+    if (lot.kind === 'station') height = this.drawStation(ctx, lot);
+    else if (lot.kind === 'utility') height = this.drawUtility(ctx, lot);
+    else if (lot.business || lot.apt) height = this.drawBuilding(ctx, s, lot);
+    else height = this.drawEmptyLot(ctx, s, lot);
+    const [cx, cy] = iso(tx + 0.5, ty + 0.5);
+    this.tops[lot.id] = height;
+    this.hits.push({ id: lot.id, x0: cx - 28, x1: cx + 28, y0: cy - 16 - height - 14, y1: cy + 16, depth: tx + ty });
+  }
+
+  drawBuilding(ctx, s, lot) {
+    const { tx, ty } = lot;
+    const b = lot.business;
+    const def = b ? BIZ[b.type] : null;
+    const m = 0.13;
+    const groundH = 20;
+    const wall = def ? def.wall : '#8d8f99';
+    // Shopfront.
+    this.box(ctx, tx, ty, m, 0, groundH, null, shade(wall, -0.05), shade(wall, -0.28));
+    // Glass shop window on the front faces.
+    this.windows(ctx, tx, ty, m, 0, groundH, groundH, 2, 'rgba(190, 230, 255, 0.85)', lot.id * 13);
+    // Awning in the business owner's colour.
+    if (b) {
+      const ac = s.players[b.owner].color;
+      this.box(ctx, tx, ty, m - 0.04, groundH - 2, groundH + 3, shade(ac, 0.15), ac, shade(ac, -0.2));
+    }
+    let h = groundH + 3;
+    const apt = lot.apt;
+    if (apt > 0 && apt < MAX_APT) {
+      const floorsH = apt * 2 * 9;
+      const tint = mix(DISTRICTS[lot.district].color, '#f3efe6', 0.7);
+      this.box(ctx, tx, ty, m + 0.03, h, h + floorsH, shade(tint, 0.1), tint, shade(tint, -0.2));
+      this.windows(ctx, tx, ty, m + 0.03, h, h + floorsH, 9, 3, '#3d5a80', lot.id * 31);
+      h += floorsH;
+      // Roof top with a little water tank.
+      const [cx, cy] = iso(tx + 0.5, ty + 0.5);
+      ctx.fillStyle = '#6b6f7a';
+      ctx.fillRect(cx - 4, cy - h - 7, 8, 7);
+    } else if (apt === MAX_APT) {
+      // Skyline Tower: slim glass tower with a spire.
+      const tH = 150;
+      const glass = mix(DISTRICTS[lot.district].color, '#9fd3ff', 0.55);
+      this.box(ctx, tx, ty, m + 0.06, h, h + tH, shade(glass, 0.3), shade(glass, -0.05), shade(glass, -0.3));
+      this.windows(ctx, tx, ty, m + 0.06, h, h + tH, 7.5, 4, 'rgba(255,255,255,0.28)', lot.id * 17);
+      h += tH;
+      const [cx, cy] = iso(tx + 0.5, ty + 0.5);
+      ctx.strokeStyle = '#d9e2ec';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(cx, cy - h); ctx.lineTo(cx, cy - h - 26); ctx.stroke();
+      const blink = Math.sin(this.clock * 4 + lot.id) > 0;
+      if (blink) { ctx.fillStyle = '#ff4d4d'; ctx.beginPath(); ctx.arc(cx, cy - h - 27, 2.4, 0, Math.PI * 2); ctx.fill(); }
+      h += 26;
+    } else {
+      // Flat roof.
+      const roof = '#cfd3da';
+      this.box(ctx, tx, ty, m, h - 0.1, h, roof, roof, roof);
+    }
+    return h;
+  }
+
+  drawEmptyLot(ctx, s, lot) {
+    const [cx, cy] = iso(lot.tx + 0.5, lot.ty + 0.5);
+    if (lot.owner >= 0) {
+      // Staked flag in the owner's colour.
+      ctx.strokeStyle = '#3a2d22';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx, cy + 2); ctx.lineTo(cx, cy - 22); ctx.stroke();
+      ctx.fillStyle = s.players[lot.owner].color;
+      ctx.beginPath(); ctx.moveTo(cx, cy - 22); ctx.lineTo(cx + 12, cy - 18); ctx.lineTo(cx, cy - 14); ctx.closePath(); ctx.fill();
+      return 22;
+    }
+    // City "for sale" sign.
+    ctx.strokeStyle = '#5b4636';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx - 5, cy + 3); ctx.lineTo(cx - 5, cy - 12); ctx.moveTo(cx + 5, cy + 3); ctx.lineTo(cx + 5, cy - 12); ctx.stroke();
+    ctx.fillStyle = '#fffaf0';
+    ctx.fillRect(cx - 10, cy - 20, 20, 11);
+    ctx.fillStyle = '#c0392b';
+    ctx.font = 'bold 8px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SALE', cx, cy - 14.5);
+    return 20;
+  }
+
+  drawStation(ctx, lot) {
+    const { tx, ty } = lot;
+    this.box(ctx, tx, ty, 0.1, 0, 16, null, '#6c7a96', '#56627a');
+    this.windows(ctx, tx, ty, 0.1, 0, 16, 16, 3, 'rgba(200,230,255,0.8)', lot.id * 5);
+    this.box(ctx, tx, ty, 0.06, 16, 22, '#2f80ed', '#2a6fcf', '#2259a8');
+    const [cx, cy] = iso(tx + 0.5, ty + 0.5);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(cx, cy - 22, 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#2f80ed';
+    ctx.font = 'bold 8px system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('M', cx, cy - 21.5);
+    return 30;
+  }
+
+  drawUtility(ctx, lot) {
+    const { tx, ty } = lot;
+    const power = lot.name.startsWith('Volt');
+    this.box(ctx, tx, ty, 0.12, 0, 18, '#b8b8ae', '#8e8e84', '#74746b');
+    const [cx, cy] = iso(tx + 0.5, ty + 0.5);
+    if (power) {
+      for (const dx of [-8, 6]) {
+        ctx.fillStyle = '#9a9a92';
+        ctx.fillRect(cx + dx - 3, cy - 44, 6, 28);
+        ctx.fillStyle = '#d9534f';
+        ctx.fillRect(cx + dx - 3, cy - 44, 6, 4);
+        // Smoke puffs drift up.
+        for (let i = 0; i < 3; i++) {
+          const ph = (((this.clock * 0.35 + i / 3 + dx * 0.1) % 1) + 1) % 1;
+          ctx.fillStyle = `rgba(230,230,230,${0.5 * (1 - ph)})`;
+          ctx.beginPath(); ctx.arc(cx + dx + ph * 6, cy - 48 - ph * 22, 3 + ph * 5, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      return 50;
+    }
+    ctx.fillStyle = '#4ea8de';
+    ctx.beginPath(); ctx.ellipse(cx, cy - 30, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3c8dbc';
+    ctx.fillRect(cx - 12, cy - 30, 24, 12);
+    ctx.fillStyle = '#6cc3f0';
+    ctx.beginPath(); ctx.ellipse(cx, cy - 30, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
+    return 38;
+  }
+
+  drawTree(ctx, x, y, r) {
+    const [cx, cy] = iso(x, y);
+    const s = 0.8 + r * 0.5;
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath(); ctx.ellipse(cx, cy, 6 * s, 3 * s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#6b4a2b';
+    ctx.fillRect(cx - 1.2, cy - 8 * s, 2.4, 8 * s);
+    const g = r < 0.33 ? '#3f8f3a' : r < 0.66 ? '#4fa646' : '#2f7a3a';
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy - 12 * s, 6.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = shade(g, 0.18);
+    ctx.beginPath(); ctx.arc(cx - 2 * s, cy - 14 * s, 3.5 * s, 0, Math.PI * 2); ctx.fill();
+  }
+
+  drawWalker(ctx, x, y, m) {
+    const [cx, cy] = iso(x, y);
+    const bob = Math.abs(Math.sin((m.t + m.px * 0.3) * Math.PI * 4)) * 1.2;
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(cx - 1.5, cy - 0.5, 3, 1.5);
+    ctx.fillStyle = m.color;
+    ctx.fillRect(cx - 1.4, cy - 6 - bob, 2.8, 4.5);
+    ctx.fillStyle = '#f1c27d';
+    ctx.beginPath(); ctx.arc(cx, cy - 7.5 - bob, 1.4, 0, Math.PI * 2); ctx.fill();
+  }
+
+  drawCar(ctx, x, y, dx, dy, color, dark) {
+    const L = 0.2, W = 0.11;
+    const ax = dx || 0.0001, ay = dy;
+    const n = Math.hypot(ax, ay);
+    const ux = ax / n, uy = ay / n, vx = -uy, vy = ux;
+    const corner = (a, b) => iso(x + ux * a + vx * b, y + uy * a + vy * b);
+    const pts = [corner(-L, -W), corner(L, -W), corner(L, W), corner(-L, W)];
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1] + 1) : ctx.moveTo(p[0], p[1] + 1)); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1] - 3) : ctx.moveTo(p[0], p[1] - 3)); ctx.closePath(); ctx.fill();
+    const roof = [corner(-L * 0.4, -W * 0.8), corner(L * 0.45, -W * 0.8), corner(L * 0.45, W * 0.8), corner(-L * 0.4, W * 0.8)];
+    ctx.fillStyle = shade(color, -0.25);
+    ctx.beginPath(); roof.forEach((p, i) => i ? ctx.lineTo(p[0], p[1] - 5.5) : ctx.moveTo(p[0], p[1] - 5.5)); ctx.closePath(); ctx.fill();
+    if (dark > 0.2) {
+      const [hx, hy] = corner(L + 0.05, 0);
+      this.lights.push((cx, dk) => {
+        const g = cx.createRadialGradient(hx, hy - 3, 0, hx, hy - 3, 9);
+        g.addColorStop(0, `rgba(255,240,190,${0.6 * dk})`);
+        g.addColorStop(1, 'rgba(255,240,190,0)');
+        cx.fillStyle = g;
+        cx.fillRect(hx - 9, hy - 12, 18, 18);
+      });
+    }
+  }
+
+  drawStreetLamps(ctx, dark) {
+    for (let y = 0; y < MAP_H; y += 3) for (let x = 0; x < MAP_W; x += 3) {
+      const [cx, cy] = iso(x + 0.5, y + 0.5);
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 26);
+      g.addColorStop(0, `rgba(255, 200, 120, ${0.22 * dark})`);
+      g.addColorStop(1, 'rgba(255, 200, 120, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - 26, cy - 26, 52, 52);
+    }
+  }
+
+  // Floating icon above each business / special building.
+  drawBadge(ctx, s, lot) {
+    let icon = null, ring = '#ffffff';
+    if (lot.business) {
+      icon = BIZ[lot.business.type].icon;
+      ring = s.players[lot.business.owner].color;
+    } else if (lot.kind === 'station') icon = '🚇';
+    else if (lot.kind === 'utility') icon = lot.name.startsWith('Volt') ? '⚡' : '💧';
+    if (!icon) return;
+    const [cx, cy] = iso(lot.tx + 0.5, lot.ty + 0.5);
+    const k = Math.max(0.75, Math.min(1.3, 1 / this.cam.z));
+    const y = cy - (this.tops[lot.id] || 20) - 13 * k;
+    const r = 9.5 * k;
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath(); ctx.arc(cx, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = ring;
+    ctx.lineWidth = 2.2 * k;
+    ctx.stroke();
+    ctx.font = `${Math.round(11 * k)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",system-ui,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#222';
+    ctx.fillText(icon, cx, y + 0.5);
+    if (lot.business) {
+      // Closed overnight: a small moon.
+      const def = BIZ[lot.business.type];
+      const h = s.hour;
+      if (!PROFILE[def.id][h]) {
+        ctx.fillStyle = 'rgba(20,24,48,0.85)';
+        ctx.beginPath(); ctx.arc(cx + r * 0.8, y - r * 0.7, 4.5 * k, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffe9a3';
+        ctx.font = `${Math.round(6 * k)}px system-ui`;
+        ctx.fillText('z', cx + r * 0.8, y - r * 0.7);
+      }
+    }
+  }
+
+  drawFloaters(ctx, dt) {
+    const k = Math.max(0.8, Math.min(1.4, 1 / this.cam.z));
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `800 ${Math.round(11 * k)}px system-ui, sans-serif`;
+    for (const f of this.floaters) {
+      f.t += dt;
+      const a = Math.max(0, 1 - f.t / 1.6);
+      ctx.fillStyle = rgba(f.color, a);
+      ctx.strokeStyle = `rgba(0,0,0,${0.5 * a})`;
+      ctx.lineWidth = 3;
+      const y = f.y - f.t * 26;
+      ctx.strokeText(f.text, f.x, y);
+      ctx.fillText(f.text, f.x, y);
+    }
+    this.floaters = this.floaters.filter(f => f.t < 1.6);
+  }
+}
+
+return { iso, darkness, Renderer };
+})();
+
+/* ===== ui.js ===== */
+__mods.ui = (() => {
+// Skyline Hustle - HTML overlay: HUD, bottom sheet (lot details and tabs),
+// toasts, offer and game-over modals. The canvas is drawn by render.js.
+
+const { DISTRICTS, BUSINESSES, BIZ, PRICE_TIERS, FIT_LEVELS, MAX_STAFF, APT_NAMES, APT_RESIDENTS,
+  MAX_APT, STATION_FARE, UTILITY_CUT, SCENARIOS, RIVALS, LOAN_STEP, LOAN_RATE, OVERHEAD_BASE, OVERHEAD_RATE } = __mods.data;
+const {
+  MAP, money, landValue, rentFor, ownsSet, setCount, estimate, buyLand, sellLand, build, sellBusiness,
+  setTier, setStaff, upgradeFit, fitCost, aptCheck, buildApt, sellApt, aptRentFor, makeOffer, acceptOffer,
+  declineOffer, takeLoan, repayLoan, loanLimit, netWorth, playerAssets, capacity, districtPopulation,
+  LEDGER_LABELS, dayName, PROFILE, askingPrice,
+} = __mods.sim;
+const { sfx, setSound, soundOn } = __mods.audio;
+
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sign = v => (v >= 0 ? '+' : '') + money(v);
+const cls = v => v >= 0 ? 'pos' : 'neg';
+const ME = 0;
+
+class UI {
+  constructor(app) {
+    this.app = app;
+    this.view = null;          // { kind: 'lot', id } | { kind: 'tab', name }
+    this.lastTouch = 0;
+    this.seenNews = 0;
+    this.shownOffers = new Set();
+    this.offerDraft = {};      // lotId -> amount
+    this.counter = {};         // lotId -> rival's asking price
+    this.tickerQueue = [];
+    this.tickerUntil = 0;
+
+    $('sheet-body').addEventListener('click', e => this.onClick(e));
+    $('modal-card').addEventListener('click', e => this.onClick(e));
+    $('sheet').addEventListener('pointerdown', () => { this.lastTouch = performance.now(); });
+    $('sheet-close').addEventListener('click', () => { sfx.tap(); this.close(); });
+    $('hud-cash').addEventListener('click', () => { sfx.tap(); this.openTab('bank'); });
+    $('goal').addEventListener('click', () => { sfx.tap(); this.openTab('rivals'); });
+    document.querySelectorAll('#nav button').forEach(b => b.addEventListener('click', () => {
+      sfx.tap();
+      const t = b.dataset.tab;
+      if (t === 'map') { this.close(); this.app.renderer.fit(); return; }
+      if (this.view?.kind === 'tab' && this.view.name === t) this.close();
+      else this.openTab(t);
+    }));
+    document.querySelectorAll('#speeds button').forEach(b => b.addEventListener('click', () => {
+      sfx.tap();
+      this.app.setSpeed(+b.dataset.speed);
+    }));
+  }
+
+  get s() { return this.app.s; }
+
+  // ---------------------------------------------------------- sheet ----
+  openLot(id) {
+    this.view = { kind: 'lot', id };
+    this.app.renderer.sel = id;
+    this.render();
+    const sheetH = $('sheet').offsetHeight + 58;
+    this.app.renderer.focusLot(this.s.lots[id], sheetH);
+  }
+  openTab(name) {
+    this.view = { kind: 'tab', name };
+    this.app.renderer.sel = -1;
+    this.render();
+    $('sheet').scrollTop = 0;
+  }
+  close() {
+    this.view = null;
+    this.app.renderer.sel = -1;
+    $('sheet').classList.add('hidden');
+    this.navState();
+  }
+  navState() {
+    document.querySelectorAll('#nav button').forEach(b => {
+      const t = b.dataset.tab;
+      b.classList.toggle('on', this.view ? this.view.kind === 'tab' && this.view.name === t : t === 'map');
+    });
+  }
+
+  render() {
+    const v = this.view;
+    if (!v || !this.s) return;
+    const body = $('sheet-body');
+    const scroll = $('sheet').scrollTop;
+    let html = '';
+    if (v.kind === 'lot') html = this.lotHTML(this.s.lots[v.id]);
+    else html = ({ empire: () => this.empireHTML(), sets: () => this.setsHTML(), rivals: () => this.rivalsHTML(),
+      bank: () => this.bankHTML(), menu: () => this.menuHTML() })[v.name]();
+    body.innerHTML = html;
+    $('sheet').classList.remove('hidden');
+    $('sheet').scrollTop = scroll;
+    this.navState();
+  }
+
+  // Refresh live numbers unless the player is mid-tap.
+  refresh() {
+    if (this.view && performance.now() - this.lastTouch > 900) this.render();
+  }
+
+  // ------------------------------------------------------------ lot ----
+  lotHTML(lot) {
+    const s = this.s, me = s.players[ME];
+    const owner = lot.owner >= 0 ? s.players[lot.owner] : null;
+    const ownerTxt = !owner ? 'City-owned · for sale' : owner.id === ME ? 'Your land' : `Owned by ${esc(owner.company)}`;
+    let chip, sub;
+    if (lot.kind === 'prop') {
+      const D = DISTRICTS[lot.district];
+      chip = `<div class="chip" style="background:${D.color}"></div>`;
+      sub = `${esc(D.name)} · ${ownerTxt}`;
+    } else {
+      chip = `<div class="chip" style="background:${lot.kind === 'station' ? '#2f80ed' : '#8c8c80'}">${lot.kind === 'station' ? '🚇' : lot.name.startsWith('Volt') ? '⚡' : '💧'}</div>`;
+      sub = `${lot.kind === 'station' ? 'Metro station' : 'Utility'} · ${ownerTxt}`;
+    }
+    let h = `<div class="sh-head">${chip}<div><div class="sh-title">${esc(lot.name)}</div><div class="sh-sub">${sub}</div></div></div>`;
+
+    if (lot.kind === 'prop') h += this.setBarHTML(lot.district, lot.id);
+    else if (lot.kind === 'station') h += this.stationHTML(lot);
+    else h += this.utilityHTML(lot);
+
+    h += this.landHTML(lot);
+    if (lot.kind === 'prop') {
+      h += this.businessHTML(lot);
+      h += this.aptHTML(lot);
+      const pop = districtPopulation(s, lot.district);
+      h += `<p class="note">Block population: <b>${Math.round(pop.residents).toLocaleString()}</b> residents · <b>${Math.round(pop.tourists).toLocaleString()}</b> visitors.
+        Mix: ${DISTRICTS[lot.district].mix.map((m, i) => `${Math.round(m * 100)}% ${['budget', 'middle', 'wealthy'][i]}`).join(', ')}.</p>`;
+    }
+    return h;
+  }
+
+  setBarHTML(d, current = -1) {
+    const s = this.s;
+    const ids = MAP.districtLots[d];
+    const dots = ids.map((id, i) => {
+      const l = s.lots[id];
+      const c = l.owner >= 0 ? s.players[l.owner].color : 'rgba(255,255,255,0.08)';
+      return `<span class="setdot ${id === current ? 'me' : ''}" style="background:${c}" title="${esc(l.name)}">${i + 1}</span>`;
+    }).join('');
+    const mine = setCount(s, ME, d), n = ids.length;
+    let txt;
+    const full = s.players.find(p => ownsSet(s, p.id, d));
+    if (full && full.id === ME) txt = '<b class="pos">Set complete!</b> Rent ×2, apartments unlocked.';
+    else if (full) txt = `<b class="neg">${esc(full.company)}</b> owns the whole set.`;
+    else if (mine === n - 1) txt = '<b class="warn">One lot away</b> from completing this set!';
+    else if (mine) txt = `You own <b>${mine} of ${n}</b>. Collect them all to double rent and build up.`;
+    else {
+      const lead = s.players.map(p => [p, setCount(s, p.id, d)]).sort((a, b) => b[1] - a[1])[0];
+      txt = lead[1] ? `${esc(lead[0].company)} owns ${lead[1]} of ${n}.` : `${n} lots in this colour. Own them all for double rent + apartments.`;
+    }
+    return `<div class="card setbar"><div class="setdots">${dots}</div><div class="note" style="margin:0">${txt}</div></div>`;
+  }
+
+  landHTML(lot) {
+    const s = this.s, me = s.players[ME];
+    const value = landValue(s, lot);
+    let h = `<h3>Land <em>${money(value)}</em></h3>`;
+    if (lot.kind === 'prop') {
+      const rent = rentFor(s, lot);
+      const tenant = lot.business && lot.business.owner !== lot.owner ? s.players[lot.business.owner] : null;
+      h += `<div class="stats">
+        <div class="stat"><small>Ground rent / day</small><b>${money(rent)}</b></div>
+        <div class="stat"><small>Paid by</small><b style="font-size:13px">${tenant ? esc(tenant.company.split(' ')[0]) : lot.business ? 'nobody' : 'no tenant'}</b></div>
+        <div class="stat"><small>Rent rate</small><b>${ownsSet(s, lot.owner, lot.district) ? '×2 set' : '×1'}</b></div>
+      </div>`;
+    }
+    if (lot.owner === -1) {
+      h += `<div class="row"><button class="btn buy" data-act="buy" ${me.cash < value ? 'disabled' : ''}>Buy land · ${money(value)}</button></div>`;
+      if (me.cash < value) h += `<p class="note">You need ${money(value - me.cash)} more. The bank may lend it to you.</p>`;
+    } else if (lot.owner === ME) {
+      const back = Math.round(value * 0.7 + lot.aptInvested * 0.5);
+      h += `<div class="row"><button class="btn danger small" data-act="sell-land">Sell to city · +${money(back)}</button></div>`;
+    } else {
+      const ask = this.counter[lot.id];
+      const draft = this.offerDraft[lot.id] ?? Math.round(value * 1.3 / 1000) * 1000;
+      this.offerDraft[lot.id] = draft;
+      h += `<div class="card">
+        <div class="ctl"><span>Your offer</span>
+          <div class="stepper"><button data-act="offer-adj" data-v="-5000">−</button><b style="min-width:90px">${money(draft)}</b><button data-act="offer-adj" data-v="5000">+</button></div></div>
+        <div class="row"><button class="btn go" data-act="offer" ${me.cash < draft ? 'disabled' : ''}>Make offer to ${esc(s.players[lot.owner].name.split(' ')[0])}</button></div>
+        ${ask ? `<p class="note">They said they'd take <b>${money(ask)}</b>. <button class="btn small gold" data-act="offer-ask">Pay ${money(ask)}</button></p>` : '<p class="note">Rivals ask far more for a lot that breaks their set or completes yours.</p>'}
+      </div>`;
+    }
+    return h;
+  }
+
+  businessHTML(lot) {
+    const s = this.s, me = s.players[ME];
+    const b = lot.business;
+    if (!b) {
+      const rentNote = lot.owner === ME ? 'Your land: no ground rent.' :
+        lot.owner === -1 ? `You'd lease from the city: ${money(rentFor(s, lot))}/day rent.` :
+        `You'd pay ${esc(s.players[lot.owner].company)} ${money(rentFor(s, lot))}/day rent.`;
+      const opts = BUSINESSES.map(def => ({ def, e: estimate(s, lot.id, def.id, ME, { tier: 2, staff: 3 }) }))
+        .sort((a, b) => b.e.profit - a.e.profit);
+      const best = opts[0]?.def.id;
+      return `<h3>Open a business</h3><p class="note">${rentNote} Forecasts assume fair prices and 3 staff.</p>
+        <div class="biz-list">${opts.map(({ def, e }) => `
+          <button class="biz-opt ${def.id === best && e.profit > 0 ? 'best' : ''}" data-act="build" data-type="${def.id}" ${me.cash < def.cost ? 'disabled' : ''}>
+            <i>${def.icon}</i>
+            <span><b>${def.name}</b><small>${money(def.cost)} · ${def.open[0]}:00–${def.open[1] % 24}:00 · ~${Math.round(e.cust)} cust/day</small></span>
+            <span class="est ${cls(e.profit)}">${sign(e.profit)}<small>per day</small></span>
+          </button>`).join('')}</div>`;
+    }
+    const def = BIZ[b.type];
+    const owner = s.players[b.owner];
+    const y = b.yesterday;
+    if (b.owner !== ME) {
+      const e = estimate(s, lot.id, b.type, b.owner, {});
+      return `<h3>Business</h3><div class="card">
+        <div class="row" style="margin:0"><span style="font-size:26px">${def.icon}</span>
+        <div><b>${def.name}</b><div class="note" style="margin:0">Run by <b style="color:${owner.color}">${esc(owner.company)}</b> · ${PRICE_TIERS[b.tier].name} prices · ${FIT_LEVELS[b.fit].name} fit-out · ${b.staff} staff</div></div></div>
+        <p class="note">Est. ~${Math.round(e.cust)} customers a day. ${lot.owner === ME ? `They pay you <b class="pos">${money(rentFor(s, lot))}</b> a day in rent.` : ''}</p></div>`;
+    }
+    const cap = capacity(b);
+    const peak = y ? Math.min(1, y.peak) : 0;
+    const e = estimate(s, lot.id, b.type, ME, {});
+    const profitY = y ? y.rev - y.cost : null;
+    const fc = fitCost(b);
+    let h = `<h3>${def.icon} ${def.name} <em>${FIT_LEVELS[b.fit].name}</em></h3>`;
+    h += `<div class="stats">
+      <div class="stat"><small>${y ? 'Yesterday' : 'Today so far'}</small><b class="${cls(profitY ?? (b.today.rev - b.today.cost))}">${sign(profitY ?? (b.today.rev - b.today.cost))}</b></div>
+      <div class="stat"><small>Customers</small><b>${Math.round(y ? y.cust : b.today.cust)}</b></div>
+      <div class="stat"><small>Turned away</small><b class="${(y ? y.lost : b.today.lost) > 5 ? 'warn' : ''}">${Math.round(y ? y.lost : b.today.lost)}</b></div>
+    </div>
+    <div class="note" style="margin-bottom:0">Peak busyness ${Math.round((y ? y.peak : b.today.peak) * 100)}% of ${Math.round(cap)}/hr capacity</div>
+    <div class="meter"><i class="${peak >= 1 ? 'hot' : ''}" style="width:${Math.round(peak * 100)}%"></i></div>`;
+    h += `<div class="ctl"><span>Prices</span></div>
+      <div class="seg">${PRICE_TIERS.map((t, i) => `<button data-act="tier" data-v="${i}" class="${b.tier === i ? 'on' : ''}">${t.name}</button>`).join('')}</div>
+      <div class="ctl"><span>Staff <small class="dim">(${money(def.wage)}/hr each)</small></span>
+        <div class="stepper"><button data-act="staff" data-v="-1">−</button><b>${b.staff}</b><button data-act="staff" data-v="1">+</button></div></div>
+      <p class="note">Forecast at these settings: <b class="${cls(e.profit)}">${sign(e.profit)}/day</b> from ~${Math.round(e.cust)} customers${e.lost > 3 ? `, <span class="warn">${Math.round(e.lost)} turned away (hire!)</span>` : ''}.</p>
+      <div class="row">
+        ${fc ? `<button class="btn small" data-act="refit" ${me.cash < fc ? 'disabled' : ''}>Refit: ${FIT_LEVELS[b.fit + 1].name} · ${money(fc)}</button>` : ''}
+        <button class="btn small danger" data-act="sell-biz">Close · +${money(b.invested * 0.5)}</button>
+      </div>`;
+    return h;
+  }
+
+  aptHTML(lot) {
+    const s = this.s, me = s.players[ME];
+    let h = `<h3>Apartments <em>${APT_NAMES[lot.apt]}</em></h3>`;
+    if (lot.apt) h += `<div class="stats">
+      <div class="stat"><small>Residents</small><b>+${APT_RESIDENTS[lot.apt]}</b></div>
+      <div class="stat"><small>Rent / day</small><b class="pos">${money(aptRentFor(s, lot))}</b></div>
+      <div class="stat"><small>Collected by</small><b style="font-size:13px">${lot.owner === ME ? 'You' : lot.owner >= 0 ? esc(s.players[lot.owner].company.split(' ')[0]) : '-'}</b></div></div>`;
+    if (lot.owner !== ME) {
+      if (!lot.apt) h += '<p class="note">The landowner can build apartments here once they own the whole colour set.</p>';
+      return h;
+    }
+    const chk = aptCheck(s, ME, lot.id);
+    if (chk.ok) {
+      const next = lot.apt + 1;
+      h += `<div class="row"><button class="btn gold" data-act="apt" ${me.cash < chk.cost ? 'disabled' : ''}>
+        ${next === MAX_APT ? '🏙️ Build Skyline Tower' : `🏢 Add ${APT_NAMES[next].replace('floors', 'floors total')}`} · ${money(chk.cost)}</button></div>
+        <p class="note">+${APT_RESIDENTS[next] - APT_RESIDENTS[lot.apt]} residents (more customers for the whole block) and higher rents.</p>`;
+    } else if (lot.apt < MAX_APT) h += `<p class="note">🔒 ${esc(chk.msg)}</p>`;
+    if (lot.apt) h += `<div class="row"><button class="btn small danger" data-act="sell-apt">Demolish one level</button></div>`;
+    return h;
+  }
+
+  stationHTML(lot) {
+    const s = this.s;
+    const k = lot.owner >= 0 ? s.lots.filter(l => l.kind === 'station' && l.owner === lot.owner).length : 0;
+    const rows = [1, 2, 3, 4].map(n => `<div class="stat"><small>Own ${n}</small><b>${money(STATION_FARE[n])}</b></div>`).join('');
+    return `<p class="note">Stations collect fares every night, and each pays more the more stations the same company owns.
+      They also bring visitors to the blocks around them.${lot.owner >= 0 ? ` Owner holds <b>${k}</b> of 4.` : ''}</p>
+      <div class="stats" style="grid-template-columns:repeat(4,1fr)">${rows}</div><p class="note">Fare per station per day.</p>`;
+  }
+  utilityHTML(lot) {
+    const s = this.s;
+    const pool = s.lots.reduce((a, l) => a + (l.business ? OVERHEAD_BASE + BIZ[l.business.type].cost * OVERHEAD_RATE : 0), 0);
+    return `<p class="note">Every business in the city pays a nightly bill. Each utility you own takes
+      <b>${Math.round(UTILITY_CUT[1] * 100)}%</b> of it, or <b>${Math.round(UTILITY_CUT[2] * 100)}%</b> each if you own both.
+      The city's bills are now <b>${money(pool)}</b> a night, and they grow with every shop that opens.</p>`;
+  }
+
+  // --------------------------------------------------------- empire ----
+  empireHTML() {
+    const s = this.s, me = s.players[ME];
+    const y = me.yesterday;
+    const op = Object.entries(y).filter(([k]) => k !== 'capex' && k !== 'trade').reduce((a, [, v]) => a + v, 0);
+    const mine = s.lots.filter(l => (l.business && l.business.owner === ME) || l.owner === ME);
+    let h = `<div class="sh-head"><div class="chip" style="background:var(--you)">💼</div><div><div class="sh-title">${esc(me.company)}</div>
+      <div class="sh-sub">Net worth ${money(netWorth(s, ME))} · yesterday <span class="${cls(op)}">${sign(op)}</span></div></div></div>`;
+    if (!mine.length) return h + `<p class="note">You don't own anything yet. Tap any lot on the map to buy land or open a business.
+      Cheap blocks (Foundry, Canal) are a good place to start. Coffee and burgers are quick earners.</p>`;
+    const biz = mine.filter(l => l.business && l.business.owner === ME);
+    if (biz.length) {
+      h += `<h3>Businesses <em>${biz.length}</em></h3>`;
+      for (const l of biz) {
+        const b = l.business, def = BIZ[b.type];
+        const p = b.yesterday ? b.yesterday.rev - b.yesterday.cost : b.today.rev - b.today.cost;
+        const busy = b.yesterday && b.yesterday.lost > 5 ? ' · <span class="warn">turning people away</span>' : '';
+        h += `<button class="list-item" data-act="goto" data-id="${l.id}"><span style="font-size:22px">${def.icon}</span>
+          <span class="grow"><b>${def.name}</b><small><span style="color:${DISTRICTS[l.district].color}">■</span> ${esc(l.name)} · ${PRICE_TIERS[b.tier].name} · ${b.staff} staff${busy}</small></span>
+          <span class="amt ${cls(p)}">${sign(p)}<small>${b.yesterday ? 'yesterday' : 'today'}</small></span></button>`;
+      }
+    }
+    const land = mine.filter(l => l.owner === ME);
+    if (land.length) {
+      h += `<h3>Land <em>${land.length} lots · ${money(land.reduce((a, l) => a + landValue(s, l), 0))}</em></h3>`;
+      for (const l of land) {
+        const icon = l.kind === 'station' ? '🚇' : l.kind === 'utility' ? (l.name.startsWith('Volt') ? '⚡' : '💧') :
+          l.apt === MAX_APT ? '🏙️' : l.apt ? '🏢' : l.business ? BIZ[l.business.type].icon : '🚩';
+        const col = l.kind === 'prop' ? DISTRICTS[l.district].color : '#8c8c80';
+        let inc = 0;
+        if (l.kind === 'prop') { inc = aptRentFor(s, l); if (l.business && l.business.owner !== ME) inc += rentFor(s, l); }
+        h += `<button class="list-item" data-act="goto" data-id="${l.id}"><span style="font-size:20px">${icon}</span>
+          <span class="grow"><b><span style="color:${col}">■</span> ${esc(l.name)}</b><small>${l.kind === 'prop' ? (ownsSet(s, ME, l.district) ? 'Full set ✓' : `${setCount(s, ME, l.district)}/${MAP.districtLots[l.district].length} of set`) : l.kind}${l.apt ? ' · ' + APT_NAMES[l.apt] : ''}</small></span>
+          <span class="amt">${money(landValue(s, l))}${inc ? `<small class="pos">+${money(inc)}/day rent</small>` : ''}</span></button>`;
+      }
+    }
+    return h;
+  }
+
+  // ----------------------------------------------------------- sets ----
+  setsHTML() {
+    const s = this.s;
+    let h = `<div class="sh-head"><div class="chip" style="background:conic-gradient(${DISTRICTS.map(d => d.color).join(',')})"></div><div><div class="sh-title">Colour sets</div>
+      <div class="sh-sub">Own every lot of a colour: double rent + apartments</div></div></div>`;
+    DISTRICTS.forEach((D, d) => {
+      const ids = MAP.districtLots[d];
+      const dots = ids.map(id => {
+        const l = s.lots[id];
+        return `<span class="setdot" style="background:${l.owner >= 0 ? s.players[l.owner].color : 'rgba(255,255,255,0.08)'}">${l.apt ? (l.apt === MAX_APT ? '★' : l.apt) : ''}</span>`;
+      }).join('');
+      const full = s.players.find(p => ownsSet(s, p.id, d));
+      const mine = setCount(s, ME, d);
+      const status = full ? (full.id === ME ? '<span class="pos">Yours ✓</span>' : `<span style="color:${full.color}">${esc(full.company.split(' ')[0])} ✓</span>`) :
+        mine === ids.length - 1 ? '<span class="warn">1 to go!</span>' : `${mine}/${ids.length}`;
+      h += `<button class="list-item" data-act="goto" data-id="${ids[0]}">
+        <span class="chip" style="background:${D.color};width:24px;height:24px"></span>
+        <span class="grow"><b>${esc(D.name)}</b><small>from ${money(landValue(s, s.lots[ids[0]]))} · ${D.mix[2] >= 0.35 ? 'wealthy' : D.mix[0] >= 0.5 ? 'budget' : 'mixed'} crowd</small></span>
+        <span class="setdots">${dots}</span><span class="amt" style="min-width:58px">${status}</span></button>`;
+    });
+    for (const kind of ['station', 'utility']) {
+      const lots = s.lots.filter(l => l.kind === kind);
+      const dots = lots.map(l => `<span class="setdot" style="background:${l.owner >= 0 ? s.players[l.owner].color : 'rgba(255,255,255,0.08)'}"></span>`).join('');
+      h += `<button class="list-item" data-act="goto" data-id="${lots[0].id}"><span style="font-size:20px;width:24px;text-align:center">${kind === 'station' ? '🚇' : '⚡'}</span>
+        <span class="grow"><b>${kind === 'station' ? 'Metro stations' : 'Utilities'}</b><small>${kind === 'station' ? 'Fares climb with each one you own' : 'A cut of every business bill'}</small></span>
+        <span class="setdots">${dots}</span></button>`;
+    }
+    return h;
+  }
+
+  // --------------------------------------------------------- rivals ----
+  rivalsHTML() {
+    const s = this.s;
+    const sc = SCENARIOS[s.scenario];
+    const rows = s.players.map(p => ({ p, w: p.bankrupt ? 0 : netWorth(s, p.id) })).sort((a, b) => b.w - a.w);
+    let h = `<div class="sh-head"><div class="chip" style="background:#ffd23f">🏆</div><div><div class="sh-title">Standings</div>
+      <div class="sh-sub">${sc.goal ? `First to ${money(sc.goal)} · day ${Math.min(s.day, sc.days)} of ${sc.days}` : 'Free play'}</div></div></div>`;
+    rows.forEach(({ p, w }, i) => {
+      const lots = s.lots.filter(l => l.owner === p.id).length;
+      const shops = s.lots.filter(l => l.business && l.business.owner === p.id).length;
+      const sets = DISTRICTS.filter((_, d) => ownsSet(s, p.id, d)).length;
+      const blurb = p.human ? 'You' : RIVALS[p.id - 1].blurb;
+      h += `<div class="card rival"><span class="bar" style="background:${p.color}"></span>
+        <div><b>${i + 1}. ${esc(p.company)}</b> ${p.bankrupt ? '<span class="neg">BANKRUPT</span>' : ''}
+          <div class="note" style="margin:2px 0">${p.human ? '' : esc(p.name) + ' · '}${esc(blurb)}</div>
+          <div class="note" style="margin:0">${lots} lots · ${shops} shops · ${sets} set${sets === 1 ? '' : 's'} · cash ${money(p.cash)}${p.loan ? ` · owes ${money(p.loan)}` : ''}</div>
+          ${this.spark(p)}</div>
+        <div class="amt" style="text-align:right;font-weight:900">${money(w)}<div class="note" style="margin:0">${sc.goal ? Math.min(100, Math.round(w / sc.goal * 100)) + '%' : ''}</div></div></div>`;
+    });
+    return h;
+  }
+  spark(p) {
+    const pts = p.worthHist.slice(-40);
+    if (pts.length < 2) return '';
+    const max = Math.max(...pts, 1), min = Math.min(...pts, 0);
+    const d = pts.map((v, i) => `${(i / (pts.length - 1) * 100).toFixed(1)},${(30 - (v - min) / (max - min || 1) * 28).toFixed(1)}`).join(' ');
+    return `<svg viewBox="0 0 100 32" preserveAspectRatio="none"><polyline points="${d}" fill="none" stroke="${p.color}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+  }
+
+  // ----------------------------------------------------------- bank ----
+  bankHTML() {
+    const s = this.s, me = s.players[ME];
+    const lim = loanLimit(s, ME);
+    const assets = playerAssets(s, ME);
+    const y = me.yesterday;
+    const keys = Object.keys(LEDGER_LABELS).filter(k => y[k]);
+    const op = keys.filter(k => k !== 'capex' && k !== 'trade').reduce((a, k) => a + y[k], 0);
+    let h = `<div class="sh-head"><div class="chip" style="background:#3ddc84">🏦</div><div><div class="sh-title">City Savings Bank</div>
+      <div class="sh-sub">Interest ${(LOAN_RATE * 100).toFixed(1)}% a day · credit line ${money(lim)}</div></div></div>
+      <div class="stats">
+        <div class="stat"><small>Cash</small><b>${money(me.cash)}</b></div>
+        <div class="stat"><small>Loan</small><b class="${me.loan ? 'neg' : ''}">${money(me.loan)}</b></div>
+        <div class="stat"><small>Net worth</small><b>${money(netWorth(s, ME))}</b></div>
+      </div>
+      <div class="row">
+        <button class="btn small" data-act="loan" ${me.loan + LOAN_STEP > lim ? 'disabled' : ''}>Borrow ${money(LOAN_STEP)}</button>
+        <button class="btn small" data-act="repay" ${!me.loan || me.cash < Math.min(LOAN_STEP, me.loan) ? 'disabled' : ''}>Repay ${money(Math.min(LOAN_STEP, me.loan || LOAN_STEP))}</button>
+        <button class="btn small" data-act="repay-all" ${!me.loan || me.cash < me.loan ? 'disabled' : ''}>Repay all</button>
+      </div>
+      <h3>Yesterday's books <em class="${cls(op)}">${sign(op)}</em></h3>`;
+    if (!keys.length) h += '<p class="note">Nothing to report yet. Come back after midnight.</p>';
+    else h += `<table class="ledger">${keys.map(k => `<tr><td>${LEDGER_LABELS[k]}</td><td class="${cls(y[k])}">${sign(y[k])}</td></tr>`).join('')}
+      <tr class="total"><td>Operating profit</td><td class="${cls(op)}">${sign(op)}</td></tr></table>`;
+    h += `<h3>Assets</h3><div class="stats">
+      <div class="stat"><small>Land</small><b>${money(assets.land)}</b></div>
+      <div class="stat"><small>Businesses</small><b>${money(assets.biz)}</b></div>
+      <div class="stat"><small>Apartments</small><b>${money(assets.apt)}</b></div></div>
+      <p class="note">Go overdrawn and the bank tops you up from your credit line. With no credit left you have three days to raise cash before you are declared bankrupt.</p>`;
+    return h;
+  }
+
+  menuHTML() {
+    return `<div class="sh-head"><div class="chip" style="background:#5b6475">☰</div><div><div class="sh-title">Menu</div>
+      <div class="sh-sub">Saved automatically every midnight</div></div></div>
+      <div class="row"><button class="btn" data-act="sound">${soundOn() ? '🔊 Sound on' : '🔇 Sound off'}</button><button class="btn" data-act="save">💾 Save now</button></div>
+      <div class="row"><button class="btn" data-act="help">❓ How to play</button><button class="btn danger" data-act="quit">🚪 Quit to title</button></div>`;
+  }
+
+  // -------------------------------------------------------- actions ----
+  onClick(e) {
+    const el = e.target.closest('[data-act]');
+    if (!el || el.disabled) return;
+    this.lastTouch = 0;
+    const s = this.s;
+    const lotId = this.view?.kind === 'lot' ? this.view.id : -1;
+    const act = el.dataset.act;
+    const res = r => {
+      if (!r) return;
+      if (r.ok) { if (r.msg) this.toast(r.msg, r.setComplete ? 'set' : 'good'); }
+      else if (r.msg) { this.toast(r.msg, 'bad'); sfx.error(); }
+      return r.ok;
+    };
+    switch (act) {
+      case 'buy': if (res(buyLand(s, ME, lotId))) { this.celebrate(lotId); } break;
+      case 'sell-land': this.confirm('Sell this land back to the city?', 'You get 70% of its value plus half of what you spent on apartments. Any apartments are demolished.', () => { res(sellLand(s, ME, lotId)); sfx.buy(); }); return;
+      case 'build': {
+        const def = BIZ[el.dataset.type];
+        if (res(build(s, ME, lotId, def.id))) { sfx.build(); this.app.renderer.floater(s.lots[lotId], `−${money(def.cost)}`, '#ff8a8a', true); }
+        break;
+      }
+      case 'tier': setTier(s, ME, lotId, +el.dataset.v); sfx.tap(); break;
+      case 'staff': setStaff(s, ME, lotId, s.lots[lotId].business.staff + +el.dataset.v); sfx.tap(); break;
+      case 'refit': if (res(upgradeFit(s, ME, lotId))) sfx.build(); break;
+      case 'sell-biz': this.confirm('Close this business?', `You recover half of what you invested (${money(s.lots[lotId].business.invested * 0.5)}).`, () => { res(sellBusiness(s, ME, lotId)); sfx.buy(); }); return;
+      case 'apt': if (res(buildApt(s, ME, lotId))) { sfx.build(); if (s.lots[lotId].apt === MAX_APT) sfx.set(); } break;
+      case 'sell-apt': res(sellApt(s, ME, lotId)); break;
+      case 'offer-adj': {
+        const v = Math.max(1000, (this.offerDraft[lotId] || 0) + +el.dataset.v);
+        this.offerDraft[lotId] = v; sfx.tap(); break;
+      }
+      case 'offer': case 'offer-ask': {
+        const amt = act === 'offer' ? this.offerDraft[lotId] : this.counter[lotId];
+        const r = makeOffer(s, ME, lotId, amt);
+        if (r.ok) { this.toast(r.msg, 'set'); delete this.counter[lotId]; this.celebrate(lotId); }
+        else { if (r.counter) this.counter[lotId] = r.counter; this.toast(r.msg, 'bad'); sfx.error(); }
+        break;
+      }
+      case 'goto': this.openLot(+el.dataset.id); sfx.tap(); return;
+      case 'loan': res(takeLoan(s, ME)); sfx.buy(); break;
+      case 'repay': res(repayLoan(s, ME)); sfx.tap(); break;
+      case 'repay-all': res(repayLoan(s, ME, s.players[ME].loan)); sfx.tap(); break;
+      case 'sound': setSound(!soundOn()); localStorage.setItem('skyline-sound', soundOn() ? '1' : '0'); break;
+      case 'save': this.app.save(); this.toast('Game saved.', 'good'); break;
+      case 'help': this.help(); return;
+      case 'quit': this.app.save(); this.app.toTitle(); return;
+      case 'accept-offer': case 'decline-offer': case 'view-offer': this.resolveOffer(act, +el.dataset.id); return;
+      case 'modal-ok': this.hideModal(); this._ok && this._ok(); return;
+      case 'modal-cancel': this.hideModal(); return;
+      case 'new-game': this.hideModal(); this.app.toTitle(); return;
+    }
+    this.render();
+    this.app.hud();
+  }
+
+  celebrate(lotId) {
+    const lot = this.s.lots[lotId];
+    if (lot.kind === 'prop' && ownsSet(this.s, ME, lot.district)) {
+      sfx.set();
+      this.modal(`<h2>🎨 ${esc(DISTRICTS[lot.district].name)} is yours!</h2>
+        <p>You own the whole colour set. Ground rent on every lot here is now <b>doubled</b>, and you can build
+        <b>apartments</b>, two floors at a time, all the way up to a <b>Skyline Tower</b>.</p>
+        <p class="note">Build evenly: each lot has to reach the same height before any lot goes higher.</p>
+        <div class="row"><button class="btn gold wide" data-act="modal-cancel">Let's build</button></div>`);
+    } else sfx.buy();
+  }
+
+  // ---------------------------------------------------------- hours ----
+  onHour() {
+    const s = this.s;
+    // News -> toasts / ticker.
+    const fresh = s.news.filter(n => n.seq > this.seenNews).reverse();
+    for (const n of fresh) {
+      this.seenNews = Math.max(this.seenNews, n.seq);
+      if (n.who === ME && n.kind !== 'set') continue;
+      if (n.kind === 'set' || n.kind === 'event' || n.kind === 'bad' || n.kind === 'warn') {
+        this.toast(n.text, n.kind === 'warn' ? 'bad' : n.kind);
+        if (n.kind === 'bad') sfx.bad();
+      } else this.tickerQueue.push(n);
+    }
+    // Offers from rivals.
+    const offer = s.offers.find(o => o.to === ME && !this.shownOffers.has(o.id));
+    if (offer && $('modal').classList.contains('hidden')) this.showOffer(offer);
+    this.refresh();
+  }
+
+  tickTicker(now) {
+    if (now < this.tickerUntil) return;
+    const n = this.tickerQueue.shift();
+    const t = $('ticker');
+    if (!n) { if (t.textContent) t.textContent = ''; return; }
+    const p = n.who >= 0 ? this.s.players[n.who] : null;
+    t.innerHTML = (p ? `<b style="color:${p.color}">●</b> ` : '📰 ') + esc(n.text);
+    this.tickerUntil = now + (this.tickerQueue.length > 3 ? 2200 : 4200);
+  }
+
+  showOffer(o) {
+    const s = this.s;
+    this.shownOffers.add(o.id);
+    const lot = s.lots[o.lotId], p = s.players[o.from];
+    const completes = lot.kind === 'prop' && setCount(s, o.from, lot.district) === MAP.districtLots[lot.district].length - 1;
+    this.app.pauseFor('offer');
+    sfx.offer();
+    this.modal(`<h2><span style="color:${p.color}">●</span> Offer from ${esc(p.name)}</h2>
+      <p>${esc(p.company)} wants to buy <b>${esc(lot.name)}</b>${lot.kind === 'prop' ? ` (${esc(DISTRICTS[lot.district].name)})` : ''}.</p>
+      <div class="big-amt pos">${money(o.amount)}</div>
+      <p class="note" style="text-align:center">Land value ${money(landValue(s, lot))}${lot.aptInvested ? ` + apartments` : ''}</p>
+      ${completes ? `<p class="warn">⚠ Selling would hand them the complete ${esc(DISTRICTS[lot.district].name)} set: double rent and apartments.</p>` : ''}
+      ${lot.business && lot.business.owner === ME ? '<p class="note">Your business there keeps trading, but you will pay them ground rent.</p>' : ''}
+      <div class="row"><button class="btn danger" data-act="decline-offer" data-id="${o.id}">Decline</button>
+      <button class="btn buy" data-act="accept-offer" data-id="${o.id}">Accept</button></div>
+      <div class="row"><button class="btn small wide" data-act="view-offer" data-id="${o.id}">Show me the lot first</button></div>`);
+  }
+  resolveOffer(act, id) {
+    const s = this.s;
+    const o = s.offers.find(x => x.id === id);
+    this.hideModal();
+    this.app.resume('offer');
+    if (!o) return;
+    if (act === 'accept-offer') { const r = acceptOffer(s, id); this.toast(r.msg, r.ok ? 'good' : 'bad'); r.ok ? sfx.buy() : sfx.error(); }
+    else if (act === 'decline-offer') { declineOffer(s, id); this.toast('Offer declined.'); }
+    else { this.shownOffers.delete(id); this.openLot(o.lotId); this.toast('The offer stands until tomorrow. It will pop up again.'); }
+    this.render();
+  }
+
+  // ---------------------------------------------------------- misc ----
+  toast(text, kind = '') {
+    const el = document.createElement('div');
+    el.className = `toast ${kind}`;
+    el.textContent = text;
+    const wrap = $('toasts');
+    wrap.appendChild(el);
+    while (wrap.children.length > 2) wrap.firstChild.remove();
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 350); }, kind === 'set' ? 4200 : 2800);
+  }
+
+  modal(html) {
+    $('modal-card').innerHTML = html;
+    $('modal').classList.remove('hidden');
+  }
+  hideModal() { $('modal').classList.add('hidden'); }
+  modalOpen() { return !$('modal').classList.contains('hidden'); }
+
+  confirm(title, text, ok) {
+    this._ok = ok;
+    this.modal(`<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="row"><button class="btn" data-act="modal-cancel">Cancel</button><button class="btn danger" data-act="modal-ok">Do it</button></div>`);
+  }
+
+  help() {
+    this.modal(`<h2>How to play</h2>${document.querySelector('.howto ul').outerHTML}
+      <div class="row"><button class="btn go wide" data-act="modal-cancel">Got it</button></div>`);
+  }
+
+  gameOver() {
+    const s = this.s;
+    const rows = s.players.map(p => ({ p, w: p.bankrupt ? 0 : netWorth(s, p.id) })).sort((a, b) => b.w - a.w);
+    const won = s.winner === ME;
+    won ? sfx.win() : sfx.bad();
+    this.modal(`<h2>${won ? '🏆 You win!' : s.winner < 0 ? '💸 Game over' : `${esc(s.players[s.winner].company)} wins`}</h2>
+      <p>${esc(s.endReason)}</p>
+      ${rows.map(({ p, w }, i) => `<div class="list-item"><span class="rank">${i + 1}</span><span class="grow"><b style="color:${p.color}">${esc(p.company)}</b><small>${p.bankrupt ? 'bankrupt' : esc(p.name)}</small></span><span class="amt">${money(w)}</span></div>`).join('')}
+      <div class="row"><button class="btn" data-act="modal-cancel">Look around</button><button class="btn go" data-act="new-game">New game</button></div>`);
+  }
+}
+
+return { UI };
+})();
+
+/* ===== main.js ===== */
+__mods.main = (() => {
+// Skyline Hustle - entry point: title screen, game loop, touch input, saves.
+
+const { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, BIZ } = __mods.data;
+const { createGame, serialize, deserialize, money, netWorth, dayName, PROFILE } = __mods.sim;
+const { advanceGame } = __mods.ai;
+const { Renderer, darkness } = __mods.render;
+const { UI } = __mods.ui;
+const { sfx, setSound } = __mods.audio;
+
+const SAVE_KEY = 'skyline-hustle-save-v1';
+const $ = id => document.getElementById(id);
+
+const app = {
+  s: null,
+  speed: 1,
+  holds: new Set(),            // reasons the clock is held (offer modal...)
+  renderer: new Renderer($('city')),
+  ui: null,
+  lastDay: 0,
+
+  setSpeed(i) {
+    this.speed = i;
+    document.querySelectorAll('#speeds button').forEach(b => b.classList.toggle('on', +b.dataset.speed === i));
+  },
+  pauseFor(why) { this.holds.add(why); },
+  resume(why) { this.holds.delete(why); },
+  running() { return this.s && !this.s.over && this.speed > 0 && !this.holds.size && !this.ui.modalOpen(); },
+
+  save() {
+    if (!this.s) return;
+    try { localStorage.setItem(SAVE_KEY, serialize(this.s)); } catch (e) { /* storage full or blocked */ }
+  },
+
+  start(s) {
+    this.s = s;
+    this.lastDay = s.day;
+    this.ui.seenNews = 0;
+    this.ui.shownOffers.clear();
+    this.ui.tickerQueue = [];
+    $('title').classList.add('hidden');
+    ['hud', 'nav'].forEach(id => $(id).classList.remove('hidden'));
+    this.renderer.walkers = [];
+    this.renderer.cars = [];
+    this.renderer.fit();
+    this.ui.close();
+    this.setSpeed(1);
+    this.ui.onHour();
+    this.hud();
+  },
+
+  toTitle() {
+    this.s = null;
+    this.ui.close();
+    ['hud', 'nav', 'sheet'].forEach(id => $(id).classList.add('hidden'));
+    $('modal').classList.add('hidden');
+    $('btn-continue').classList.toggle('hidden', !localStorage.getItem(SAVE_KEY));
+    $('title').classList.remove('hidden');
+  },
+
+  hud() {
+    const s = this.s;
+    if (!s) return;
+    const me = s.players[0];
+    $('cash').textContent = money(me.cash);
+    $('cash').className = me.cash < 0 ? 'neg' : '';
+    const today = Object.entries(me.today).filter(([k]) => k !== 'capex' && k !== 'trade').reduce((a, [, v]) => a + v, 0);
+    $('cash-delta').innerHTML = `today <span class="${today >= 0 ? 'pos' : 'neg'}">${today >= 0 ? '+' : ''}${money(today)}</span>${me.loan ? ` · loan ${money(me.loan)}` : ''}`;
+    const mins = Math.floor(s.t * 60 / 15) * 15;
+    $('clock-time').textContent = `${String(s.hour).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    $('clock-day').textContent = `Day ${s.day} · ${dayName(s)}`;
+    const sc = SCENARIOS[s.scenario];
+    const w = netWorth(s, 0);
+    if (sc.goal) {
+      $('goal-fill').style.width = Math.max(0, Math.min(100, w / sc.goal * 100)) + '%';
+      $('goal-text').textContent = `Net worth ${money(w)} / ${money(sc.goal)} · ${Math.max(0, sc.days - s.day + 1)} days left`;
+    } else {
+      $('goal-fill').style.width = '0%';
+      $('goal-text').textContent = `Net worth ${money(w)}`;
+    }
+  },
+
+  // Called once per simulated hour.
+  afterHour(steps) {
+    const s = this.s;
+    const r = this.renderer;
+    // Money pops over your shops that just earned.
+    if (steps <= 2 && s.lastHour) {
+      for (const id in s.lastHour) {
+        const lot = s.lots[id];
+        const v = s.lastHour[id];
+        if (!lot.business || lot.business.owner !== 0) continue;
+        if (v > 4) r.floater(lot, '+' + money(v), '#5dff9e');
+        else if (v < -4) r.floater(lot, money(v), '#ff8a8a');
+      }
+      if (Object.keys(s.lastHour).some(id => s.lots[id].business?.owner === 0 && s.lastHour[id] > 4)) sfx.coin();
+    }
+    if (s.day !== this.lastDay) {
+      this.lastDay = s.day;
+      const y = s.players[0].yesterday;
+      const op = Object.entries(y).filter(([k]) => k !== 'capex' && k !== 'trade').reduce((a, [, v]) => a + v, 0);
+      if (Object.keys(y).length) this.ui.toast(`Day ${s.day - 1} closed: ${op >= 0 ? '+' : ''}${money(op)} operating profit.`, op >= 0 ? 'good' : 'bad');
+      this.save();
+    }
+    this.ui.onHour();
+    if (s.over) {
+      localStorage.removeItem(SAVE_KEY);
+      this.ui.gameOver();
+    }
+  },
+};
+app.ui = new UI(app);
+
+// --------------------------------------------------------------- loop ----
+let last = performance.now();
+let hudAt = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  const s = app.s;
+  if (s) {
+    let steps = 0;
+    if (app.running()) steps = advanceGame(s, dt * SPEEDS[app.speed] / SECONDS_PER_HOUR);
+    if (steps) app.afterHour(steps);
+    if (now > hudAt) { app.hud(); hudAt = now + 150; }
+    app.ui.tickTicker(now);
+    // Crowd size follows the time of day and how busy the city is.
+    const hf = s.hour + s.t;
+    const dk = darkness(hf);
+    const open = s.lots.filter(l => l.business && PROFILE[l.business.type][s.hour]).length;
+    app.renderer.syncCrowd(Math.round(18 + (1 - dk * 0.7) * (25 + open * 4)), Math.round(6 + (1 - dk * 0.6) * 10));
+    app.renderer.draw(s, hf, dt, app.running() ? SPEEDS[app.speed] : 0);
+  } else {
+    // Title screen: a gently turning empty city behind the menu.
+    if (!app.demo) app.demo = createGame({ seed: 4 });
+    app.demo.t += dt * 0.25;
+    if (app.demo.t >= 1) { app.demo.t -= 1; app.demo.hour = (app.demo.hour + 1) % 24; }
+    app.renderer.syncCrowd(40, 10);
+    app.renderer.draw(app.demo, app.demo.hour + app.demo.t, dt, 1);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// -------------------------------------------------------------- input ----
+// One finger pans, two fingers pinch-zoom, a tap selects a lot.
+const canvas = $('city');
+const pointers = new Map();
+let gesture = null;
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) gesture = { sx: e.clientX, sy: e.clientY, moved: false, t: performance.now() };
+  else gesture = { pinch: true, moved: true };
+});
+canvas.addEventListener('pointermove', e => {
+  const p = pointers.get(e.pointerId);
+  if (!p) return;
+  const r = app.renderer;
+  if (pointers.size === 1 && gesture && !gesture.pinch) {
+    if (!gesture.moved && Math.hypot(e.clientX - gesture.sx, e.clientY - gesture.sy) > 8) gesture.moved = true;
+    if (gesture.moved) r.pan(e.clientX - p.x, e.clientY - p.y);
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const before = Math.hypot(a.x - b.x, a.y - b.y);
+    const midB = [(a.x + b.x) / 2, (a.y + b.y) / 2];
+    p.x = e.clientX; p.y = e.clientY;
+    const [c, d] = [...pointers.values()];
+    const after = Math.hypot(c.x - d.x, c.y - d.y);
+    const midA = [(c.x + d.x) / 2, (c.y + d.y) / 2];
+    if (before > 10) r.zoomAt(midA[0], midA[1], after / before);
+    r.pan(midA[0] - midB[0], midA[1] - midB[1]);
+    return;
+  }
+  p.x = e.clientX; p.y = e.clientY;
+});
+const endPointer = e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  if (pointers.size === 0 && gesture && !gesture.moved && !gesture.pinch && app.s) {
+    const id = app.renderer.pick(e.clientX, e.clientY);
+    if (id >= 0) { sfx.tap(); app.ui.openLot(id); }
+    else if (app.ui.view) app.ui.close();
+  }
+  if (pointers.size === 0) gesture = null;
+};
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); gesture = null; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  app.renderer.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015));
+}, { passive: false });
+
+window.addEventListener('resize', () => { app.renderer.resize(); app.renderer.fit(); });
+window.addEventListener('keydown', e => {
+  if (!app.s || e.target.tagName === 'INPUT') return;
+  if (e.key === ' ') { e.preventDefault(); app.setSpeed(app.speed ? 0 : 1); }
+  else if (e.key >= '0' && e.key <= '3') app.setSpeed(+e.key);
+  else if (e.key === 'Escape') app.ui.view ? app.ui.close() : null;
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden) app.save(); });
+
+// --------------------------------------------------------------- title ----
+let scenario = 'standard', difficulty = 'normal';
+const segPick = (id, cb) => document.querySelectorAll(`#${id} button`).forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll(`#${id} button`).forEach(x => x.classList.toggle('on', x === b));
+  cb(b.dataset.v);
+  sfx.tap();
+}));
+const blurb = () => { $('scenario-blurb').textContent = SCENARIOS[scenario].blurb; };
+segPick('seg-scenario', v => { scenario = v; blurb(); });
+segPick('seg-difficulty', v => { difficulty = v; });
+blurb();
+$('in-company').value = localStorage.getItem('skyline-company') || '';
+$('btn-new').addEventListener('click', () => {
+  const company = $('in-company').value.trim() || 'Your Company';
+  localStorage.setItem('skyline-company', company);
+  sfx.build();
+  app.start(createGame({ scenario, difficulty, company, name: 'You' }));
+  setTimeout(() => app.ui.toast('Tap a lot to get started. Cheap colours are top-left.', 'good'), 600);
+});
+$('btn-continue').addEventListener('click', () => {
+  try { app.start(deserialize(localStorage.getItem(SAVE_KEY))); sfx.tap(); }
+  catch (e) { localStorage.removeItem(SAVE_KEY); app.toTitle(); }
+});
+setSound(localStorage.getItem('skyline-sound') !== '0');
+app.toTitle();
+
+// Handy for debugging from the console.
+window.__SH = app;
+
+return {  };
+})();
+
+})();
+</script>
+</body>
+</html>
