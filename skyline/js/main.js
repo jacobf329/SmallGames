@@ -132,6 +132,11 @@ const app = {
       pct = w / sc.goal * 100;
       text = `Net worth ${money(w)} / ${money(sc.goal)} · ${Math.max(0, sc.days - s.day + 1)} days left`;
     } else text = `Net worth ${money(w)} · ${eraName(yearOf(s))}`;
+    if (s.freePlay) {
+      const r = s.result;
+      pct = 0;
+      text = `Free play · net worth ${money(w)}${r ? ` · ${r.winner === getMe() ? 'you won' : r.winner >= 0 ? s.players[r.winner].company.split(' ')[0] + ' won' : 'game lost'} on day ${r.day}` : ''}`;
+    }
     $('goal-fill').style.width = Math.max(0, Math.min(100, pct)) + '%';
     $('goal-text').textContent = text;
   },
@@ -162,7 +167,8 @@ const app = {
     this.checkOver();
   },
   checkOver() {
-    if (this.s.over && !this.overShown) {
+    if (!this.s.over) { if (this.overShown) { this.overShown = false; this.ui.hideModal(); } return; }
+    if (!this.overShown) {
       this.overShown = true;
       if (!this.mp) localStorage.removeItem(SAVE_KEY);
       this.ui.gameOver();

@@ -521,7 +521,7 @@ export const goalText = g => GOAL_TEXT[g.type](g.n);
 export const humans = s => s.players.filter(p => p.human);
 
 function checkGoals(s) {
-  if (s.over || !s.goals.length) return;
+  if (s.over || s.freePlay || !s.goals.length) return;
   const people = humans(s);
   for (const p of people) {
     if (p.failed || p.bankrupt) continue;
@@ -550,6 +550,7 @@ function checkEnd(s) {
   const sc = SCENARIOS[s.scenario];
   const people = humans(s);
   if (people.every(p => p.bankrupt)) return finish(s, -1, people.length > 1 ? 'Every player went bankrupt.' : 'You went bankrupt.');
+  if (s.freePlay) return;              // after "keep playing": no more deadlines
   const alive = s.players.filter(p => !p.bankrupt);
   if (alive.length === 1 && sc.mode === 'race') return finish(s, alive[0].id, 'Every rival has gone bust.');
   if (sc.mode !== 'race') return;
@@ -558,6 +559,22 @@ function checkEnd(s) {
   if (worth[best] >= sc.goal) return finish(s, best, `${s.players[best].company} reached ${money(sc.goal)} first.`);
   if (s.day > sc.days) return finish(s, best, `Time is up after ${sc.days} days. Richest tycoon wins.`);
 }
+// Carry on after a win or loss: no more goals or deadlines. Bankrupt
+// players get a fresh start with half the usual starting cash.
+export function continueGame(s) {
+  if (!s.over) return fail('The game is still on.');
+  s.result = { winner: s.winner, reason: s.endReason, day: s.day };
+  s.over = false;
+  s.freePlay = true;
+  for (const p of s.players) {
+    if (!p.human || !p.bankrupt) continue;
+    p.bankrupt = false; p.cash = Math.round(START_CASH / 2); p.loan = 0; p.debtDays = 0;
+    news(s, `${p.company} is back in business with fresh backing of ${money(p.cash)}.`, 'info', p.id);
+  }
+  news(s, 'The game goes on in free play. Build whatever you like.', 'info');
+  return { ok: true };
+}
+
 function finish(s, winner, reason) {
   if (s.over) return;
   s.over = true; s.winner = winner; s.endReason = reason;

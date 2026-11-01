@@ -368,3 +368,6 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 #layers .seg button { display: flex; flex-direction: column; align-items: center; font-size: 17px; line-height: 1.1; padding: 5px 1px; }
 #layers .seg button small { font-size: 9.5px; }
 @media (max-height: 500px) { #layers { top: auto; bottom: 60px; left: 8px; transform: none; width: min(60vw, 420px); } }
+.auc-head { gap: 8px; }
+.auc-head .pill { white-space: nowrap; flex: none; }
+.auc-head .dim { text-align: right; font-size: 11.5px; }

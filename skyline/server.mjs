@@ -17,7 +17,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { attachWebSocket } from '../server/ws.js';
 import { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, DIFFICULTY, MAX_COMPANIES } from './js/data.js';
-import { createGame, serialize, deserialize, news } from './js/sim.js';
+import { createGame, serialize, deserialize, news, continueGame } from './js/sim.js';
 import { advanceGame } from './js/game.js';
 import { auctionTick, maybeSettle } from './js/auction.js';
 import { perform } from './js/actions.js';
@@ -269,6 +269,15 @@ attachWebSocket(server, conn => {
       }
       case 'end':
         if (game && isHost(c)) { notice('The host ended the game.'); endGame(); }
+        break;
+      case 'continue':
+        // The host chooses to carry on after a win or loss.
+        if (game && game.over && isHost(c)) {
+          continueGame(game);
+          game.overSaved = false;
+          notice('The host kept the game going: free play, no more deadlines.', 'good');
+          stateDirty = true;
+        }
         break;
     }
   });

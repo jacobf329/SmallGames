@@ -13,7 +13,7 @@ import {
   aptRentFor, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, loanLimit, netWorth, playerAssets,
   capacity, districtPopulation, LEDGER_LABELS, operating, dayName, yearOf, techOf, bizOpen, bizLabel,
   petition, nextAuctionSlot, goalProgress, goalText, setsOwned, buildCost, floorCost, promoCost, buyoutPrice,
-  canLandscape, parkSlots, blockStars, parkStars, trainCost,
+  canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame,
 } from './sim.js';
 import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } from './staff.js';
 import { auctionBid, settleRest, minBid, increment, canCall, reservePrice } from './auction.js';
@@ -883,6 +883,11 @@ export class UI {
       case 'vote-yes': case 'vote-no': this.app.mp?.net.send({ t: 'vote', id: +el.dataset.id, yes: act === 'vote-yes' }); sfx.tap(); return;
       case 'modal-ok': this.hideModal(); this._ok && this._ok(); return;
       case 'modal-cancel': this.hideModal(); return;
+      case 'keep-playing':
+        this.hideModal();
+        if (this.app.mp) this.app.mp.net.send({ t: 'continue' });
+        else { continueGame(s); this.app.overShown = false; this.app.save(); this.toast('Free play: the city carries on.', 'good'); this.onHour(); }
+        return;
       case 'new-game': this.hideModal(); this.app.mp?.host ? this.app.mp.net.send({ t: 'end' }) : this.app.toTitle(); return;
     }
     this.render();
@@ -1003,6 +1008,9 @@ export class UI {
     this.modal(`<h2>${won ? '🏆 You win!' : s.winner < 0 ? '💸 Game over' : `${esc(s.players[s.winner].company)} wins`}</h2>
       <p>${esc(s.endReason)}</p>
       ${rows.map(({ p, w }, i) => `<div class="list-item"><span class="rank">${i + 1}</span><span class="grow"><b style="color:${p.color}">${esc(p.company)}</b><small>${p.bankrupt ? 'bankrupt' : esc(p.name)}</small></span><span class="amt">${money(w)}</span></div>`).join('')}
+      ${this.app.mp && !this.app.mp.host ? '<p class="note">The host decides whether to keep playing or go back to the lobby.</p>' : ''}
+      <div class="row"><button class="btn buy wide" data-act="keep-playing" ${this.app.mp && !this.app.mp.host ? 'disabled' : ''}>▶ Keep playing</button></div>
+      <p class="note" style="text-align:center">${s.players[ME].bankrupt ? 'You get a fresh start with half the usual cash. ' : ''}No more goals or deadlines: the city and the rivals carry on.</p>
       <div class="row"><button class="btn" data-act="modal-cancel">Look around</button><button class="btn go" data-act="new-game">New game</button></div>`);
   }
 }

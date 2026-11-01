@@ -159,6 +159,11 @@ before TV and slump after it), and events fit the times.
 
 Miss a milestone deadline and the scenario is lost.
 
+Win or lose, you can **keep playing**: the game carries on in free play with
+no more goals or deadlines, and the rivals keep competing. If you went
+bankrupt, your company is re-founded with half the usual starting cash. In LAN
+games the host makes that choice for everyone.
+
 ### Rivals
 
 | Rival | Style |
