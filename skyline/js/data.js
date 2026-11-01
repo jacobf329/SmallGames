@@ -43,7 +43,7 @@ export const UTILITY_PRICE = 16000;
 export const STATION_NAMES = ['West Gate Station', 'Mill Street Station', 'Harbour Station', 'East Gate Station'];
 export const UTILITY_NAMES = ['Volt Works', 'Clearwater Works'];
 // Daily fare per station, by how many stations the same owner holds.
-export const STATION_FARE = [0, 420, 900, 1500, 2300];
+export const STATION_FARE = [0, 300, 520, 800, 1150];
 // Utilities collect a cut of every business's daily overhead bill.
 export const UTILITY_CUT = [0, 0.30, 0.45];   // per utility, owning 1 / 2
 
@@ -54,49 +54,150 @@ export const PARK_TOURISTS = 300;
 // ---------------------------------------------------------- businesses ----
 // cost      build price             ticket  average spend per customer
 // stock     cost of goods / ticket  wage    per staff per open hour
-// cap       customers / staff / hr  open    [from, to) hours, may wrap
+// cap       customers / staff / hr  open    default [from, to) hours, may wrap
 // peaks     busiest hours           app     customers per 1000 people per
 //                                           peak hour: [budget, middle, wealthy, tourist]
+// need      which citizen need it satisfies
+// year      first year it can be built   names  [[fromYear, name], ...]
+// perish    leftover stock spoils overnight (share lost)
 export const BUSINESSES = [
-  { id: 'cafe',     name: 'Coffee House',    icon: '☕', cost: 9000,  ticket: 6,   stock: 0.30, wage: 19, cap: 20, open: [6, 20],  peaks: [8, 13, 16], app: [9, 13, 15, 16],  wall: '#8b5e3c', group: 'food' },
-  { id: 'burger',   name: 'Burger Bar',      icon: '🍔', cost: 12000, ticket: 11,  stock: 0.36, wage: 19, cap: 16, open: [10, 24], peaks: [12, 19],    app: [15, 10, 4, 12],  wall: '#e0533d', group: 'food' },
-  { id: 'grocer',   name: 'Corner Grocer',   icon: '🛒', cost: 14000, ticket: 19,  stock: 0.60, wage: 18, cap: 18, open: [7, 22],  peaks: [9, 18],     app: [11, 10, 6, 3],   wall: '#3f9a4a', group: 'retail' },
-  { id: 'pharmacy', name: 'Pharmacy',        icon: '💊', cost: 16000, ticket: 24,  stock: 0.52, wage: 24, cap: 12, open: [8, 21],  peaks: [11, 17],    app: [4.5, 4.5, 4.5, 2], wall: '#2f9bd6', group: 'retail' },
-  { id: 'gym',      name: 'Fitness Club',    icon: '🏋️', cost: 24000, ticket: 14,  stock: 0.08, wage: 22, cap: 24, open: [6, 23],  peaks: [7, 18],     app: [3, 6.5, 8, 1.5], wall: '#5b6475', group: 'leisure' },
-  { id: 'boutique', name: 'Fashion Boutique', icon: '👗', cost: 22000, ticket: 58, stock: 0.48, wage: 24, cap: 6,  open: [10, 20], peaks: [14, 17],    app: [1, 3, 6.5, 5],   wall: '#c2418f', group: 'retail' },
-  { id: 'gadget',   name: 'Gadget Store',    icon: '📱', cost: 30000, ticket: 115, stock: 0.66, wage: 27, cap: 4,  open: [10, 20], peaks: [15, 18],    app: [0.8, 1.7, 2.6, 1.6], wall: '#334a7d', group: 'retail' },
-  { id: 'cinema',   name: 'Cinema',          icon: '🎬', cost: 38000, ticket: 14,  stock: 0.22, wage: 19, cap: 32, open: [12, 24], peaks: [19, 21],    app: [5, 6.5, 5, 6.5], wall: '#7a2b2b', group: 'leisure' },
-  { id: 'bistro',   name: 'Bistro',          icon: '🍷', cost: 32000, ticket: 46,  stock: 0.40, wage: 27, cap: 8,  open: [17, 24], peaks: [20],        app: [1, 4.5, 10, 8],  wall: '#5a2e4f', group: 'food' },
-  { id: 'club',     name: 'Night Club',      icon: '🪩', cost: 36000, ticket: 28,  stock: 0.30, wage: 24, cap: 28, open: [21, 4],  peaks: [0],         app: [5, 6, 4, 11],    wall: '#2a1d4f', group: 'leisure' },
-  { id: 'hotel',    name: 'Boutique Hotel',  icon: '🏨', cost: 58000, ticket: 150, stock: 0.22, wage: 24, cap: 3,  open: [0, 24],  peaks: [15, 21],    app: [0, 0.1, 0.4, 3.2], wall: '#a88a52', group: 'leisure' },
+  { id: 'cafe',     icon: '☕', cost: 9000,  ticket: 6,   stock: 0.30, wage: 19, cap: 20, open: [6, 20],  peaks: [8, 13, 16], app: [9, 13, 15, 16],  wall: '#8b5e3c', group: 'food',    need: 'food',     year: 1930, perish: 0.5,
+    names: [[1930, 'Tea Room'], [1958, 'Coffee Bar'], [1990, 'Coffee House']] },
+  { id: 'burger',   icon: '🍔', cost: 12000, ticket: 11,  stock: 0.36, wage: 19, cap: 16, open: [10, 24], peaks: [12, 19],    app: [15, 10, 4, 12],  wall: '#e0533d', group: 'food',    need: 'food',     year: 1946, perish: 0.5,
+    names: [[1946, 'Diner'], [1975, 'Burger Bar']] },
+  { id: 'smoothie', icon: '🥤', cost: 11000, ticket: 7,   stock: 0.34, wage: 18, cap: 22, open: [7, 19],  peaks: [9, 13, 17], app: [4, 8, 11, 7],    wall: '#4cc38a', group: 'food',    need: 'food',     year: 2001, perish: 0.6,
+    names: [[2001, 'Smoothie Bar']] },
+  { id: 'bistro',   icon: '🍷', cost: 32000, ticket: 46,  stock: 0.40, wage: 27, cap: 8,  open: [17, 24], peaks: [20],        app: [1, 4.5, 10, 8],  wall: '#5a2e4f', group: 'food',    need: 'food',     year: 1930, perish: 0.4,
+    names: [[1930, 'Supper Club'], [1965, 'Bistro']] },
+  { id: 'grocer',   icon: '🛒', cost: 14000, ticket: 19,  stock: 0.60, wage: 18, cap: 18, open: [7, 22],  peaks: [9, 18],     app: [11, 10, 6, 3],   wall: '#3f9a4a', group: 'retail',  need: 'groceries', year: 1930, perish: 0.15,
+    names: [[1930, 'Corner Grocer'], [1970, 'Mini Mart']] },
+  { id: 'pharmacy', icon: '💊', cost: 16000, ticket: 24,  stock: 0.52, wage: 24, cap: 12, open: [8, 21],  peaks: [11, 17],    app: [4.5, 4.5, 4.5, 2], wall: '#2f9bd6', group: 'retail', need: 'health',  year: 1930, perish: 0,
+    names: [[1930, 'Apothecary'], [1955, 'Pharmacy']] },
+  { id: 'boutique', icon: '👗', cost: 22000, ticket: 58,  stock: 0.48, wage: 24, cap: 6,  open: [10, 20], peaks: [14, 17],    app: [1, 3, 6.5, 5],   wall: '#c2418f', group: 'retail',  need: 'shopping', year: 1930, perish: 0,
+    names: [[1930, 'Tailor'], [1960, 'Fashion Boutique']] },
+  { id: 'gadget',   icon: '📻', cost: 30000, ticket: 115, stock: 0.66, wage: 27, cap: 4,  open: [10, 20], peaks: [15, 18],    app: [0.8, 1.7, 2.6, 1.6], wall: '#334a7d', group: 'retail', need: 'shopping', year: 1930, perish: 0,
+    names: [[1930, 'Radio Shop'], [1955, 'TV & Hi-Fi'], [1985, 'Electronics'], [2005, 'Gadget Store']] },
+  { id: 'gym',      icon: '🏋️', cost: 24000, ticket: 14,  stock: 0.08, wage: 22, cap: 24, open: [6, 23],  peaks: [7, 18],     app: [3, 6.5, 8, 1.5], wall: '#5b6475', group: 'leisure', need: 'fitness',  year: 1966, perish: 0,
+    names: [[1966, 'Health Club'], [1990, 'Fitness Club']] },
+  { id: 'cinema',   icon: '🎬', cost: 38000, ticket: 14,  stock: 0.22, wage: 19, cap: 32, open: [12, 24], peaks: [19, 21],    app: [5, 6.5, 5, 6.5], wall: '#7a2b2b', group: 'leisure', need: 'fun',      year: 1930, perish: 0.2,
+    names: [[1930, 'Picture House'], [1960, 'Cinema'], [1995, 'Multiplex']] },
+  { id: 'arcade',   icon: '🕹️', cost: 20000, ticket: 6,   stock: 0.12, wage: 18, cap: 30, open: [12, 23], peaks: [16, 20],    app: [7, 6, 2, 4],     wall: '#2b3fbf', group: 'leisure', need: 'fun',      year: 1979, perish: 0,
+    names: [[1979, 'Video Arcade'], [2005, 'Game Lounge']] },
+  { id: 'club',     icon: '🪩', cost: 36000, ticket: 28,  stock: 0.30, wage: 24, cap: 28, open: [21, 4],  peaks: [0],         app: [5, 6, 4, 11],    wall: '#2a1d4f', group: 'leisure', need: 'fun',      year: 1956, perish: 0.2,
+    names: [[1956, 'Dance Hall'], [1972, 'Disco'], [1988, 'Night Club']] },
+  { id: 'hotel',    icon: '🏨', cost: 58000, ticket: 150, stock: 0.22, wage: 24, cap: 3,  open: [0, 24],  peaks: [15, 21],    app: [0, 0.1, 0.4, 3.2], wall: '#a88a52', group: 'leisure', need: 'lodging', year: 1930, perish: 0,
+    names: [[1930, 'Grand Hotel'], [1990, 'Boutique Hotel']] },
 ];
 export const BIZ = Object.fromEntries(BUSINESSES.map(b => [b.id, b]));
+export function bizName(def, year) {
+  let n = def.names[0][1];
+  for (const [y, name] of def.names) if (year >= y) n = name;
+  return n;
+}
+// How fashionable each kind of business is in a given year.
+export function eraDemand(id, year) {
+  switch (id) {
+    case 'cinema': return year < 1955 ? 1.25 : year < 1985 ? 0.85 : 1.0;     // TV arrives
+    case 'gadget': return Math.min(1.5, 0.6 + (year - 1930) / 75);
+    case 'arcade': return year < 1996 ? 1.3 : 0.7;
+    case 'club':   return year >= 1972 && year < 1985 ? 1.3 : 1.0;           // disco years
+    case 'cafe':   return year >= 1995 ? 1.2 : 1.0;
+    case 'boutique': return year >= 1960 ? 1.15 : 0.9;
+    default: return 1;
+  }
+}
 
-// Price tiers the owner can pick. mult scales the ticket.
-export const PRICE_TIERS = [
-  { name: 'Bargain', mult: 0.72 },
-  { name: 'Cheap',   mult: 0.86 },
-  { name: 'Fair',    mult: 1.00 },
-  { name: 'Premium', mult: 1.20 },
-  { name: 'Luxury',  mult: 1.45 },
+// Citizen needs and the businesses that satisfy them.
+export const NEEDS = [
+  { id: 'food',      icon: '🍽️', label: 'Food' },
+  { id: 'groceries', icon: '🧺', label: 'Groceries' },
+  { id: 'health',    icon: '💊', label: 'Health' },
+  { id: 'fitness',   icon: '💪', label: 'Fitness' },
+  { id: 'fun',       icon: '🎉', label: 'Fun' },
+  { id: 'shopping',  icon: '🛍️', label: 'Shopping' },
+  { id: 'lodging',   icon: '🛏️', label: 'A bed' },
 ];
+
+// Price is a multiplier on the ticket; the UI steps it in 5% increments.
+export const PRICE_MIN = 0.5;
+export const PRICE_MAX = 2.0;
+export const PRICE_STEP = 0.05;
+export function priceLabel(m) {
+  return m < 0.8 ? 'Bargain' : m < 0.95 ? 'Cheap' : m <= 1.05 ? 'Fair' : m <= 1.3 ? 'Premium' : 'Luxury';
+}
 // Fit-out level: nicer shops draw more customers and serve them faster.
 export const FIT_LEVELS = [
   null,
-  { name: 'Basic',    appeal: 1.00, cap: 1.00, costMult: 0 },
-  { name: 'Smart',    appeal: 1.28, cap: 1.15, costMult: 0.35 },
-  { name: 'Flagship', appeal: 1.60, cap: 1.30, costMult: 0.70 },
+  { name: 'Basic',    appeal: 1.00, cap: 1.00, costMult: 0,    year: 1930 },
+  { name: 'Smart',    appeal: 1.28, cap: 1.15, costMult: 0.35, year: 1936 },
+  { name: 'Flagship', appeal: 1.60, cap: 1.30, costMult: 0.70, year: 1960 },
 ];
 export const MAX_STAFF = 8;
 
+// -------------------------------------------------------------- stock ----
+// Deliveries arrive at 06:00 and top shelves up to the target. Food spoils
+// overnight; everything else costs a little to hold. Auto-restock orders
+// from a wholesaler at a premium.
+export const DELIVERY_HOUR = 6;
+export const HOLD_COST = 0.01;          // per day, share of the value of unsold stock
+export const AUTO_STOCK_PREMIUM = 0.06;
+
 // -------------------------------------------------------- apartments ----
-// Only on a lot whose owner holds the whole colour set, built evenly.
+// Any lot you own can take apartments. Owning the whole colour set doubles
+// apartment rents as well as ground rent. Taller buildings need the tech.
 export const APT_NAMES = ['Ground only', '2 floors', '4 floors', '6 floors', '8 floors', 'Skyline Tower'];
 export const APT_RESIDENTS = [0, 150, 300, 450, 600, 1000];
-export const APT_RENT = [0, 1, 2, 3.2, 4.5, 8];       // x lot base price x APT_RENT_RATE per day
-export const APT_RENT_RATE = 0.007;
+export const APT_RENT = [0, 1, 2, 3, 4, 6];       // x lot base price x APT_RENT_RATE per day
+export const APT_RENT_RATE = 0.005;
 export const APT_COST_RATE = 0.55;                    // per level, x lot base price
+export const APT_SET_MULT = 2;
 export const MAX_APT = 5;
+
+// ---------------------------------------------------- eras & tech tree ----
+// A year passes every YEAR_DAYS game days. Each entry unlocks on Jan 1st.
+export const YEAR_DAYS = 5;
+export const TECH = [
+  { year: 1930, apt: 1, text: 'Two-storey walk-ups are the height of fashion.' },
+  { year: 1936, fit: 2, text: 'Chrome and neon: shops can be refitted to Smart.' },
+  { year: 1940, apt: 2, text: 'Elevators! Apartments can now rise to 4 floors.' },
+  { year: 1946, biz: 'burger', text: 'Post-war diners are booming: Diners can now be built.' },
+  { year: 1950, apt: 3, text: 'Reinforced concrete: apartments up to 6 floors.' },
+  { year: 1956, biz: 'club', text: 'Rock and roll! Dance Halls can now be built.' },
+  { year: 1960, fit: 3, apt: 4, text: 'Flagship fit-outs and 8-floor apartment blocks unlocked.' },
+  { year: 1966, biz: 'gym', text: 'The fitness boom: Health Clubs can now be built.' },
+  { year: 1972, apt: 5, text: 'Steel-frame skyscrapers: Skyline Towers unlocked!' },
+  { year: 1979, biz: 'arcade', text: 'Space invaders! Video Arcades can now be built.' },
+  { year: 2001, biz: 'smoothie', text: 'Juice cleanse season: Smoothie Bars can now be built.' },
+];
+export function techAt(year) {
+  let apt = 0, fit = 1;
+  const biz = new Set(BUSINESSES.filter(b => b.year <= year).map(b => b.id));
+  for (const t of TECH) {
+    if (t.year > year) break;
+    if (t.apt) apt = t.apt;
+    if (t.fit) fit = t.fit;
+  }
+  return { apt, fit, biz };
+}
+export const ERAS = [
+  { from: 1930, name: 'Jazz Age' }, { from: 1945, name: 'Post-war Boom' }, { from: 1960, name: 'Space Age' },
+  { from: 1975, name: 'Disco Decade' }, { from: 1990, name: 'Digital Age' }, { from: 2005, name: 'Smart City' },
+];
+export const eraName = y => [...ERAS].reverse().find(e => y >= e.from).name;
+
+// ---------------------------------------------------------- auctions ----
+// The city sells land by live auction a few times a day.
+export const AUCTION_HOURS = [9, 13, 17];
+export const AUCTION_SECONDS = 9;        // countdown, real time
+export const AUCTION_EXTEND = 3.5;       // a late bid resets the clock to at least this
+export const AUCTION_RESERVE = 0.8;      // opening bid x land value
+
+// ---------------------------------------------------------- citizens ----
+export const PEOPLE_PER_CITIZEN = 8;     // each simulated citizen is a small group
+export const WALK_RANGE = 10;            // road tiles a citizen will travel
+export const DISTANCE_FALLOFF = 3.0;
+export const FIRST_NAMES = ['Ada', 'Bo', 'Cy', 'Dot', 'Eli', 'Flo', 'Gus', 'Hal', 'Ivy', 'Jo', 'Kit', 'Lou', 'Mae', 'Ned', 'Ola', 'Pip', 'Quin', 'Ray', 'Sal', 'Tess', 'Uma', 'Vic', 'Wes', 'Xan', 'Yara', 'Zed', 'Amos', 'Bea', 'Cal', 'Dina', 'Ezra', 'Fay', 'Gil', 'Hope', 'Ike', 'June', 'Kai', 'Lena', 'Milo', 'Nia'];
+export const LAST_NAMES = ['Abbot', 'Bishop', 'Cole', 'Dunn', 'Ellis', 'Ford', 'Grant', 'Hale', 'Ives', 'Joyce', 'Kerr', 'Lowe', 'Marsh', 'Nash', 'Orr', 'Pike', 'Quill', 'Reyes', 'Stone', 'Toms', 'Underwood', 'Vale', 'Webb', 'Yates', 'Zhou', 'Okafor', 'Novak', 'Moreau', 'Lindqvist', 'Kowalski', 'Jensen', 'Ibarra'];
 
 // ----------------------------------------------------------- economy ----
 export const DEMAND_SCALE = 0.62;
@@ -135,10 +236,35 @@ export const RIVALS = [
 ];
 export const HUMAN_COLOR = '#2ee6ff';
 
+// Scenarios. 'goals' scenarios are won by meeting every goal before its
+// deadline (miss one and you lose); 'race' scenarios by being first to a
+// net worth. Goal types: biz, lots, sets, apt (levels), tower, worth, profit
+// (one day's operating profit), stations, customers (one day's).
 export const SCENARIOS = {
-  quick:    { name: 'Quick Deal',   goal: 500000,  days: 40,  blurb: 'First to a $500K net worth within 40 days.' },
-  standard: { name: 'City Mogul',   goal: 2000000, days: 100, blurb: 'First to a $2M net worth within 100 days.' },
-  sandbox:  { name: 'Free Play',    goal: 0,       days: 0,   blurb: 'No deadline. Build the skyline you want.' },
+  boomtown: { name: 'Boomtown', year: 1930, mode: 'goals', days: 60,
+    blurb: '1930. A new city, three sharks. Hit every milestone on time.',
+    goals: [
+      { type: 'biz', n: 2, by: 10 }, { type: 'lots', n: 3, by: 20 }, { type: 'profit', n: 2500, by: 30 },
+      { type: 'sets', n: 1, by: 42 }, { type: 'worth', n: 250000, by: 60 },
+    ] },
+  golden: { name: 'Golden Age', year: 1950, mode: 'goals', days: 90,
+    blurb: '1950. Ride the post-war boom: shops, apartments, sets and the metro.',
+    goals: [
+      { type: 'biz', n: 4, by: 15 }, { type: 'customers', n: 1500, by: 35 }, { type: 'apt', n: 6, by: 50 },
+      { type: 'sets', n: 2, by: 75 }, { type: 'stations', n: 2, by: 80 }, { type: 'worth', n: 1000000, by: 90 },
+    ] },
+  quick: { name: 'Quick Deal', year: 1990, mode: 'race', goal: 750000, days: 40,
+    blurb: '1990. First tycoon to a $750K net worth within 40 days wins.' },
+  mogul: { name: 'Mogul Race', year: 1975, mode: 'race', goal: 3000000, days: 100,
+    blurb: '1975. First to $3M within 100 days. Watch the eras roll by.' },
+  sandbox: { name: 'Free Play', year: 1930, mode: 'free', days: 0,
+    blurb: 'No deadline. Start in the Jazz Age and build the skyline you want.' },
+};
+export const GOAL_TEXT = {
+  biz: n => `Run ${n} businesses`, lots: n => `Own ${n} lots of land`, sets: n => `Complete ${n} colour set${n > 1 ? 's' : ''}`,
+  apt: n => `Build ${n} apartment levels`, tower: n => `Top out ${n} Skyline Tower${n > 1 ? 's' : ''}`,
+  worth: n => `Reach a net worth of $${n >= 1e6 ? n / 1e6 + 'M' : n / 1e3 + 'K'}`, profit: n => `Make $${n.toLocaleString('en-US')} operating profit in a day`,
+  stations: n => `Own ${n} metro stations`, customers: n => `Serve ${n.toLocaleString('en-US')} customers in a day`,
 };
 export const DIFFICULTY = {
   easy:   { aiCash: 0.7,  think: 8, margin: 1.3,  minRoi: 0.045, tune: 0.35, borrow: false },
@@ -153,8 +279,9 @@ export const EVENTS = [
   { id: 'heat',      days: [2, 3], weight: 2, text: () => 'Heatwave: cafés and grocers are mobbed, gyms empty.', mods: { cafe: 1.4, grocer: 1.25, gym: 0.75 } },
   { id: 'rain',      days: [1, 2], weight: 3, text: () => 'Rainstorm: people head for cinemas and stay off the high street.', mods: { cinema: 1.5, boutique: 0.7, gadget: 0.85, all: 0.9 } },
   { id: 'convention',days: [2, 3], weight: 2, text: () => 'Trade convention in town: tourist numbers jump citywide.', touristMult: 1.8 },
-  { id: 'fitness',   days: [3, 4], weight: 2, text: () => 'A fitness craze sweeps the city. Burgers suffer.', mods: { gym: 1.6, burger: 0.8 } },
-  { id: 'gadget',    days: [2, 3], weight: 1, text: () => 'New phone launch! Gadget stores have queues round the block.', mods: { gadget: 1.9 } },
+  { id: 'fitness',   days: [3, 4], weight: 2, from: 1966, text: () => 'A fitness craze sweeps the city. Fast food suffers.', mods: { gym: 1.6, burger: 0.8, smoothie: 1.3 } },
+  { id: 'gadget',    days: [2, 3], weight: 1, from: 1990, text: () => 'New phone launch! Electronics stores have queues round the block.', mods: { gadget: 1.9 } },
+  { id: 'tv',        days: [2, 3], weight: 1, to: 1989, text: () => 'Everyone wants the new colour TV set! Electronics sales soar.', mods: { gadget: 1.7 } },
   { id: 'fashion',   days: [2, 2], weight: 1, text: () => 'Fashion week: boutiques and bistros boom.', mods: { boutique: 1.7, bistro: 1.25 } },
   { id: 'boom',      days: [1, 1], weight: 1, text: () => 'Property boom: land values up 8%.', land: 1.08 },
   { id: 'slump',     days: [1, 1], weight: 1, text: () => 'Market jitters: land values down 6%.', land: 0.94 },

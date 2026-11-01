@@ -36,6 +36,17 @@
   <div id="ticker"></div>
 </header>
 
+<div id="floaters"></div>
+
+<div id="camctl" class="hidden">
+  <button data-cam="left" aria-label="Rotate left">⟲</button>
+  <button data-cam="right" aria-label="Rotate right">⟳</button>
+  <button data-cam="tilt" aria-label="Tilt">⛰</button>
+  <button data-cam="home" aria-label="Whole city">⌂</button>
+</div>
+
+<section id="auction" class="hidden" aria-live="polite"></section>
+
 <section id="sheet" class="hidden" aria-live="polite">
   <div class="grab" id="sheet-grab"></div>
   <button class="sheet-close" id="sheet-close" aria-label="Close">✕</button>
@@ -46,7 +57,7 @@
   <button data-tab="map"><i>🗺️</i><span>City</span></button>
   <button data-tab="empire"><i>💼</i><span>Empire</span></button>
   <button data-tab="sets"><i>🎨</i><span>Sets</span></button>
-  <button data-tab="rivals"><i>🏆</i><span>Rivals</span></button>
+  <button data-tab="goals"><i>🏆</i><span>Goals</span></button>
   <button data-tab="bank"><i>🏦</i><span>Bank</span></button>
   <button data-tab="menu"><i>☰</i><span>Menu</span></button>
 </nav>
@@ -57,7 +68,7 @@
 <section id="title" class="screen">
   <div class="title-card">
     <div class="logo"><span class="logo-sky">SKYLINE</span><span class="logo-hustle">HUSTLE</span></div>
-    <p class="tag">Buy the block. Paint the town your colour. Build to the clouds.</p>
+    <p class="tag">Win the land auctions. Paint the town your colour. Build to the clouds, decade by decade.</p>
 
     <button id="btn-continue" class="btn go hidden">Continue</button>
 
@@ -68,10 +79,12 @@
 
     <div class="field">
       <span>Scenario</span>
-      <div class="seg" id="seg-scenario">
-        <button data-v="quick">Quick</button>
-        <button data-v="standard" class="on">Mogul</button>
-        <button data-v="sandbox">Free Play</button>
+      <div class="seg wrap" id="seg-scenario">
+        <button data-v="boomtown" class="on">Boomtown<small>1930</small></button>
+        <button data-v="golden">Golden Age<small>1950</small></button>
+        <button data-v="mogul">Mogul Race<small>1975</small></button>
+        <button data-v="quick">Quick Deal<small>1990</small></button>
+        <button data-v="sandbox">Free Play<small>1930</small></button>
       </div>
       <small id="scenario-blurb"></small>
     </div>
@@ -90,16 +103,17 @@
     <details class="howto">
       <summary>How to play</summary>
       <ul>
-        <li><b>Tap a lot</b> to buy land, open a business or manage it. Drag to pan, pinch to zoom.</li>
-        <li>The city is split into <b>8 colour districts</b>. Own <b>every lot of a colour</b> to complete the set:
-          ground rent on it <b>doubles</b> and you can stack <b>apartments</b> all the way to a <b>Skyline Tower</b>.</li>
-        <li>Apartments bring residents, and residents are customers. Build them evenly across the set.</li>
-        <li>You can open a business on anyone's land, but you'll pay them rent every night. Rivals do the same to you.</li>
-        <li>Set each shop's <b>price</b> and <b>staff</b>. Rich streets tolerate luxury prices; budget streets flee them.
-          If the shop's queue is out of the door, hire. If it's empty, cut staff.</li>
-        <li><b>Metro stations</b> pay fares (more the more you own) and bring tourists to nearby blocks.
-          <b>Utilities</b> take a cut of every business's bills.</li>
-        <li>Rivals will bid for the lot that completes their set. You can bid for theirs too.</li>
+        <li><b>The city sells land at live auctions</b> at 9:00, 13:00 and 17:00. Bid against the rivals in real time
+          (the clock waits). Tap a city lot to <b>petition</b> for it to be auctioned next.</li>
+        <li>You can <b>open a business on any free lot</b>, even land you don't own; you just pay the landowner
+          (or the city) ground rent every night.</li>
+        <li>Build <b>apartments</b> on any land you own. Residents become customers for every shop nearby.</li>
+        <li>The city has <b>8 colour districts</b>. Own <b>every lot of a colour</b> and its ground rent and apartment rent <b>double</b>.</li>
+        <li>Run each shop: <b>price</b>, <b>staff</b>, <b>opening hours</b> and <b>stock</b>. Food spoils overnight; empty shelves turn customers away.</li>
+        <li>Every person walking the streets is a real <b>citizen</b> with needs, a budget and opinions, heading to a real shop.
+          Tap one to see what they want. Each block's <b>word on the street</b> tells you what's missing.</li>
+        <li>Time moves through the <b>eras</b>, from the 1930s onward: new kinds of business, smarter fit-outs and taller buildings unlock as the years pass.</li>
+        <li><b>Camera:</b> drag to pan, pinch to zoom, twist to rotate, two-finger drag to tilt. Or use the ⟲ ⟳ ⛰ ⌂ buttons.</li>
       </ul>
     </details>
   </div>

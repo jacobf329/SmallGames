@@ -272,3 +272,56 @@ h3 em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(
   #toasts { top: calc(84px + var(--safe-t)); left: 8px; transform: none; width: min(42vw, 360px); }
   #hud { right: calc(56px + var(--safe-r)); }
 }
+
+/* ---------------------------------------------------- 3D-era additions -- */
+#floaters { position: fixed; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
+.floater { position: absolute; left: 0; top: 0; font-weight: 900; font-size: 13px; white-space: nowrap;
+  text-shadow: 0 1px 0 #000, 0 0 6px rgba(0,0,0,0.6); will-change: transform, opacity; }
+
+#camctl { position: fixed; z-index: 5; right: calc(8px + var(--safe-r)); top: calc(270px + var(--safe-t));
+  display: flex; flex-direction: column; gap: 6px; }
+#camctl button { width: 38px; height: 38px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); font-size: 18px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+
+#auction {
+  position: fixed; z-index: 25; left: 50%; transform: translateX(-50%);
+  bottom: calc(66px + var(--safe-b)); width: min(94vw, 420px); max-height: 70vh; overflow-y: auto;
+  background: rgba(18, 24, 44, 0.97); border: 2px solid #ffd23f; border-radius: 20px; padding: 10px 14px 12px;
+  box-shadow: 0 0 0 4px rgba(255, 210, 63, 0.15), 0 20px 50px rgba(0,0,0,0.5); animation: rise .2s ease-out;
+}
+.auc-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.pill { background: #ffd23f; color: #2b1d00; font-weight: 900; border-radius: 999px; padding: 3px 10px; font-size: 12px; letter-spacing: 0.5px; animation: pulse 1s infinite alternate; }
+@keyframes pulse { to { box-shadow: 0 0 12px rgba(255, 210, 63, 0.7); } }
+.auc-bid { display: flex; justify-content: space-between; align-items: flex-end; margin: 8px 0 4px; }
+.auc-bid small { display: block; color: var(--dim); font-size: 11px; }
+.auc-bid b { font-size: 28px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.auc-bid div:last-child b { font-size: 18px; }
+.auc-timer { height: 8px; }
+.auc-timer i { background: #ffd23f; transition: width .1s linear; }
+.auc-log { font-size: 12.5px; margin: 6px 0; min-height: 18px; font-variant-numeric: tabular-nums; }
+
+.seg.wrap { flex-wrap: wrap; }
+.seg.wrap button { flex: 1 1 30%; display: flex; flex-direction: column; align-items: center; line-height: 1.1; padding: 7px 2px; }
+.seg button small { font-size: 10.5px; opacity: 0.7; font-weight: 600; }
+.seg.small button { min-height: 30px; padding: 4px 6px; font-size: 12.5px; }
+.stepper b small.sub { display: block; font-size: 10.5px; color: var(--dim); font-weight: 600; }
+.stars { color: #ffd23f; letter-spacing: -1px; font-size: 12px; }
+.biz-opt.locked { opacity: 0.4; }
+.chat { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.chat .grow { flex: 1; color: #d6e0f5; font-style: italic; }
+.chat b { font-variant-numeric: tabular-nums; color: var(--dim); }
+.need { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 13.5px; }
+.need .grow { flex: 1; }
+.need .meter { margin: 0; }
+.thought { font-style: italic; color: #e3ebff; }
+.goalrow.done { opacity: 0.6; }
+.goalrow.urgent { border-color: rgba(255, 210, 63, 0.6); }
+.goalrow .grow { flex: 1; }
+.tech { display: flex; gap: 10px; font-size: 12.5px; color: var(--dim); padding: 4px 0; }
+.tech b { min-width: 38px; }
+.tech.have { color: var(--ink); }
+.tech.have b { color: var(--good); }
+@media (max-height: 500px) {
+  #camctl { top: auto; bottom: 10px; right: calc(64px + var(--safe-r)); flex-direction: row; }
+  #auction { left: 8px; transform: none; bottom: 8px; width: min(48vw, 400px); max-height: calc(100vh - 16px); }
+}

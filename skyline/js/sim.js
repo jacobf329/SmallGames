@@ -1,151 +1,55 @@
 // Skyline Hustle - the city simulation. Pure data in, pure data out: no DOM,
 // so it runs identically in the browser and in headless Node tests.
 //
-// Time advances one game hour at a time. Every hour each district generates
-// customers for every kind of business; they split between the open shops of
-// that kind on the block and its neighbours by fit-out, price and distance.
-// At midnight rents, fares, utility cuts, apartment rents and interest settle.
+// Time advances one game hour at a time. Each hour citizens decide where to
+// spend (citizens.js) and shops pay wages; at 06:00 stock is delivered; at
+// midnight rents, fares, utility cuts, apartment rents and interest settle,
+// food spoils, reputations move, the calendar turns and goals are checked.
+// Land is sold by the city at live auctions (auction.js).
 
 import {
-  MAP_W, MAP_H, BLOCK_LAYOUT, DISTRICTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE,
-  STATION_NAMES, UTILITY_NAMES, STATION_FARE, UTILITY_CUT, TRANSIT_TOURISTS, PARK_TOURISTS,
-  BUSINESSES, BIZ, PRICE_TIERS, FIT_LEVELS, MAX_STAFF, APT_RESIDENTS, APT_RENT, APT_RENT_RATE,
-  APT_COST_RATE, MAX_APT, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE,
-  RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY,
-  LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV,
-  START_CASH, RIVALS, HUMAN_COLOR, SCENARIOS, DIFFICULTY, EVENTS,
+  DISTRICTS, SEG_ELASTICITY, STATION_FARE, UTILITY_CUT, BUSINESSES, BIZ, FIT_LEVELS, MAX_STAFF,
+  APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, DEMAND_SCALE,
+  OUTSIDE_WEIGHT, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE,
+  LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP,
+  LOAN_LTV, START_CASH, RIVALS, HUMAN_COLOR, SCENARIOS, DIFFICULTY, EVENTS, PRICE_MIN, PRICE_MAX,
+  DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, TECH, YEAR_DAYS, GOAL_TEXT, bizName, eraName,
 } from './data.js';
+import { MAP, rand } from './map.js';
+import { NAT, bizOpen, defaultHours, yearOf, techOf, modFor, capacity, appeal, unitCost } from './demand.js';
+import { buildCitizens, syncResidents, syncTourists, touristsIn, citizensHour } from './citizens.js';
 
-// ------------------------------------------------------------- rng ----
-// mulberry32 with its state kept inside the save game.
-export function rand(s) {
-  let t = (s.rng = (s.rng + 0x6D2B79F5) >>> 0);
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-}
-const pick = (s, arr) => arr[Math.floor(rand(s) * arr.length)];
-
-// ------------------------------------------------------- static map ----
-// Built once from BLOCK_LAYOUT; never saved.
-export const MAP = (() => {
-  const tiles = [];
-  for (let y = 0; y < MAP_H; y++) {
-    tiles.push([]);
-    for (let x = 0; x < MAP_W; x++) {
-      const road = x % 3 === 0 || y % 3 === 0;
-      tiles[y].push({ x, y, kind: road ? 'road' : 'plaza', block: -1, district: -1, lot: -1 });
-    }
-  }
-  const blocks = [];
-  const lotDefs = [];
-  let station = 0, utility = 0;
-  BLOCK_LAYOUT.forEach((row, br) => row.forEach((slot, bc) => {
-    const bx = 1 + bc * 3, by = 1 + br * 3;
-    const block = { id: blocks.length, bc, br, bx, by, kind: slot, district: -1 };
-    if (slot.startsWith('d:')) { block.kind = 'district'; block.district = +slot.slice(2); }
-    blocks.push(block);
-    const at = (dx, dy) => tiles[by + dy][bx + dx];
-    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-      at(dx, dy).block = block.id;
-      at(dx, dy).district = block.district;
-      if (block.kind === 'park') at(dx, dy).kind = 'park';
-    }
-    const addLot = (dx, dy, def) => {
-      const t = at(dx, dy);
-      t.kind = 'lot';
-      t.lot = lotDefs.length;
-      lotDefs.push({ id: lotDefs.length, tx: bx + dx, ty: by + dy, block: block.id, ...def });
-    };
-    if (block.kind === 'district') {
-      const D = DISTRICTS[block.district];
-      const spots = D.lots === 3 ? [[0, 0], [1, 0], [0, 1]] : [[0, 0], [1, 1]];
-      spots.forEach(([dx, dy], i) => addLot(dx, dy, {
-        kind: 'prop', district: block.district, index: i,
-        name: `${D.short} Lot ${i + 1}`,
-        basePrice: Math.round(D.price * (1 + 0.09 * i) / 100) * 100,
-      }));
-    } else if (block.kind === 'transit') {
-      [[0, 0], [1, 1]].forEach(([dx, dy]) => addLot(dx, dy, {
-        kind: 'station', district: -1, name: STATION_NAMES[station++], basePrice: STATION_PRICE,
-      }));
-    } else if (block.kind === 'utility') {
-      [[0, 0], [1, 1]].forEach(([dx, dy]) => addLot(dx, dy, {
-        kind: 'utility', district: -1, name: UTILITY_NAMES[utility++], basePrice: UTILITY_PRICE,
-      }));
-    }
-  }));
-
-  // District adjacency: who shops where, and where tourists come from.
-  const distBlock = DISTRICTS.map((_, d) => blocks.find(b => b.district === d));
-  const neighbours = DISTRICTS.map((_, d) => {
-    const a = distBlock[d];
-    const out = [];
-    DISTRICTS.forEach((_, e) => {
-      const b = distBlock[e];
-      const dx = Math.abs(a.bc - b.bc), dy = Math.abs(a.br - b.br);
-      if (d === e) out.push({ d: e, w: 1 });
-      else if (dx + dy === 1) out.push({ d: e, w: NEIGHBOUR_W });
-      else if (dx === 1 && dy === 1) out.push({ d: e, w: DIAGONAL_W });
-    });
-    return out;
-  });
-  const tourists = DISTRICTS.map((_, d) => {
-    const a = distBlock[d];
-    let t = 0;
-    for (const b of blocks) {
-      if (Math.max(Math.abs(a.bc - b.bc), Math.abs(a.br - b.br)) !== 1) continue;
-      const ortho = a.bc === b.bc || a.br === b.br;
-      if (b.kind === 'transit') t += TRANSIT_TOURISTS * (ortho ? 1 : 0.5);
-      if (b.kind === 'park') t += PARK_TOURISTS * (ortho ? 1 : 0.5);
-    }
-    return t;
-  });
-  const districtLots = DISTRICTS.map((_, d) => lotDefs.filter(l => l.district === d).map(l => l.id));
-  return { tiles, blocks, lotDefs, neighbours, tourists, districtLots, distBlock };
-})();
-
-// Precomputed demand curve per business per hour (0 when closed).
-export function isOpen(def, h) {
-  const [a, z] = def.open;
-  return a < z ? h >= a && h < z : h >= a || h < z;
-}
-export const PROFILE = Object.fromEntries(BUSINESSES.map(def => {
-  const arr = [];
-  for (let h = 0; h < 24; h++) {
-    if (!isOpen(def, h)) { arr.push(0); continue; }
-    let v = 0.22;
-    for (const p of def.peaks) {
-      const d = Math.min(Math.abs(h - p), 24 - Math.abs(h - p));
-      v += 0.8 * Math.exp(-(d * d) / (2 * 2.2 * 2.2));
-    }
-    arr.push(Math.min(v, 1.15));
-  }
-  return [def.id, arr];
-}));
-export const openHours = def => PROFILE[def.id].filter(v => v > 0).length;
+export { MAP, rand, yearOf, techOf, capacity, bizOpen };
 
 // ------------------------------------------------------------ setup ----
-export function createGame({ scenario = 'standard', difficulty = 'normal', name = 'You', company = 'Your Company', seed } = {}) {
+export function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You', company = 'Your Company', seed } = {}) {
   const diff = DIFFICULTY[difficulty] || DIFFICULTY.normal;
+  const sc = SCENARIOS[scenario];
   const s = {
-    v: 1,
+    v: 2,
     rng: (seed ?? Math.floor(Math.random() * 2 ** 32)) >>> 0,
     day: 1, hour: 7, t: 0,
     scenario, difficulty,
     players: [],
-    lots: MAP.lotDefs.map(l => ({ ...l, owner: -1, apt: 0, aptInvested: 0, business: null })),
+    lots: MAP.lotDefs.map(l => ({ ...l, owner: -1, apt: 0, aptInvested: 0, business: null, unsold: 0 })),
     events: [], news: [], newsSeq: 0, offers: [], offerSeq: 0,
     landMod: 1, mods: {}, touristMult: 1,
+    chatter: DISTRICTS.map(() => ({})),
     cityCustomersToday: 0, cityCustomersYesterday: 0,
+    auction: null, auctionQueue: [], liveAuctions: false,
+    goals: (sc.goals || []).map(g => ({ ...g, done: false, doneDay: 0 })),
     over: false, winner: -1, endReason: '',
   };
   s.players.push(makePlayer(0, name || 'You', company || 'Your Company', HUMAN_COLOR, true, 'human', START_CASH));
   RIVALS.forEach((r, i) => s.players.push(makePlayer(i + 1, r.name, r.company, r.color, false, r.style,
     Math.round(START_CASH * diff.aiCash))));
+  // The city auctions its land roughly cheapest first, with some shuffle.
+  s.auctionQueue = s.lots.map(l => ({ id: l.id, k: l.basePrice * (0.6 + rand(s) * 0.9) }))
+    .sort((a, b) => a.k - b.k).map(x => x.id);
   refreshMods(s);
-  news(s, `Welcome to the city, ${s.players[0].company}. ${SCENARIOS[scenario].blurb}`, 'info');
-  news(s, 'Tip: own every lot of one colour to double its rents and unlock apartment towers.', 'info');
+  buildCitizens(s);
+  news(s, `Welcome to ${yearOf(s)}, ${s.players[0].company}. ${sc.blurb}`, 'info');
+  news(s, 'The city sells its land at live auctions at 9:00, 13:00 and 17:00. Open shops anywhere meanwhile.', 'info');
   return s;
 }
 
@@ -153,7 +57,7 @@ function makePlayer(id, name, company, color, human, style, cash) {
   return {
     id, name, company, color, human, style, cash, loan: 0,
     bankrupt: false, debtDays: 0,
-    today: {}, yesterday: {}, hist: [], worthHist: [],
+    today: {}, yesterday: {}, worthHist: [],
   };
 }
 
@@ -162,20 +66,22 @@ export function news(s, text, kind = 'info', who = -1) {
   if (s.news.length > 60) s.news.length = 60;
 }
 
+export const bizLabel = (s, type) => bizName(BIZ[type], yearOf(s));
+
 // ------------------------------------------------------- money book ----
-function ledger(p, cat, amt) {
+export function ledger(p, cat, amt) {
   p.cash += amt;
   p.today[cat] = (p.today[cat] || 0) + amt;
 }
 export const LEDGER_LABELS = {
-  sales: 'Sales', goods: 'Stock & goods', wages: 'Wages', rentPaid: 'Ground rent paid',
+  sales: 'Sales', goods: 'Stock deliveries', storage: 'Storage', wages: 'Wages', rentPaid: 'Ground rent paid',
   rentIn: 'Ground rent received', overhead: 'Overheads & bills', fares: 'Station fares',
   utility: 'Utility income', aptRent: 'Apartment rents', interest: 'Loan interest',
   trade: 'Land trades', capex: 'Building & land',
 };
+export const operating = led => Object.entries(led).filter(([k]) => k !== 'capex' && k !== 'trade').reduce((a, [, v]) => a + v, 0);
 
 // ------------------------------------------------------ valuations ----
-export const isWeekend = s => (s.day - 1) % 7 >= 5;
 export const dayName = s => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(s.day - 1) % 7];
 
 export function districtStats(s, d) {
@@ -201,6 +107,9 @@ export function setCount(s, pid, d) {
 export function ownsSet(s, pid, d) {
   return pid >= 0 && d >= 0 && setCount(s, pid, d) === MAP.districtLots[d].length;
 }
+export function setsOwned(s, pid) {
+  return DISTRICTS.filter((_, d) => ownsSet(s, pid, d)).length;
+}
 
 export function rentFor(s, lot) {
   if (lot.kind !== 'prop') return 0;
@@ -212,10 +121,11 @@ export function aptCost(lot, level) {
   return Math.round(lot.basePrice * APT_COST_RATE * (level === MAX_APT ? 2.4 : 1) / 100) * 100;
 }
 export function aptRentFor(s, lot) {
-  return Math.round(lot.basePrice * APT_RENT_RATE * APT_RENT[lot.apt] * (1 + 0.004 * (s.day - 1)));
+  const set = ownsSet(s, lot.owner, lot.district) ? APT_SET_MULT : 1;
+  return Math.round(lot.basePrice * APT_RENT_RATE * APT_RENT[lot.apt] * set * (1 + 0.004 * (s.day - 1)));
 }
 
-export function bizValue(b) { return Math.round(b.invested * 0.6); }
+export function bizValue(b) { return Math.round(b.invested * 0.6 + b.stock * unitCost(BIZ[b.type]) * 0.5); }
 
 export function playerAssets(s, pid) {
   let land = 0, biz = 0, apt = 0;
@@ -238,75 +148,65 @@ export function loanLimit(s, pid) {
 export function districtPopulation(s, d) {
   let residents = DISTRICTS[d].pop;
   for (const id of MAP.districtLots[d]) residents += APT_RESIDENTS[s.lots[id].apt];
-  let tourists = MAP.tourists[d] * s.touristMult;
-  for (const e of s.events) if (e.district === d && e.tourists) tourists += e.tourists;
-  return { residents, tourists };
+  return { residents, tourists: touristsIn(s, d) };
 }
-
 function segments(s, d) {
   const { residents, tourists } = districtPopulation(s, d);
   const m = DISTRICTS[d].mix;
   return [residents * m[0], residents * m[1], residents * m[2], tourists];
 }
 
-export function capacity(b) {
-  return b.staff * BIZ[b.type].cap * FIT_LEVELS[b.fit].cap;
-}
-
-// Splits one hour of demand between open businesses.
-// pools: optional Set of districts to evaluate; onlyType: optional business id.
+// Analytic forecaster: the expected split of one hour of demand between
+// open businesses. Citizens make the real decisions; this predicts them
+// closely enough for the build menu, the price forecast and the AI.
 // Returns Map lotId -> customers (before the capacity cap).
 export function allocate(s, h, pools = null, onlyType = null) {
+  const tech = techOf(s);
   const byType = {};
   for (const l of s.lots) {
     const b = l.business;
-    if (!b || (onlyType && b.type !== onlyType)) continue;
-    if (!PROFILE[b.type][h]) continue;
+    if (!b || (onlyType && b.type !== onlyType) || !bizOpen(b, h)) continue;
     (byType[b.type] ||= []).push(l);
   }
   const out = new Map();
   for (let d = 0; d < DISTRICTS.length; d++) {
     if (pools && !pools.has(d)) continue;
     const seg = segments(s, d);
-    const total = seg[0] + seg[1] + seg[2] + seg[3];
-    const el = ELASTICITY_BASE * (seg[0] * SEG_ELASTICITY[0] + seg[1] * SEG_ELASTICITY[1] +
-      seg[2] * SEG_ELASTICITY[2] + seg[3] * SEG_ELASTICITY[3]) / total;
     const neigh = MAP.neighbours[d];
     for (const type in byType) {
+      if (!tech.biz.has(type)) continue;
       const def = BIZ[type];
-      const demand = (seg[0] * def.app[0] + seg[1] * def.app[1] + seg[2] * def.app[2] + seg[3] * def.app[3]) /
-        1000 * DEMAND_SCALE * PROFILE[type][h] * modFor(s, def);
-      if (demand <= 0) continue;
-      let sum = 0;
-      const ws = [];
-      for (const l of byType[type]) {
-        const n = neigh.find(x => x.d === l.district);
-        if (!n) { ws.push(0); continue; }
-        const b = l.business;
-        const a = n.w * FIT_LEVELS[b.fit].appeal * Math.pow(1 / PRICE_TIERS[b.tier].mult, el);
-        ws.push(a);
-        sum += a;
+      const k = DEMAND_SCALE * NAT[type][h] * modFor(s, def) / 1000;
+      // Each wealth group weighs price differently, so split them.
+      for (let g = 0; g < 4; g++) {
+        const demand = seg[g] * def.app[g] * k;
+        if (demand <= 0) continue;
+        const el = ELASTICITY_BASE * SEG_ELASTICITY[g];
+        let sum = 0;
+        const ws = [];
+        for (const l of byType[type]) {
+          const n = neigh.find(x => x.d === l.district);
+          if (!n) { ws.push(0); continue; }
+          const a = n.w * appeal(l.business) * Math.pow(1 / l.business.price, el);
+          ws.push(a);
+          sum += a;
+        }
+        if (sum <= 0) continue;
+        const denom = OUTSIDE_WEIGHT + sum;
+        byType[type].forEach((l, i) => {
+          if (ws[i] > 0) out.set(l.id, (out.get(l.id) || 0) + demand * ws[i] / denom);
+        });
       }
-      if (sum <= 0) continue;
-      const denom = OUTSIDE_WEIGHT + sum;
-      byType[type].forEach((l, i) => {
-        if (ws[i] > 0) out.set(l.id, (out.get(l.id) || 0) + demand * ws[i] / denom);
-      });
     }
   }
   return out;
-}
-
-function modFor(s, def) {
-  const m = s.mods;
-  return (m.all || 1) * (m[def.id] || 1) * (m[def.group] || 1);
 }
 
 function refreshMods(s) {
   const m = {};
   const mul = (k, v) => { m[k] = (m[k] || 1) * v; };
   const dow = (s.day - 1) % 7;
-  if (dow >= 5) { mul('club', 1.35); mul('bistro', 1.25); mul('cinema', 1.3); mul('boutique', 1.2); mul('gadget', 1.15); mul('gym', 0.85); mul('cafe', 0.95); }
+  if (dow >= 5) { mul('club', 1.35); mul('bistro', 1.25); mul('cinema', 1.3); mul('boutique', 1.2); mul('gadget', 1.15); mul('arcade', 1.3); mul('gym', 0.85); mul('cafe', 0.95); }
   if (dow === 4) { mul('club', 1.2); mul('bistro', 1.12); }
   let tm = 1;
   for (const e of s.events) {
@@ -318,36 +218,44 @@ function refreshMods(s) {
   s.touristMult = tm;
 }
 
-// What would this business make per day, right now?
-// Temporarily installs it on the lot, runs 24 hours of allocation, restores.
+// A new business's default settings.
+export function newBizConfig(def) {
+  return { price: 1, staff: 3, fit: 1, ...defaultHours(def) };
+}
+
+// What would this business make per day, right now? Temporarily installs
+// it on the lot, runs 24 hours of the forecaster, restores. cfg overrides
+// price / staff / fit / from / len.
 export function estimate(s, lotId, type, ownerId, cfg = {}) {
   const lot = s.lots[lotId];
   const saved = lot.business;
   const def = BIZ[type];
+  const base = saved && saved.type === type ? saved : newBizConfig(def);
   const b = {
-    type, owner: ownerId,
-    tier: cfg.tier ?? saved?.tier ?? 2,
-    staff: cfg.staff ?? saved?.staff ?? 3,
-    fit: cfg.fit ?? saved?.fit ?? 1,
+    type, owner: ownerId, rep: saved?.type === type ? saved.rep : 1,
+    price: cfg.price ?? base.price, staff: cfg.staff ?? base.staff, fit: cfg.fit ?? base.fit,
+    from: cfg.from ?? base.from, len: cfg.len ?? base.len,
   };
   lot.business = b;
   const pools = new Set(MAP.neighbours[lot.district].map(n => n.d));
-  const cap = capacity(b);
+  // Real customers arrive in rushes, not a smooth stream: plan for headroom.
+  const cap = capacity(b) * 0.8;
   let cust = 0, lost = 0, hours = 0;
   for (let h = 0; h < 24; h++) {
-    if (!PROFILE[type][h]) continue;
+    if (!bizOpen(b, h)) continue;
     hours++;
     const c = allocate(s, h, pools, type).get(lotId) || 0;
     cust += Math.min(c, cap);
     lost += Math.max(0, c - cap);
   }
   lot.business = saved;
-  const rev = cust * def.ticket * PRICE_TIERS[b.tier].mult;
-  const goods = cust * def.ticket * def.stock;
+  const rev = cust * def.ticket * b.price;
+  // Goods sold, plus a little waste on perishables.
+  const goods = cust * unitCost(def) * (1 + def.perish * 0.15);
   const wages = b.staff * def.wage * hours;
   const rent = lot.owner === ownerId ? 0 : rentFor(s, lot);
   const overhead = OVERHEAD_BASE + def.cost * OVERHEAD_RATE;
-  return { cust, lost, rev, goods, wages, rent, overhead, profit: rev - goods - wages - rent - overhead };
+  return { cust, lost, rev, goods, wages, rent, overhead, hours, profit: rev - goods - wages - rent - overhead };
 }
 
 // ------------------------------------------------------------ clock ----
@@ -357,44 +265,62 @@ export function stepHour(s, hooks = {}) {
   runHour(s, s.hour);
   s.hour = (s.hour + 1) % 24;
   if (s.hour === 0) endOfDay(s, hooks);
+  checkGoals(s);
   if (!s.over && hooks.onHour) hooks.onHour(s);
 }
 
+function freshBizDay() { return { cust: 0, turned: 0, rev: 0, cost: 0, peak: 0, rent: 0, waste: 0, delivered: 0, outHours: 0 }; }
+
+export function deliver(s, lot) {
+  const b = lot.business, def = BIZ[b.type];
+  const target = b.autoStock ? autoTarget(b) : b.stockTarget;
+  const order = Math.max(0, Math.round(target - b.stock));
+  if (!order) return 0;
+  const cost = order * unitCost(def) * (b.autoStock ? 1 + AUTO_STOCK_PREMIUM : 1);
+  ledger(s.players[b.owner], 'goods', -cost);
+  b.stock += order;
+  b.today.cost += cost;
+  b.today.delivered += order;
+  return cost;
+}
+export function autoTarget(b) {
+  const y = b.yesterday;
+  const base = y ? y.cust + y.turned * 0.5 : b.stockTarget;
+  return Math.max(16, Math.round(base * 1.15 / 4) * 4);
+}
+
 export function runHour(s, h) {
-  const alloc = allocate(s, h);
+  if (h === DELIVERY_HOUR) for (const l of s.lots) if (l.business) deliver(s, l);
+  const visits = citizensHour(s, h);
   s.lastHour = {};
   for (const l of s.lots) {
     const b = l.business;
-    if (!b || !PROFILE[b.type][h]) continue;
+    if (!b || !bizOpen(b, h)) continue;
     const def = BIZ[b.type];
     const p = s.players[b.owner];
-    const cap = capacity(b);
-    const want = alloc.get(l.id) || 0;
-    const c = Math.min(want, cap);
-    const rev = c * def.ticket * PRICE_TIERS[b.tier].mult;
-    const goods = c * def.ticket * def.stock;
+    const v = visits.get(l.id) || { cust: 0, turned: 0 };
+    const rev = v.cust * def.ticket * b.price;
     const wages = b.staff * def.wage;
     ledger(p, 'sales', rev);
-    ledger(p, 'goods', -goods);
     ledger(p, 'wages', -wages);
     const t = b.today;
-    t.cust += c; t.lost += Math.max(0, want - c);
-    t.rev += rev; t.cost += goods + wages;
-    t.peak = Math.max(t.peak, want / cap);
-    s.cityCustomersToday += c;
-    s.lastHour[l.id] = rev - goods - wages;
+    t.cust += v.cust; t.turned += v.turned;
+    t.rev += rev; t.cost += wages;
+    t.peak = Math.max(t.peak, (v.cust + v.turned) / capacity(b));
+    if (b.stock < 4) t.outHours++;
+    s.cityCustomersToday += v.cust;
+    s.lastHour[l.id] = rev - wages;
   }
 }
 
-function freshBizDay() { return { cust: 0, lost: 0, rev: 0, cost: 0, peak: 0, rent: 0 }; }
-
 function endOfDay(s, hooks) {
   const P = s.players;
-  // Ground rent, overheads.
+  // Ground rent, overheads, spoilage and storage.
   let overheadPool = 0;
   for (const l of s.lots) {
     const b = l.business;
     if (!b) continue;
+    const def = BIZ[b.type];
     const tenant = P[b.owner];
     if (l.owner !== b.owner) {
       const r = rentFor(s, l);
@@ -403,10 +329,25 @@ function endOfDay(s, hooks) {
       b.today.cost += r;
       if (l.owner >= 0) ledger(P[l.owner], 'rentIn', r);
     }
-    const o = OVERHEAD_BASE + BIZ[b.type].cost * OVERHEAD_RATE;
+    const o = OVERHEAD_BASE + def.cost * OVERHEAD_RATE;
     ledger(tenant, 'overhead', -o);
     b.today.cost += o;
     overheadPool += o;
+    if (def.perish > 0 && b.stock > 0) {
+      const lost = Math.floor(b.stock * def.perish);
+      b.stock -= lost;
+      b.today.waste = lost;
+    } else if (b.stock > 0) {
+      const hold = b.stock * unitCost(def) * HOLD_COST;
+      ledger(tenant, 'storage', -hold);
+      b.today.cost += hold;
+    }
+    // Reputation follows service: full shelves and short queues build it.
+    const asked = b.today.cust + b.today.turned;
+    if (asked > 0) {
+      const served = b.today.cust / asked;
+      b.rep = Math.max(0.7, Math.min(1.4, (b.rep ?? 1) + 0.1 * (served - 0.85) - (b.price > 1.35 ? 0.008 : 0)));
+    }
   }
   // Utilities take a cut of everyone's bills; stations collect fares.
   for (const p of P) {
@@ -416,9 +357,7 @@ function endOfDay(s, hooks) {
     const stations = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
     if (stations) ledger(p, 'fares', STATION_FARE[stations] * stations * (0.7 + 0.3 * s.touristMult) * (1 + 0.004 * (s.day - 1)));
   }
-  // Apartment rents.
   for (const l of s.lots) if (l.apt > 0 && l.owner >= 0) ledger(P[l.owner], 'aptRent', aptRentFor(s, l));
-  // Interest.
   for (const p of P) if (p.loan > 0) ledger(p, 'interest', -p.loan * LOAN_RATE);
 
   // Close the books on the day.
@@ -432,29 +371,41 @@ function endOfDay(s, hooks) {
   }
   s.cityCustomersYesterday = s.cityCustomersToday;
   s.cityCustomersToday = 0;
+  s.cz.visitsToday = 0;
+  for (const ch of s.chatter) for (const k in ch) { ch[k] *= 0.5; if (ch[k] < 4) delete ch[k]; }
 
   if (hooks.onDay) hooks.onDay(s);   // AI reprices, trades, liquidates
 
   for (const p of P) {
     p.yesterday = p.today;
     p.today = {};
-    const nw = netWorth(s, p.id);
-    p.worthHist.push(nw);
-    if (p.worthHist.length > 120) p.worthHist.shift();
+    p.worthHist.push(netWorth(s, p.id));
+    if (p.worthHist.length > 150) p.worthHist.shift();
   }
 
+  const yearBefore = yearOf(s);
   s.day++;
+  if (yearOf(s) !== yearBefore) newYear(s);
   solvency(s);
   tickEvents(s);
   refreshMods(s);
+  syncTourists(s);
   checkEnd(s);
+}
+
+function newYear(s) {
+  const y = yearOf(s);
+  for (const t of TECH) if (t.year === y) news(s, `📅 ${y}: ${t.text}`, 'tech');
+  const era = eraName(y);
+  if (eraName(y - 1) !== era) news(s, `A new era dawns: the ${era}.`, 'tech');
+  // Shops get their era-appropriate names as fashions change.
+  for (const def of BUSINESSES) for (const [yr, nm] of def.names) if (yr === y && yr !== def.year) news(s, `${y}: the ${bizName(def, y - 1)} is now the ${nm}.`, 'info');
 }
 
 function solvency(s) {
   for (const p of s.players) {
     if (p.bankrupt) continue;
     if (p.cash >= 0) { p.debtDays = 0; continue; }
-    // The bank covers the gap if it can.
     const room = loanLimit(s, p.id) - p.loan;
     const need = Math.ceil(-p.cash / LOAN_STEP) * LOAN_STEP;
     if (room >= need) {
@@ -472,19 +423,27 @@ export function bankrupt(s, p) {
   p.bankrupt = true;
   for (const l of s.lots) {
     if (l.business && l.business.owner === p.id) l.business = null;
-    if (l.owner === p.id) { l.owner = -1; l.apt = 0; l.aptInvested = 0; }
+    if (l.owner === p.id) { returnToCity(s, l); }
   }
   s.offers = s.offers.filter(o => o.from !== p.id);
-  news(s, `${p.company} has gone bankrupt! Its land returns to the city.`, 'bad', p.id);
+  syncResidents(s);
+  news(s, `${p.company} has gone bankrupt! Its land goes back on the auction block.`, 'bad', p.id);
+}
+
+function returnToCity(s, lot) {
+  lot.owner = -1; lot.apt = 0; lot.aptInvested = 0;
+  if (!s.auctionQueue.includes(lot.id)) s.auctionQueue.push(lot.id);
 }
 
 function tickEvents(s) {
   for (const e of s.events) e.left--;
   s.events = s.events.filter(e => e.left > 0);
   if (s.events.length < 2 && rand(s) < 0.5) {
-    const total = EVENTS.reduce((a, e) => a + e.weight, 0);
-    let r = rand(s) * total, def = EVENTS[0];
-    for (const e of EVENTS) { r -= e.weight; if (r <= 0) { def = e; break; } }
+    const y = yearOf(s);
+    const pool = EVENTS.filter(e => (!e.from || y >= e.from) && (!e.to || y <= e.to));
+    const total = pool.reduce((a, e) => a + e.weight, 0);
+    let r = rand(s) * total, def = pool[0];
+    for (const e of pool) { r -= e.weight; if (r <= 0) { def = e; break; } }
     if (s.events.some(e => e.id === def.id)) return;
     const len = def.days[0] + Math.floor(rand(s) * (def.days[1] - def.days[0] + 1));
     const e = { id: def.id, left: len, district: -1, tourists: def.tourists || 0 };
@@ -495,19 +454,54 @@ function tickEvents(s) {
   }
 }
 
+// ------------------------------------------------------------ goals ----
+export function goalProgress(s, g) {
+  const me = 0;
+  const own = s.lots.filter(l => l.owner === me);
+  const v = ({
+    biz: () => s.lots.filter(l => l.business && l.business.owner === me).length,
+    lots: () => own.length,
+    sets: () => setsOwned(s, me),
+    apt: () => own.reduce((a, l) => a + l.apt, 0),
+    tower: () => own.filter(l => l.apt === MAX_APT).length,
+    worth: () => netWorth(s, me),
+    profit: () => operating(s.players[me].yesterday),
+    customers: () => s.lots.filter(l => l.business && l.business.owner === me)
+      .reduce((a, l) => a + (l.business.yesterday ? l.business.yesterday.cust : 0), 0),
+    stations: () => own.filter(l => l.kind === 'station').length,
+  })[g.type]();
+  return Math.round(v);
+}
+export const goalText = g => GOAL_TEXT[g.type](g.n);
+
+function checkGoals(s) {
+  if (s.over || !s.goals.length) return;
+  for (const g of s.goals) {
+    if (g.done) continue;
+    if (goalProgress(s, g) >= g.n) {
+      g.done = true; g.doneDay = s.day;
+      news(s, `🎯 Goal complete: ${goalText(g)}!`, 'goal');
+    } else if (s.day > g.by) {
+      return finish(s, -1, `You missed a goal: "${goalText(g)}" by day ${g.by}.`);
+    }
+  }
+  if (s.goals.every(g => g.done)) finish(s, 0, `Every milestone met. ${SCENARIOS[s.scenario].name} complete!`);
+}
+
 function checkEnd(s) {
   const sc = SCENARIOS[s.scenario];
   const me = s.players[0];
   if (me.bankrupt) return finish(s, -1, 'You went bankrupt.');
   const alive = s.players.filter(p => !p.bankrupt);
-  if (alive.length === 1) return finish(s, alive[0].id, 'Every rival has gone bust.');
-  if (!sc.goal) return;
+  if (alive.length === 1 && sc.mode === 'race') return finish(s, alive[0].id, 'Every rival has gone bust.');
+  if (sc.mode !== 'race') return;
   const worth = s.players.map(p => p.bankrupt ? -Infinity : netWorth(s, p.id));
   const best = worth.indexOf(Math.max(...worth));
   if (worth[best] >= sc.goal) return finish(s, best, `${s.players[best].company} reached ${money(sc.goal)} first.`);
   if (s.day > sc.days) return finish(s, best, `Time is up after ${sc.days} days. Richest tycoon wins.`);
 }
 function finish(s, winner, reason) {
+  if (s.over) return;
   s.over = true; s.winner = winner; s.endReason = reason;
 }
 
@@ -515,17 +509,30 @@ function finish(s, winner, reason) {
 // Every action returns { ok, msg } so the UI and the AI share the same rules.
 const fail = msg => ({ ok: false, msg });
 
-export function buyLand(s, pid, lotId) {
+// Hands a lot to its auction winner.
+export function grantLand(s, pid, lotId, price) {
   const p = s.players[pid], lot = s.lots[lotId];
-  if (lot.owner !== -1) return fail('Not for sale by the city.');
-  const price = landValue(s, lot);
-  if (p.cash < price) return fail(`Need ${money(price)}.`);
   ledger(p, 'capex', -price);
   lot.owner = pid;
+  lot.unsold = 0;
+  s.auctionQueue = s.auctionQueue.filter(id => id !== lotId);
   const done = lot.kind === 'prop' && ownsSet(s, pid, lot.district);
-  news(s, `${p.company} bought ${lot.name} for ${money(price)}.` +
+  news(s, `🔨 ${p.company} won ${lot.name} at auction for ${money(price)}.` +
     (done ? ` That completes the ${DISTRICTS[lot.district].name} set!` : ''), done ? 'set' : 'deal', pid);
-  return { ok: true, msg: done ? `Set complete: ${DISTRICTS[lot.district].name}!` : `Bought ${lot.name}.`, setComplete: done };
+  return done;
+}
+
+// Ask the city to put a lot up next.
+export function petition(s, lotId) {
+  const lot = s.lots[lotId];
+  if (lot.owner !== -1) return fail('That lot is not the city\'s to sell.');
+  s.auctionQueue = [lotId, ...s.auctionQueue.filter(id => id !== lotId)];
+  return { ok: true, msg: `${lot.name} goes under the hammer at the next auction.` };
+}
+export function nextAuctionSlot(s) {
+  const slots = [9, 13, 17];
+  const h = slots.find(x => x > s.hour) ?? slots[0];
+  return { hour: h, tomorrow: h <= s.hour };
 }
 
 export function sellLand(s, pid, lotId) {
@@ -533,9 +540,10 @@ export function sellLand(s, pid, lotId) {
   if (lot.owner !== pid) return fail('You do not own this.');
   const value = Math.round(landValue(s, lot) * SELL_LAND_RATE + lot.aptInvested * 0.5);
   ledger(p, 'capex', value);
-  lot.owner = -1; lot.apt = 0; lot.aptInvested = 0;
+  returnToCity(s, lot);
+  syncResidents(s);
   s.offers = s.offers.filter(o => o.lotId !== lotId);
-  news(s, `${p.company} sold ${lot.name} back to the city.`, 'deal', pid);
+  news(s, `${p.company} sold ${lot.name} back to the city. It will be auctioned again.`, 'deal', pid);
   return { ok: true, msg: `Sold for ${money(value)}.` };
 }
 
@@ -547,63 +555,105 @@ export function canBuild(s, lotId) {
 export function build(s, pid, lotId, type, cfg = {}) {
   const p = s.players[pid], lot = s.lots[lotId], def = BIZ[type];
   if (!canBuild(s, lotId)) return fail('Lot is not free.');
+  if (!techOf(s).biz.has(type)) return fail(`Not invented yet: arrives in ${def.year}.`);
   if (p.cash < def.cost) return fail(`Need ${money(def.cost)}.`);
+  const conf = { ...newBizConfig(def), ...cfg };
+  const est = estimate(s, lotId, type, pid, conf);
   ledger(p, 'capex', -def.cost);
   lot.business = {
-    type, owner: pid, tier: cfg.tier ?? 2, staff: cfg.staff ?? 3, fit: 1,
+    type, owner: pid, ...conf, rep: 1,
+    stock: 0, stockTarget: Math.max(16, Math.round(est.cust * 0.9 / 4) * 4), autoStock: cfg.autoStock ?? true,
     invested: def.cost, opened: s.day, today: freshBizDay(), yesterday: null, hist: [],
   };
-  news(s, `${p.company} opened a ${def.name} on ${lot.name}.`, 'build', pid);
-  return { ok: true, msg: `${def.name} is open for business!` };
+  deliver(s, lot);                       // opening stock arrives with the builders
+  news(s, `${p.company} opened a ${bizLabel(s, type)} on ${lot.name}.`, 'build', pid);
+  return { ok: true, msg: `${bizLabel(s, type)} is open for business!` };
 }
 
 export function sellBusiness(s, pid, lotId) {
   const p = s.players[pid], lot = s.lots[lotId], b = lot.business;
   if (!b || b.owner !== pid) return fail('Not your business.');
-  const v = Math.round(b.invested * SELL_BIZ_RATE);
+  const v = Math.round(b.invested * SELL_BIZ_RATE + b.stock * unitCost(BIZ[b.type]) * 0.5);
   ledger(p, 'capex', v);
   lot.business = null;
-  news(s, `${p.company} closed its ${BIZ[b.type].name} on ${lot.name}.`, 'deal', pid);
-  return { ok: true, msg: `Sold the fittings for ${money(v)}.` };
+  news(s, `${p.company} closed its ${bizLabel(s, b.type)} on ${lot.name}.`, 'deal', pid);
+  return { ok: true, msg: `Sold the fittings and stock for ${money(v)}.` };
 }
 
-export function setTier(s, pid, lotId, tier) {
+const mine = (s, pid, lotId) => {
   const b = s.lots[lotId].business;
-  if (!b || b.owner !== pid) return fail('Not your business.');
-  b.tier = Math.max(0, Math.min(PRICE_TIERS.length - 1, tier));
+  return b && b.owner === pid ? b : null;
+};
+export function setPrice(s, pid, lotId, price) {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  b.price = Math.round(Math.max(PRICE_MIN, Math.min(PRICE_MAX, price)) * 100) / 100;
   return { ok: true };
 }
 export function setStaff(s, pid, lotId, staff) {
-  const b = s.lots[lotId].business;
-  if (!b || b.owner !== pid) return fail('Not your business.');
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
   b.staff = Math.max(1, Math.min(MAX_STAFF, staff));
   return { ok: true };
 }
+export function setHours(s, pid, lotId, from, len) {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  b.from = ((from % 24) + 24) % 24;
+  b.len = Math.max(2, Math.min(24, len));
+  return { ok: true };
+}
+export function setStock(s, pid, lotId, target, auto) {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  if (auto !== undefined) b.autoStock = auto;
+  if (target !== undefined) b.stockTarget = Math.max(0, Math.min(5000, Math.round(target)));
+  return { ok: true };
+}
+// Emergency delivery right now, at a 25% rush premium.
+export function rushDelivery(s, pid, lotId) {
+  const b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
+  const def = BIZ[b.type];
+  const target = b.autoStock ? autoTarget(b) : b.stockTarget;
+  const order = Math.max(0, Math.round(target - b.stock));
+  if (!order) return fail('Shelves are already full.');
+  const cost = order * unitCost(def) * 1.25;
+  if (s.players[pid].cash < cost) return fail(`Need ${money(cost)}.`);
+  ledger(s.players[pid], 'goods', -cost);
+  b.stock += order;
+  b.today.cost += cost;
+  return { ok: true, msg: `Rush delivery: ${order} units for ${money(cost)}.` };
+}
+
 export function fitCost(b) {
   if (b.fit >= FIT_LEVELS.length - 1) return 0;
   const def = BIZ[b.type];
   return Math.round(def.cost * (FIT_LEVELS[b.fit + 1].costMult - FIT_LEVELS[b.fit].costMult) / 100) * 100;
 }
 export function upgradeFit(s, pid, lotId) {
-  const p = s.players[pid], b = s.lots[lotId].business;
-  if (!b || b.owner !== pid) return fail('Not your business.');
+  const p = s.players[pid], b = mine(s, pid, lotId);
+  if (!b) return fail('Not your business.');
   const c = fitCost(b);
   if (!c) return fail('Already a flagship.');
+  if (b.fit + 1 > techOf(s).fit) return fail(`${FIT_LEVELS[b.fit + 1].name} fit-outs arrive in ${FIT_LEVELS[b.fit + 1].year}.`);
   if (p.cash < c) return fail(`Need ${money(c)}.`);
   ledger(p, 'capex', -c);
   b.fit++; b.invested += c;
   return { ok: true, msg: `Refitted to ${FIT_LEVELS[b.fit].name}.` };
 }
 
-// Apartments: whole colour set required, built evenly across the set.
+// Apartments: any lot you own. Completing the colour set doubles their rent.
 export function aptCheck(s, pid, lotId) {
   const lot = s.lots[lotId];
   if (lot.kind !== 'prop') return fail('Only district lots take apartments.');
   if (lot.owner !== pid) return fail('You must own the land.');
-  if (!ownsSet(s, pid, lot.district)) return fail(`Own all of ${DISTRICTS[lot.district].name} first.`);
   if (lot.apt >= MAX_APT) return fail('Already a Skyline Tower.');
-  const min = Math.min(...MAP.districtLots[lot.district].map(id => s.lots[id].apt));
-  if (lot.apt > min) return fail('Build evenly: raise the other lots in this colour first.');
+  const maxNow = techOf(s).apt;
+  if (lot.apt >= maxNow) {
+    const next = TECH.find(t => t.apt === lot.apt + 1);
+    return fail(`Building any higher needs new technology${next ? ` (${next.year})` : ''}.`);
+  }
   return { ok: true, cost: aptCost(lot, lot.apt + 1) };
 }
 export function buildApt(s, pid, lotId) {
@@ -613,6 +663,7 @@ export function buildApt(s, pid, lotId) {
   if (p.cash < chk.cost) return fail(`Need ${money(chk.cost)}.`);
   ledger(p, 'capex', -chk.cost);
   lot.apt++; lot.aptInvested += chk.cost;
+  syncResidents(s);
   if (lot.apt === MAX_APT) news(s, `${p.company} topped out a Skyline Tower on ${lot.name}!`, 'set', pid);
   else if (!p.human) news(s, `${p.company} added apartments on ${lot.name}.`, 'build', pid);
   return { ok: true, msg: lot.apt === MAX_APT ? 'Skyline Tower complete!' : `Now ${lot.apt * 2} floors of apartments.` };
@@ -620,24 +671,22 @@ export function buildApt(s, pid, lotId) {
 export function sellApt(s, pid, lotId) {
   const p = s.players[pid], lot = s.lots[lotId];
   if (lot.owner !== pid || lot.apt <= 0) return fail('Nothing to demolish.');
-  const max = Math.max(...MAP.districtLots[lot.district].map(id => s.lots[id].apt));
-  if (lot.apt < max) return fail('Demolish evenly: take the tallest lot down first.');
   const c = aptCost(lot, lot.apt);
   ledger(p, 'capex', Math.round(c * 0.5));
   lot.apt--; lot.aptInvested = Math.max(0, lot.aptInvested - c);
+  syncResidents(s);
   return { ok: true, msg: `Sold one level for ${money(c * 0.5)}.` };
 }
 
-// How much an owner wants for a lot. AI sellers use this; it is also what
-// the UI shows as "they'd take about...".
+// How much an owner wants for a lot (rival sellers use this).
 export function askingPrice(s, sellerId, lotId, buyerId) {
   const lot = s.lots[lotId];
   let v = landValue(s, lot) + lot.aptInvested * 0.9;
   if (lot.kind === 'prop') {
     const n = MAP.districtLots[lot.district].length;
-    const mine = setCount(s, sellerId, lot.district);
-    if (mine === n) v *= 3.0;
-    else if (mine >= 2) v *= 1.6;
+    const have = setCount(s, sellerId, lot.district);
+    if (have === n) v *= 3.0;
+    else if (have >= 2) v *= 1.6;
     if (setCount(s, buyerId, lot.district) === n - 1) v *= 1.75;
   } else if (lot.kind === 'station') {
     v *= 1 + 0.3 * s.lots.filter(l => l.kind === 'station' && l.owner === sellerId).length;
@@ -659,7 +708,6 @@ export function transfer(s, buyerId, sellerId, lotId, amount) {
   return done;
 }
 
-// The human bids on a rival's lot.
 export function makeOffer(s, buyerId, lotId, amount) {
   const lot = s.lots[lotId], buyer = s.players[buyerId];
   if (lot.owner < 0 || lot.owner === buyerId) return fail('Nobody to buy from.');
@@ -668,7 +716,7 @@ export function makeOffer(s, buyerId, lotId, amount) {
   const seller = s.players[lot.owner];
   if (amount >= ask) {
     const done = transfer(s, buyerId, lot.owner, lotId, amount);
-    return { ok: true, msg: done ? `Deal! ${DISTRICTS[lot.district].name} set complete!` : `${seller.name} accepts. ${lot.name} is yours.` };
+    return { ok: true, setComplete: done, msg: done ? `Deal! ${DISTRICTS[lot.district].name} set complete!` : `${seller.name} accepts. ${lot.name} is yours.` };
   }
   return { ok: false, counter: ask, msg: `${seller.name} declines. "I'd want ${money(ask)} for that."` };
 }
@@ -714,11 +762,13 @@ export function money(v) {
   return (neg ? '−' : '') + str;
 }
 
+// Citizens are rebuilt on load rather than saved: it keeps saves small.
 export function serialize(s) {
-  return JSON.stringify(s);
+  return JSON.stringify(s, (k, v) => (k === 'cz' ? undefined : v));
 }
 export function deserialize(json) {
   const s = JSON.parse(json);
-  if (!s || s.v !== 1 || !Array.isArray(s.lots)) throw new Error('bad save');
+  if (!s || s.v !== 2 || !Array.isArray(s.lots)) throw new Error('bad save');
+  buildCitizens(s);
   return s;
 }

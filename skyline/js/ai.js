@@ -2,38 +2,26 @@
 // the human: every move goes through the action functions in sim.js.
 //
 // Each rival thinks every few game hours. It scores every move it could
-// make (open a business, buy land, finish a colour set, build apartments,
-// buy a station or utility) as expected daily return on the cash spent,
-// tilts the scores by personality and takes the best one it can afford.
-// Once a day it re-prices and re-staffs its shops, sells losers, and may
-// try to buy the last lot it needs to complete a colour set.
+// make (open a business, build apartments, refit a busy shop) as expected
+// daily return on the cash spent, tilts the scores by personality and takes
+// the best one it can afford. Once a day it re-prices, re-staffs and
+// re-times its shops, sells losers, and may try to buy the last lot it needs
+// to complete a colour set. At auctions it bids up to what the lot is worth
+// to it: more if it completes a set or blocks a rival's.
 
-import { BUSINESSES, BIZ, DISTRICTS, DIFFICULTY, PRICE_TIERS, FIT_LEVELS, MAX_STAFF, STATION_FARE, UTILITY_CUT,
-  OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, APT_RESIDENTS, LOAN_STEP } from './data.js';
+import { BUSINESSES, BIZ, DISTRICTS, DIFFICULTY, MAX_STAFF, STATION_FARE, UTILITY_CUT,
+  OVERHEAD_BASE, OVERHEAD_RATE, APT_RESIDENTS, LOAN_STEP, PRICE_MIN, PRICE_MAX } from './data.js';
 import {
-  MAP, rand, estimate, landValue, rentFor, ownsSet, setCount, netWorth, buyLand, build, setTier, setStaff,
-  sellBusiness, upgradeFit, fitCost, aptCheck, buildApt, aptRentFor, askingPrice, transfer, sellLand,
-  loanLimit, takeLoan, repayLoan, stepHour, money, news,
+  MAP, rand, techOf, estimate, landValue, rentFor, ownsSet, setCount, netWorth, build, setPrice, setStaff,
+  setHours, sellBusiness, upgradeFit, fitCost, aptCheck, buildApt, aptRentFor, askingPrice, transfer, sellLand,
+  loanLimit, takeLoan, repayLoan, money, news, newBizConfig,
 } from './sim.js';
 
 const STYLE = {
-  baron:   { build: 0.85, land: 1.6, apt: 1.5, set: 1.6, tiers: [1, 2, 3], fit: 0.5, prefer: [] },
-  cutter:  { build: 1.15, land: 0.8, apt: 0.9, set: 1.0, tiers: [0, 1, 2], fit: 0.3, prefer: ['food'] },
-  premium: { build: 1.0,  land: 1.0, apt: 1.1, set: 1.1, tiers: [2, 3, 4], fit: 1.6, prefer: ['retail', 'leisure'] },
+  baron:   { build: 0.85, land: 1.35, apt: 1.5, set: 1.6, price: [0.9, 1.25],  start: 1.0,  fit: 0.5, prefer: [] },
+  cutter:  { build: 1.15, land: 0.85, apt: 0.9, set: 1.0, price: [0.65, 1.0],  start: 0.85, fit: 0.3, prefer: ['food'] },
+  premium: { build: 1.0,  land: 0.85, apt: 1.0, set: 1.0, price: [1.0, 1.45],  start: 1.15, fit: 1.3, prefer: ['retail', 'leisure'] },
 };
-
-// Advances the whole game, AI included. This is what the UI calls.
-export function advanceGame(s, hours) {
-  s.t += hours;
-  let steps = 0;
-  while (s.t >= 1 && !s.over && steps < 48) {
-    s.t -= 1; steps++;
-    stepHour(s, HOOKS);
-  }
-  if (steps >= 48) s.t = 0;
-  return steps;
-}
-export const HOOKS = { onHour: aiHour, onDay: aiDay };
 
 export function aiHour(s) {
   const think = DIFFICULTY[s.difficulty].think;
@@ -50,62 +38,36 @@ export function aiDay(s) {
     liquidity(s, p);
     if (rand(s) < 0.45) tradeForSets(s, p);
   }
-  // Offers to the human expire after a day.
   s.offers = s.offers.filter(o => o.expires > s.day);
 }
 
-// ------------------------------------------------------------ think ----
-function reserveFor(s, p) {
+export function reserveFor(s, p) {
   return 3000 + 0.04 * Math.max(0, netWorth(s, p.id));
 }
 
+// ------------------------------------------------------------ think ----
 function think1(s, p) {
   const st = STYLE[p.style];
   const reserve = reserveFor(s, p);
+  const tech = techOf(s);
   const moves = [];
 
-  // Open a business: every free lot x every business type.
+  // Open a business: every free lot x every invented business type.
   const free = s.lots.filter(l => l.kind === 'prop' && !l.business);
   for (const lot of free) {
     for (const def of BUSINESSES) {
-      const tier = st.tiers[1];
-      const e = estimate(s, lot.id, def.id, p.id, { tier, staff: 3 });
+      if (!tech.biz.has(def.id)) continue;
+      const cfg = { price: st.start, staff: 3 };
+      const e = estimate(s, lot.id, def.id, p.id, cfg);
       if (e.profit <= 0) continue;
       let roi = e.profit / def.cost * st.build;
       if (st.prefer.includes(def.group)) roi *= 1.2;
-      // Building on your own land is worth a little extra (it lifts its value).
       if (lot.owner === p.id) roi *= 1.1;
-      moves.push({ roi, cost: def.cost, run: () => build(s, p.id, lot.id, def.id, { tier, staff: 3 }) });
+      moves.push({ roi, cost: def.cost, run: () => build(s, p.id, lot.id, def.id, cfg) });
     }
   }
 
-  // Buy land from the city.
-  for (const lot of s.lots) {
-    if (lot.owner !== -1) continue;
-    const price = landValue(s, lot);
-    let gain = price * LAND_GROWTH_DAY;          // appreciation
-    if (lot.kind === 'prop') {
-      const n = MAP.districtLots[lot.district].length;
-      const mine = setCount(s, p.id, lot.district);
-      const others = MAP.districtLots[lot.district].some(id => s.lots[id].owner >= 0 && s.lots[id].owner !== p.id);
-      if (lot.business) gain += rentFor(s, lot);
-      if (mine === n - 1) gain += price * 0.05 * st.set;               // completes a set
-      else if (!others) gain += price * 0.012 * (mine + 1) * st.set;     // still collectable
-      // Block a rival who is one lot away from a set.
-      for (const q of s.players) if (q.id !== p.id && !q.bankrupt && setCount(s, q.id, lot.district) === n - 1) gain += price * 0.02;
-      gain *= st.land;
-    } else if (lot.kind === 'station') {
-      const k = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
-      gain += STATION_FARE[k + 1] * (k + 1) - STATION_FARE[k] * k;
-    } else {
-      const k = s.lots.filter(l => l.kind === 'utility' && l.owner === p.id).length;
-      const pool = s.lots.reduce((a, l) => a + (l.business ? OVERHEAD_BASE + BIZ[l.business.type].cost * OVERHEAD_RATE : 0), 0);
-      gain += pool * (UTILITY_CUT[k + 1] * (k + 1) - UTILITY_CUT[k] * k);
-    }
-    moves.push({ roi: gain / price, cost: price, run: () => buyLand(s, p.id, lot.id) });
-  }
-
-  // Apartments on completed sets.
+  // Apartments on land it owns (a full set doubles the rent).
   for (const lot of s.lots) {
     if (lot.owner !== p.id || lot.kind !== 'prop') continue;
     const chk = aptCheck(s, p.id, lot.id);
@@ -113,14 +75,15 @@ function think1(s, p) {
     const before = aptRentFor(s, lot);
     lot.apt++; const after = aptRentFor(s, lot); lot.apt--;
     const residents = APT_RESIDENTS[lot.apt + 1] - APT_RESIDENTS[lot.apt];
-    const gain = (after - before) + residents * 0.25 + rentFor(s, lot) * 0.3 * (lot.business && lot.business.owner !== p.id ? 1 : 0);
-    moves.push({ roi: gain / chk.cost * st.apt, cost: chk.cost, run: () => buildApt(s, p.id, lot.id) });
+    const gain = (after - before) + residents * 0.2 + (lot.business && lot.business.owner !== p.id ? rentFor(s, lot) * 0.2 : 0);
+    const setBonus = ownsSet(s, p.id, lot.district) ? 1.2 : 0.8;
+    moves.push({ roi: gain / chk.cost * st.apt * setBonus, cost: chk.cost, run: () => buildApt(s, p.id, lot.id) });
   }
 
   // Refit a busy shop.
   for (const lot of s.lots) {
     const b = lot.business;
-    if (!b || b.owner !== p.id || !b.yesterday) continue;
+    if (!b || b.owner !== p.id || !b.yesterday || b.fit >= tech.fit) continue;
     const c = fitCost(b);
     if (!c) continue;
     const e0 = estimate(s, lot.id, b.type, p.id, {});
@@ -134,7 +97,6 @@ function think1(s, p) {
   for (const m of moves.slice(0, 6)) {
     if (m.roi < diff.minRoi) break;
     if (p.cash - m.cost >= reserve) { m.run(); return; }
-    // Borrow for a really good move.
     const short = m.cost + reserve - p.cash;
     const room = loanLimit(s, p.id) - p.loan;
     if (diff.borrow && m.roi > 0.06 && short <= room && p.loan < 0.35 * Math.max(1, netWorth(s, p.id))) {
@@ -143,7 +105,6 @@ function think1(s, p) {
       return;
     }
   }
-  // Nothing worth doing: pay down debt with spare cash.
   if (p.loan > 0 && p.cash > reserve * 2 + LOAN_STEP) repayLoan(s, p.id, LOAN_STEP);
 }
 
@@ -153,28 +114,28 @@ function tune(s, p) {
   for (const lot of s.lots) {
     const b = lot.business;
     if (!b || b.owner !== p.id || !b.yesterday) continue;
-    // Staffing: try one more / one fewer and keep the best.
-    let best = { staff: b.staff, tier: b.tier, profit: estimate(s, lot.id, b.type, p.id, {}).profit };
-    for (const ds of [-1, 1]) {
-      const staff = b.staff + ds;
-      if (staff < 1 || staff > MAX_STAFF) continue;
-      const e = estimate(s, lot.id, b.type, p.id, { staff });
-      if (e.profit > best.profit + 5) best = { staff, tier: b.tier, profit: e.profit };
+    let best = { staff: b.staff, price: b.price, len: b.len, profit: estimate(s, lot.id, b.type, p.id, {}).profit };
+    const tryCfg = cfg => {
+      const e = estimate(s, lot.id, b.type, p.id, { staff: best.staff, price: best.price, len: best.len, ...cfg });
+      if (e.profit > best.profit + 5) best = { staff: best.staff, price: best.price, len: best.len, ...cfg, profit: e.profit };
+    };
+    for (const ds of [-1, 1]) if (b.staff + ds >= 1 && b.staff + ds <= MAX_STAFF) tryCfg({ staff: b.staff + ds });
+    for (const dp of [-0.1, 0.1]) {
+      const price = Math.round((b.price + dp) * 100) / 100;
+      if (price >= st.price[0] && price <= st.price[1] && price >= PRICE_MIN && price <= PRICE_MAX) tryCfg({ price });
     }
-    for (const tier of st.tiers) {
-      if (tier === b.tier) continue;
-      const e = estimate(s, lot.id, b.type, p.id, { staff: best.staff, tier });
-      if (e.profit > best.profit + 5) best = { staff: best.staff, tier, profit: e.profit };
-    }
+    for (const dl of [-2, 2]) if (b.len + dl >= 4 && b.len + dl <= 24) tryCfg({ len: b.len + dl });
+    // Queues out of the door trump the spreadsheet: hire.
+    const y = b.yesterday;
+    if (y.turned > 0.1 * (y.cust + y.turned) && best.staff <= b.staff && b.staff < MAX_STAFF) best.staff = b.staff + 1;
     setStaff(s, p.id, lot.id, best.staff);
-    setTier(s, p.id, lot.id, best.tier);
-    // Close a shop that keeps losing money and is expected to keep doing so.
+    setPrice(s, p.id, lot.id, best.price);
+    setHours(s, p.id, lot.id, b.from, best.len);
     const h = b.hist;
     if (h.length >= 4 && h.slice(-4).every(v => v < 0) && best.profit < 0) sellBusiness(s, p.id, lot.id);
   }
 }
 
-// Raise cash if overdrawn: borrow, then sell the worst assets.
 function liquidity(s, p) {
   if (p.cash >= 0) return;
   const room = loanLimit(s, p.id) - p.loan;
@@ -195,7 +156,7 @@ function tradeForSets(s, p) {
     if (setCount(s, p.id, d) !== ids.length - 1) continue;
     const id = ids.find(i => s.lots[i].owner !== p.id);
     const lot = s.lots[id];
-    if (lot.owner < 0) continue;            // city lot: think1 will just buy it
+    if (lot.owner < 0) continue;             // the city's: wait for the auction
     const seller = s.players[lot.owner];
     const value = landValue(s, lot) + lot.aptInvested;
     const budget = Math.min(p.cash - reserveFor(s, p), value * 3.2);
@@ -211,4 +172,41 @@ function tradeForSets(s, p) {
     }
     return;
   }
+}
+
+// ---------------------------------------------------------- auctions ----
+// The most this rival will pay for a lot right now.
+export function aiAuctionMax(s, p, lot) {
+  const st = STYLE[p.style];
+  const diff = DIFFICULTY[s.difficulty];
+  const v = landValue(s, lot);
+  let f = 0.95;
+  if (lot.kind === 'prop') {
+    const ids = MAP.districtLots[lot.district];
+    const n = ids.length;
+    const have = setCount(s, p.id, lot.district);
+    const others = ids.some(id => s.lots[id].owner >= 0 && s.lots[id].owner !== p.id);
+    if (have === n - 1) f += 0.9 * st.set;
+    else if (!others) f += 0.12 * (have + 1) * st.set;
+    for (const q of s.players) if (q.id !== p.id && !q.bankrupt && setCount(s, q.id, lot.district) === n - 1) f += 0.35;
+    // What could it earn with a shop on it?
+    let best = 0;
+    const tech = techOf(s);
+    if (!lot.business) for (const def of BUSINESSES) {
+      if (!tech.biz.has(def.id)) continue;
+      best = Math.max(best, estimate(s, lot.id, def.id, p.id, { price: st.start }).profit);
+    } else if (lot.business.owner !== p.id) best = rentFor(s, lot);
+    f += Math.max(0, Math.min(0.8, best * 10 / v));
+    f *= st.land;
+  } else if (lot.kind === 'station') {
+    const k = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
+    f = 0.7 + (STATION_FARE[k + 1] * (k + 1) - STATION_FARE[k] * k) * 25 / v;
+  } else {
+    const k = s.lots.filter(l => l.kind === 'utility' && l.owner === p.id).length;
+    const pool = s.lots.reduce((a, l) => a + (l.business ? OVERHEAD_BASE + BIZ[l.business.type].cost * OVERHEAD_RATE : 0), 0);
+    f = 0.7 + pool * (UTILITY_CUT[k + 1] * (k + 1) - UTILITY_CUT[k] * k) * 25 / v;
+  }
+  f *= (0.9 + rand(s) * 0.25) * (2 - diff.margin);
+  const budget = p.cash - reserveFor(s, p) + (diff.borrow ? (loanLimit(s, p.id) - p.loan) * 0.3 : 0);
+  return Math.max(0, Math.round(Math.min(v * f, budget) / 500) * 500);
 }
