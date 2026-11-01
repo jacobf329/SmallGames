@@ -10,8 +10,8 @@
 // With liveAuctions off (headless tests) auctions settle instantly.
 
 import { AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, AUCTION_GAP, CALL_COOLDOWN, LOAN_STEP } from './data.js';
-import { rand, landValue, grantLand, news, money, loanLimit, takeLoan } from './sim.js';
-import { aiAuctionMax } from './ai.js';
+import { rand, landValue, grantLand, news, money, loanLimit, takeLoan, MAP } from './sim.js';
+import { aiAuctionMax, sample } from './ai.js';
 
 export const increment = price => Math.max(500, Math.round(price * 0.06 / 500) * 500);
 
@@ -23,13 +23,15 @@ export function minBid(a) {
 }
 
 const nowH = s => s.day * 24 + s.hour;
+// Bigger cities hold auctions more often (6h apart on the Town, 3h on the largest).
+export const auctionGap = () => Math.max(3, Math.round(AUCTION_GAP * Math.sqrt(28 / (MAP.lotDefs?.length || 28))));
 
 // Can this player call an auction on this lot right now?
 export function canCall(s, pid, lotId) {
   const lot = s.lots[lotId], p = s.players[pid];
   if (!lot || lot.owner !== -1) return { ok: false, msg: 'Only city land is auctioned.' };
   if (s.auction) return { ok: false, msg: 'An auction is already running.' };
-  const gap = (s.lastAuctionAt ?? -99) + AUCTION_GAP - nowH(s);
+  const gap = (s.lastAuctionAt ?? -99) + auctionGap() - nowH(s);
   if (gap > 0) return { ok: false, msg: `The auction house reopens in ${gap}h.`, wait: gap };
   const cd = (p.lastCall ?? -99) + CALL_COOLDOWN - nowH(s);
   if (cd > 0) return { ok: false, msg: `You can call another auction in ${cd}h.`, wait: cd };
@@ -53,14 +55,14 @@ export function callAuction(s, pid, lotId) {
 // Rivals call auctions for lots they really want, mostly in office hours.
 export function aiCallAuctions(s) {
   if (s.auction || s.over || s.hour < 8 || s.hour > 20) return;
-  if ((s.lastAuctionAt ?? -99) + AUCTION_GAP > nowH(s)) return;
+  if ((s.lastAuctionAt ?? -99) + auctionGap() > nowH(s)) return;
   const rivals = s.players.filter(p => !p.human && !p.bankrupt);
   for (let i = rivals.length - 1; i > 0; i--) { const j = Math.floor(rand(s) * (i + 1)); [rivals[i], rivals[j]] = [rivals[j], rivals[i]]; }
   for (const p of rivals) {
     if (rand(s) > 0.25) continue;
     let best = null;
-    for (const lot of s.lots) {
-      if (lot.owner !== -1 || !canCall(s, p.id, lot.id).ok) continue;
+    for (const lot of sample(s, s.lots.filter(l => l.owner === -1), 12)) {
+      if (!canCall(s, p.id, lot.id).ok) continue;
       const reserve = reservePrice(s, lot);
       const keen = aiAuctionMax(s, p, lot) / reserve;
       if (keen >= 1.15 && (!best || keen > best.keen)) best = { lot, keen };

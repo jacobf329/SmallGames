@@ -20,8 +20,8 @@ themselves every midnight in the browser.
 
 Up to **4 players** on the same wifi, with AI rivals filling any empty seats.
 Everyone opens the address the server prints, enters a name and taps
-**Join LAN lobby**. The first person in is the host and picks the scenario
-and difficulty. The server runs the one shared city: everyone bids in the
+**Join LAN lobby**. The first person in is the host and picks the scenario,
+map and difficulty. The server runs the one shared city: everyone bids in the
 same live auctions, rents your land, and competes for the same customers.
 
 - **Shared speed, by agreement.** Tapping a speed button (pause included)
@@ -198,6 +198,21 @@ no more goals or deadlines, and the rivals keep competing. If you went
 bankrupt, your company is re-founded with half the usual starting cash. In LAN
 games the host makes that choice for everyone.
 
+### Maps
+
+| Map | Grid | Colour blocks | Lots | Rivals | Race goals |
+| --- | --- | --- | --- | --- | --- |
+| Town | 13×10 | 8 | 28 | 3 | as listed |
+| City | 19×13 | 17 | 57 | 4 | ×1.6 |
+| Metropolis | 25×16 | 29 | 98 | 5 | ×2.3 |
+| Megalopolis | 31×19 | 46 | 150 | 5 | ×3 |
+
+Town is hand-made. The larger maps are generated from a fixed layout: stations
+around the edge, parks spread out from the centre, and the priciest streets
+next to the parks and downtown. Bigger maps space their auctions closer
+together, and rivals think a little less often to keep phones smooth. In LAN games,
+human players take rival seats, up to 4 humans.
+
 ### Rivals
 
 | Rival | Style |
@@ -205,6 +220,8 @@ games the host makes that choice for everyone.
 | Margo Vance, Vance Estates | Land baron: bids hard for set-completing lots, builds apartments |
 | Rex Dupree, Dupree & Sons | Cheap food everywhere, undercuts on price |
 | Ines Kato, Kato Collective | Premium prices, smart fit-outs, wealthy streets |
+| Olga Petrov, Petrov Holdings | Land baron (City and larger) |
+| Sid Okafor, Okafor Brands | Premium (Metropolis and larger) |
 
 They use exactly the same rules and actions as you. Difficulty (Relaxed /
 Sharp / Ruthless) changes how often they think, the returns they insist on,
@@ -235,7 +252,7 @@ skyline/
                           city, speed votes, saves (reuses ../server/ws.js)
   vendor/three.module.min.js   three.js r160 (MIT)
   js/data.js       every number: districts, businesses, eras, tech, scenarios, events
-  js/map.js        the city grid, road network (BFS distances / paths), seeded RNG
+  js/map.js        the maps (Town + generated larger cities), road network (BFS distances / paths), seeded RNG
   js/demand.js     demand curves by hour, opening hours, era fashions
   js/citizens.js   the citizens: needs, choices, queues, grudges, comments, trips
   js/staff.js      shop staff: roles, skill, wages, morale, training, quitting

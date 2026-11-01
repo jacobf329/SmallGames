@@ -9,7 +9,7 @@
 // to complete a colour set. At auctions it bids up to what the lot is worth
 // to it: more if it completes a set or blocks a rival's.
 
-import { BUSINESSES, BIZ, DISTRICTS, DIFFICULTY, STATION_FARE, UTILITY_CUT,
+import { BUSINESSES, BIZ, DISTRICTS, DIFFICULTY, stationFare, UTILITY_CUT,
   OVERHEAD_BASE, OVERHEAD_RATE, APT_RESIDENTS, LOAN_STEP, PRICE_MIN, PRICE_MAX, PARKS, PROMOS } from './data.js';
 import {
   MAP, rand, techOf, estimate, landValue, rentFor, ownsSet, setCount, netWorth, build, setPrice, setStaff,
@@ -27,7 +27,8 @@ const STYLE = {
 };
 
 export function aiHour(s) {
-  const think = DIFFICULTY[s.difficulty].think;
+  // Big maps: rivals plan half as often (there's more of them, and more to scan).
+  const think = DIFFICULTY[s.difficulty].think * (MAP.lotDefs.length > 60 ? 2 : 1);
   for (const p of s.players) {
     if (p.human || p.bankrupt) continue;
     if ((s.hour + p.id * 3) % think === 0) think1(s, p);
@@ -56,10 +57,10 @@ function think1(s, p) {
   const moves = [];
 
   // Open a business: every free lot x every invented business type.
-  const free = s.lots.filter(l => l.kind === 'prop' && !l.business);
+  // On big maps look at a random handful of free lots each time.
+  const free = sample(s, s.lots.filter(l => l.kind === 'prop' && !l.business), 14);
   for (const lot of free) {
-    for (const def of BUSINESSES) {
-      if (!tech.biz.has(def.id)) continue;
+    for (const def of shortlist(s, lot, tech)) {
       const cfg = { price: st.start, staff: 3 };
       const e = estimate(s, lot.id, def.id, p.id, cfg);
       if (e.profit <= 0) continue;
@@ -83,8 +84,9 @@ function think1(s, p) {
     moves.push({ roi: gain / chk.cost * st.apt * setBonus, cost: chk.cost, run: () => buildApt(s, p.id, lot.id) });
   }
 
-  // Refit a busy shop.
-  for (const lot of s.lots) {
+  // Refit a busy shop (a few of its shops each time on big empires).
+  const mineShops = sample(s, s.lots.filter(l => l.business && l.business.owner === p.id), 5);
+  for (const lot of mineShops) {
     const b = lot.business;
     if (!b || b.owner !== p.id || !b.yesterday || b.fit >= tech.fit) continue;
     const c = fitCost(b);
@@ -116,7 +118,7 @@ function think1(s, p) {
     if (e.profit - lostRent > 0) moves.push({ roi: (e.profit - lostRent) / price * (st.set > 1.2 ? 1.2 : 1), cost: price, run: () => buyout(s, p.id, lot.id) });
   }
   // Advertise a shop that has room for more customers.
-  for (const lot of s.lots) {
+  for (const lot of mineShops) {
     const b = lot.business;
     if (!b || b.owner !== p.id || b.promo || !b.yesterday || b.yesterday.peak > 0.85) continue;
     const pr = [...PROMOS].reverse().find(x => yearOf(s) >= x.year);
@@ -198,6 +200,25 @@ function liquidity(s, p) {
   while (p.cash < 0 && land.length) sellLand(s, p.id, land.shift().id);
 }
 const sum = a => a.reduce((x, y) => x + y, 0);
+// Cheap first pass: the business types with the most local demand per
+// existing competitor; only these get a full forecast.
+function shortlist(s, lot, tech, n = 6) {
+  const d = lot.district;
+  const pools = MAP.neighbours[d];
+  const rivals = {};
+  for (const nb of pools) for (const id of MAP.districtLots[nb.d]) { const b = s.lots[id].business; if (b) rivals[b.type] = (rivals[b.type] || 0) + nb.w; }
+  const mix = DISTRICTS[d].mix;
+  return BUSINESSES.filter(def => tech.biz.has(def.id))
+    .map(def => ({ def, score: (mix[0] * def.app[0] + mix[1] * def.app[1] + mix[2] * def.app[2] + 0.3 * def.app[3]) * def.ticket * (1 - def.stock) / (1 + (rivals[def.id] || 0)) / Math.sqrt(def.cost) }))
+    .sort((a, b) => b.score - a.score).slice(0, n).map(x => x.def);
+}
+
+export function sample(s, arr, n) {
+  if (arr.length <= n) return arr;
+  const a = [...arr];
+  for (let i = 0; i < n; i++) { const j = i + Math.floor(rand(s) * (a.length - i)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a.slice(0, n);
+}
 
 // Try to buy the one lot standing between this rival and a full colour set.
 function tradeForSets(s, p) {
@@ -251,7 +272,7 @@ export function aiAuctionMax(s, p, lot) {
     f *= st.land;
   } else if (lot.kind === 'station') {
     const k = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
-    f = 0.7 + (STATION_FARE[k + 1] * (k + 1) - STATION_FARE[k] * k) * 25 / v;
+    f = 0.7 + (stationFare(k + 1) * (k + 1) - stationFare(k) * k) * 25 / v;
   } else {
     // What it would earn as ours (plus the pairing bonus on one we already own).
     const was = lot.owner; lot.owner = p.id;

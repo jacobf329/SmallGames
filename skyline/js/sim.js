@@ -8,7 +8,7 @@
 // Land is sold by the city at live auctions (auction.js).
 
 import {
-  DISTRICTS, SEG_ELASTICITY, STATION_FARE, UTILITY_CUT, BUSINESSES, BIZ, FIT_LEVELS, MAX_STAFF,
+  DISTRICTS, SEG_ELASTICITY, stationFare, MAPS, UTILITY_CUT, BUSINESSES, BIZ, FIT_LEVELS, MAX_STAFF,
   APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, DEMAND_SCALE,
   OUTSIDE_WEIGHT, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE,
   LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP,
@@ -16,20 +16,21 @@ import {
   DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, TECH, YEAR_DAYS, GOAL_TEXT, bizName, eraName,
   BIZ_UTIL, STAFF_ROLES, MAX_FLOORS, FLOOR_COST, PARKS, PROMOS, SURVEY_COST, SURVEY_DAYS, BUYOUT_MULT, BUYOUT_SET_MULT,
 } from './data.js';
-import { MAP, rand } from './map.js';
+import { MAP, rand, setMap } from './map.js';
 import { NAT, bizOpen, defaultHours, yearOf, techOf, modFor, capacity, appeal, unitCost, blockStars, starFactor } from './demand.js';
 import { makeStaff, refreshCandidates, teamWage, staffNight, syncHeadcount, servers, clerks, manager, maxStaff, fairPay, avgMorale, TRAIN_DAYS } from './staff.js';
 import { buildCitizens, syncResidents, syncTourists, touristsIn, citizensHour } from './citizens.js';
 
-export { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars };
+export { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars, setMap };
 
 // ------------------------------------------------------------ setup ----
 // humans: [{ name, company }] for LAN games; otherwise one player from name/company.
-export function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You', company = 'Your Company', seed, humans } = {}) {
+export function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You', company = 'Your Company', seed, humans, map = 'town' } = {}) {
+  setMap(map);
   const diff = DIFFICULTY[difficulty] || DIFFICULTY.normal;
   const sc = SCENARIOS[scenario];
   const s = {
-    v: 4,
+    v: 4, mapId: MAP.id,
     rng: (seed ?? Math.floor(Math.random() * 2 ** 32)) >>> 0,
     day: 1, hour: 7, t: 0,
     scenario, difficulty,
@@ -43,14 +44,15 @@ export function createGame({ scenario = 'boomtown', difficulty = 'normal', name 
     goals: sc.goals || [],
     over: false, winner: -1, endReason: '',
   };
-  const people = (humans && humans.length ? humans : [{ name, company }]).slice(0, MAX_COMPANIES);
+  const companies = MAPS[MAP.id].companies;
+  const people = (humans && humans.length ? humans : [{ name, company }]).slice(0, Math.min(MAX_COMPANIES, companies));
   people.forEach((h, i) => {
     const p = makePlayer(i, h.name || `Player ${i + 1}`, h.company || `Company ${i + 1}`, HUMAN_COLORS[i], true, 'human', START_CASH);
     p.goals = s.goals.map(g => ({ done: false, doneDay: 0 }));
     p.failed = false;
     s.players.push(p);
   });
-  RIVALS.slice(0, MAX_COMPANIES - people.length).forEach(r => {
+  RIVALS.slice(0, companies - people.length).forEach(r => {
     const p = makePlayer(s.players.length, r.name, r.company, r.color, false, r.style, Math.round(START_CASH * diff.aiCash));
     p.blurb = r.blurb;
     s.players.push(p);
@@ -181,45 +183,65 @@ function segments(s, d) {
 // Returns Map lotId -> customers (before the capacity cap).
 export function allocate(s, h, pools = null, onlyType = null) {
   const tech = techOf(s);
+  // Only shops within shopping distance of the pools can win their custom.
+  let lots = s.lots;
+  if (pools) {
+    const near = new Set();
+    for (const d of pools) for (const n of MAP.neighbours[d]) near.add(n.d);
+    lots = [];
+    for (const d of near) for (const id of MAP.districtLots[d]) lots.push(s.lots[id]);
+  }
   const byType = {};
-  for (const l of s.lots) {
+  for (const l of lots) {
     const b = l.business;
     if (!b || (onlyType && b.type !== onlyType) || !bizOpen(b, h)) continue;
     (byType[b.type] ||= []).push(l);
   }
   const out = new Map();
-  const stars = DISTRICTS.map((_, d) => blockStars(s, d));
+  const stars = starsCache(s);
   for (let d = 0; d < DISTRICTS.length; d++) {
     if (pools && !pools.has(d)) continue;
     const seg = segments(s, d);
-    const neigh = MAP.neighbours[d];
+    const nw = MAP.neighW[d];
     for (const type in byType) {
       if (!tech.biz.has(type)) continue;
       const def = BIZ[type];
       const k = DEMAND_SCALE * NAT[type][h] * modFor(s, def) / 1000;
+      const list = byType[type];
+      // Per-shop pull before price (shared by the four wealth groups).
+      const base = list.map(l => (nw.get(l.district) || 0) * appeal(l.business));
       // Each wealth group weighs price differently, so split them.
       for (let g = 0; g < 4; g++) {
         const demand = seg[g] * def.app[g] * k;
         if (demand <= 0) continue;
         const el = ELASTICITY_BASE * SEG_ELASTICITY[g];
         let sum = 0;
-        const ws = [];
-        for (const l of byType[type]) {
-          const n = neigh.find(x => x.d === l.district);
-          if (!n) { ws.push(0); continue; }
-          const a = n.w * appeal(l.business) * starFactor(stars[l.district], g) * Math.pow(1 / l.business.price, el);
-          ws.push(a);
+        const ws = list.map((l, i) => {
+          if (!base[i]) return 0;
+          const a = base[i] * starFactor(stars[l.district], g) * Math.pow(1 / l.business.price, el);
           sum += a;
-        }
+          return a;
+        });
         if (sum <= 0) continue;
         const denom = OUTSIDE_WEIGHT + sum;
-        byType[type].forEach((l, i) => {
+        list.forEach((l, i) => {
           if (ws[i] > 0) out.set(l.id, (out.get(l.id) || 0) + demand * ws[i] / denom);
         });
       }
     }
   }
   return out;
+}
+
+// Block stars only change when parks do: cache them per state.
+const STAR_CACHE = new WeakMap();
+function starsCache(s) {
+  const key = (s.parks || []).length + ':' + MAP.id;
+  const c = STAR_CACHE.get(s);
+  if (c && c.key === key) return c.stars;
+  const stars = DISTRICTS.map((_, d) => blockStars(s, d));
+  STAR_CACHE.set(s, { key, stars });
+  return stars;
 }
 
 function refreshMods(s) {
@@ -431,7 +453,7 @@ function endOfDay(s, hooks) {
     const utils = s.lots.filter(l => l.kind === 'utility' && l.owner === p.id);
     for (const u of utils) ledger(p, 'utility', utilityIncome(s, u, pools, p.id));
     const stations = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
-    if (stations) ledger(p, 'fares', STATION_FARE[stations] * stations * (0.7 + 0.3 * s.touristMult) * (1 + 0.004 * (s.day - 1)));
+    if (stations) ledger(p, 'fares', stationFare(stations) * stations * (0.7 + 0.3 * s.touristMult) * (1 + 0.004 * (s.day - 1)));
   }
   for (const l of s.lots) if (l.apt > 0 && l.owner >= 0) ledger(P[l.owner], 'aptRent', aptRentFor(s, l));
   for (const p of P) if (p.loan > 0) ledger(p, 'interest', -p.loan * LOAN_RATE);
@@ -615,7 +637,7 @@ function checkEnd(s) {
   if (sc.mode !== 'race') return;
   const worth = s.players.map(p => p.bankrupt ? -Infinity : netWorth(s, p.id));
   const best = worth.indexOf(Math.max(...worth));
-  if (worth[best] >= sc.goal) return finish(s, best, `${s.players[best].company} reached ${money(sc.goal)} first.`);
+  if (worth[best] >= raceGoal(s)) return finish(s, best, `${s.players[best].company} reached ${money(raceGoal(s))} first.`);
   if (s.day > sc.days) return finish(s, best, `Time is up after ${sc.days} days. Richest tycoon wins.`);
 }
 // Carry on after a win or loss: no more goals or deadlines. Bankrupt
@@ -633,6 +655,9 @@ export function continueGame(s) {
   news(s, 'The game goes on in free play. Build whatever you like.', 'info');
   return { ok: true };
 }
+
+// Race targets grow with the map: more city, more money to be made.
+export const raceGoal = s => Math.round(SCENARIOS[s.scenario].goal * (MAPS[s.mapId || 'town']?.goalMult || 1) / 50000) * 50000;
 
 function finish(s, winner, reason) {
   if (s.over) return;
@@ -1115,6 +1140,7 @@ export function serialize(s) {
 export function deserialize(json) {
   const s = JSON.parse(json);
   if (!s || s.v !== 4 || !Array.isArray(s.lots)) throw new Error('bad save');
+  setMap(s.mapId || 'town');
   buildCitizens(s);
   return s;
 }

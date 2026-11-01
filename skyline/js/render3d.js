@@ -7,16 +7,16 @@
 // real customer walking from home to a real shop and back (see citizens.js).
 
 import * as THREE from '../vendor/three.module.min.js';
-import { MAP_W, MAP_H, DISTRICTS, BIZ, MAX_APT, SEGMENTS, PARKS, BUSINESSES } from './data.js';
+import { DISTRICTS, BIZ, MAX_APT, SEGMENTS, PARKS, BUSINESSES } from './data.js';
 import { MAP, BLOCK_TILES } from './map.js';
 import { roadPath } from './map.js';
 import { tripPhase } from './citizens.js';
 import { lensData, lensColor } from './lens.js';
 import { ownsSet, bizOpen, blockStars, landValue, money } from './sim.js';
 
-const OX = MAP_W / 2, OZ = MAP_H / 2;
-export const wx = tx => tx + 0.5 - OX;           // tile -> world
-export const wz = ty => ty + 0.5 - OZ;
+// Tile -> world: the map is centred on the origin (sizes vary by map).
+export const wx = tx => tx + 0.5 - MAP.w / 2;
+export const wz = ty => ty + 0.5 - MAP.h / 2;
 const GROUND = 0.12, FLOOR_H = 0.34, APT_H = 0.3, TOWER_H = 2.7;
 const SEG_COLORS = ['#ff9f43', '#2ec4b6', '#a77bff', '#ffd23f'];
 
@@ -187,10 +187,109 @@ export class Renderer3D {
   // Frame the whole city.
   fit() {
     const portrait = this.h > this.w;
-    this.want = { x: 0, z: 0.4, dist: portrait ? 21 : 12, yaw: Math.PI / 4, pitch: portrait ? 1.0 : 0.85 };
+    const k = Math.max(MAP.w / 13, MAP.h / 10);       // Town is the reference size
+    this.want = { x: 0, z: 0.4, dist: (portrait ? 21 : 12) * k, yaw: Math.PI / 4, pitch: portrait ? 1.0 : 0.85 };
   }
   rotate(d) { this.want.yaw += d; }
   tilt() { this.want.pitch = this.want.pitch > 0.95 ? 0.55 : this.want.pitch > 0.7 ? 1.25 : 0.95; }
+
+  // Everything that depends on the map: ground, roads, trees, ponds, lamps.
+  buildCity() {
+    const G = this.cityGroup;
+    const S = G;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(MAP.w + 0.8, 0.7, MAP.h + 0.8),
+      [ '#6b5440', '#6b5440', '#79b55a', '#4d3b2c', '#6b5440', '#5a4634' ].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 1 })));
+    slab.position.y = -0.35;
+    slab.receiveShadow = true;
+    G.add(slab);
+
+    // Ground tiles as one instanced mesh.
+    const tiles = [];
+    for (let y = 0; y < MAP.h; y++) for (let x = 0; x < MAP.w; x++) tiles.push(MAP.tiles[y][x]);
+    const tileGeo = new THREE.BoxGeometry(1, 0.1, 1);
+    const tileMesh = new THREE.InstancedMesh(tileGeo, new THREE.MeshStandardMaterial({ roughness: 0.95 }), tiles.length);
+    const m = new THREE.Matrix4(), c = new THREE.Color();
+    tiles.forEach((t, i) => {
+      const block = MAP.blocks[t.block];
+      let col = '#4a505c', y = 0.0;
+      if (t.kind !== 'road') {
+        y = 0.04;
+        col = t.kind === 'park' ? '#5fa846' : block?.kind === 'district' ? mixHex(DISTRICTS[block.district].color, '#e9e4da', 0.72)
+          : block?.kind === 'transit' ? '#b4bccb' : '#a3a39a';
+      }
+      m.makeTranslation(wx(t.x), y, wz(t.y));
+      tileMesh.setMatrixAt(i, m);
+      tileMesh.setColorAt(i, c.set(col));
+    });
+    tileMesh.receiveShadow = true;
+    G.add(tileMesh);
+
+    // Lane dashes and crossings.
+    const dash = [];
+    for (const t of tiles) {
+      if (t.kind !== 'road') continue;
+      const h = t.y % 3 === 0, v = t.x % 3 === 0;
+      if (h && !v) dash.push([wx(t.x), wz(t.y), 0]);
+      if (v && !h) dash.push([wx(t.x), wz(t.y), Math.PI / 2]);
+    }
+    const dashMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.4, 0.01, 0.05), new THREE.MeshBasicMaterial({ color: '#f5d76e' }), dash.length);
+    dash.forEach(([x, z, r], i) => { m.makeRotationY(r).setPosition(x, 0.055, z); dashMesh.setMatrixAt(i, m); });
+    G.add(dashMesh);
+
+    // Trees on plazas and in the park.
+    const trees = [];
+    for (const t of tiles) {
+      if (t.kind !== 'plaza' && t.kind !== 'park') continue;
+      const n = t.kind === 'park' ? 3 : 1 + (noise(t.x, t.y) < 0.4 ? 1 : 0);
+      for (let i = 0; i < n; i++) trees.push([wx(t.x) - 0.3 + noise(t.x, t.y, i + 1) * 0.6, wz(t.y) - 0.3 + noise(t.x, t.y, i + 9) * 0.6, 0.8 + noise(t.x, t.y, i + 3) * 0.5, t.x + ',' + t.y]);
+    }
+    const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.04, 0.22, 6), new THREE.MeshStandardMaterial({ color: '#6b4a2b' }), trees.length);
+    const crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.17, 0), new THREE.MeshStandardMaterial({ color: '#3f8f3a', flatShading: true }), trees.length);
+    trees.forEach(([x, z, sc2], i) => {
+      m.makeScale(sc2, sc2, sc2).setPosition(x, 0.09 + 0.11 * sc2, z); trunk.setMatrixAt(i, m);
+      m.makeScale(sc2, sc2 * 1.15, sc2).setPosition(x, 0.09 + 0.33 * sc2, z); crown.setMatrixAt(i, m);
+      crown.setColorAt(i, c.set(['#3f8f3a', '#4fa646', '#2f7a3a'][i % 3]));
+    });
+    trunk.castShadow = crown.castShadow = true;
+    G.add(trunk, crown);
+    this.trees = { trunk, crown, list: trees };
+
+    // A pond in every park.
+    for (const park of MAP.blocks.filter(b => b.kind === 'park')) {
+      const pond = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.03, 24), new THREE.MeshStandardMaterial({ color: '#5ab3e0', roughness: 0.2 }));
+      pond.position.set(wx(park.bx) + 0.5, 0.1, wz(park.by) + 0.5);
+      G.add(pond);
+    }
+
+    // Street lamps: glowing sprites at the crossings, lit at night.
+    const glow = this.lampMat;
+    for (let y = 0; y < MAP.h; y += 3) for (let x = 0; x < MAP.w; x += 3) {
+      const sp = new THREE.Sprite(glow);
+      sp.position.set(wx(x), 0.35, wz(y));
+      sp.scale.set(1.3, 1.3, 1);
+      G.add(sp);
+    }
+
+  }
+
+  // Switch to another map: rebuild the ground and forget every building.
+  setCity() {
+    clearGroup(this.cityGroup);
+    for (const o of this.lotObjs.values()) { this.scene.remove(o.group); disposeTree(o.group); }
+    this.lotObjs.clear();
+    this.litMats.length = 0;
+    this.parkSig = null; this.setSig = ''; this.lineD = undefined; this.overlayAt = 0;
+    clearGroup(this.parkGroup); clearGroup(this.overlayGroup); clearGroup(this.setBorders); clearGroup(this.districtLine);
+    this.pathCache.clear();
+    this.buildCity();
+    this.roadTiles = [];
+    for (let y = 0; y < MAP.h; y++) for (let x = 0; x < MAP.w; x++) if (MAP.tiles[y][x].kind === 'road') this.roadTiles.push([x, y]);
+    this.cars = this.cars.map(() => this.spawnCar());
+    const span = Math.max(MAP.w, MAP.h);
+    this.scene.fog.near = 28 * span / 13; this.scene.fog.far = 70 * span / 13;
+    this.mapId = MAP.id;
+    this.fit();
+  }
 
   // ------------------------------------------------------- static ----
   buildStatic() {
@@ -213,78 +312,11 @@ export class Renderer3D {
     water.position.y = -0.6;
     S.add(water);
     this.water = water;
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(MAP_W + 0.8, 0.7, MAP_H + 0.8),
-      [ '#6b5440', '#6b5440', '#79b55a', '#4d3b2c', '#6b5440', '#5a4634' ].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 1 })));
-    slab.position.y = -0.35;
-    slab.receiveShadow = true;
-    S.add(slab);
-
-    // Ground tiles as one instanced mesh.
-    const tiles = [];
-    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) tiles.push(MAP.tiles[y][x]);
-    const tileGeo = new THREE.BoxGeometry(1, 0.1, 1);
-    const tileMesh = new THREE.InstancedMesh(tileGeo, new THREE.MeshStandardMaterial({ roughness: 0.95 }), tiles.length);
-    const m = new THREE.Matrix4(), c = new THREE.Color();
-    tiles.forEach((t, i) => {
-      const block = MAP.blocks[t.block];
-      let col = '#4a505c', y = 0.0;
-      if (t.kind !== 'road') {
-        y = 0.04;
-        col = t.kind === 'park' ? '#5fa846' : block?.kind === 'district' ? mixHex(DISTRICTS[block.district].color, '#e9e4da', 0.72)
-          : block?.kind === 'transit' ? '#b4bccb' : '#a3a39a';
-      }
-      m.makeTranslation(wx(t.x), y, wz(t.y));
-      tileMesh.setMatrixAt(i, m);
-      tileMesh.setColorAt(i, c.set(col));
-    });
-    tileMesh.receiveShadow = true;
-    S.add(tileMesh);
-
-    // Lane dashes and crossings.
-    const dash = [];
-    for (const t of tiles) {
-      if (t.kind !== 'road') continue;
-      const h = t.y % 3 === 0, v = t.x % 3 === 0;
-      if (h && !v) dash.push([wx(t.x), wz(t.y), 0]);
-      if (v && !h) dash.push([wx(t.x), wz(t.y), Math.PI / 2]);
-    }
-    const dashMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.4, 0.01, 0.05), new THREE.MeshBasicMaterial({ color: '#f5d76e' }), dash.length);
-    dash.forEach(([x, z, r], i) => { m.makeRotationY(r).setPosition(x, 0.055, z); dashMesh.setMatrixAt(i, m); });
-    S.add(dashMesh);
-
-    // Trees on plazas and in the park.
-    const trees = [];
-    for (const t of tiles) {
-      if (t.kind !== 'plaza' && t.kind !== 'park') continue;
-      const n = t.kind === 'park' ? 3 : 1 + (noise(t.x, t.y) < 0.4 ? 1 : 0);
-      for (let i = 0; i < n; i++) trees.push([wx(t.x) - 0.3 + noise(t.x, t.y, i + 1) * 0.6, wz(t.y) - 0.3 + noise(t.x, t.y, i + 9) * 0.6, 0.8 + noise(t.x, t.y, i + 3) * 0.5, t.x + ',' + t.y]);
-    }
-    const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.04, 0.22, 6), new THREE.MeshStandardMaterial({ color: '#6b4a2b' }), trees.length);
-    const crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.17, 0), new THREE.MeshStandardMaterial({ color: '#3f8f3a', flatShading: true }), trees.length);
-    trees.forEach(([x, z, sc2], i) => {
-      m.makeScale(sc2, sc2, sc2).setPosition(x, 0.09 + 0.11 * sc2, z); trunk.setMatrixAt(i, m);
-      m.makeScale(sc2, sc2 * 1.15, sc2).setPosition(x, 0.09 + 0.33 * sc2, z); crown.setMatrixAt(i, m);
-      crown.setColorAt(i, c.set(['#3f8f3a', '#4fa646', '#2f7a3a'][i % 3]));
-    });
-    trunk.castShadow = crown.castShadow = true;
-    S.add(trunk, crown);
-    this.trees = { trunk, crown, list: trees };
-
-    // Park pond and fountain.
-    const park = MAP.blocks.find(b => b.kind === 'park');
-    const pond = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.03, 24), new THREE.MeshStandardMaterial({ color: '#5ab3e0', roughness: 0.2 }));
-    pond.position.set(wx(park.bx) + 0.5, 0.1, wz(park.by) + 0.5);
-    S.add(pond);
-
-    // Street lamps: glowing sprites at the crossings, lit at night.
-    const glow = new THREE.SpriteMaterial({ map: glowTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 });
-    this.lampMat = glow;
-    for (let y = 0; y < MAP_H; y += 3) for (let x = 0; x < MAP_W; x += 3) {
-      const sp = new THREE.Sprite(glow);
-      sp.position.set(wx(x), 0.35, wz(y));
-      sp.scale.set(1.3, 1.3, 1);
-      S.add(sp);
-    }
+    this.cityGroup = new THREE.Group();
+    S.add(this.cityGroup);
+    this.lampMat = new THREE.SpriteMaterial({ map: glowTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 });
+    this.buildCity();
+    this.mapId = MAP.id;
 
     // Shared building materials.
     const apt = windowTextures(3, 2, '#efe7d8', '#3d5a80', 1);
@@ -723,7 +755,7 @@ export class Renderer3D {
     for (let i = 0; i < this.maxCars; i++) this.carBody.setColorAt(i, c.set(palette[i % palette.length]));
     this.scene.add(this.carBody, this.carTop);
     const roads = [];
-    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (MAP.tiles[y][x].kind === 'road') roads.push([x, y]);
+    for (let y = 0; y < MAP.h; y++) for (let x = 0; x < MAP.w; x++) if (MAP.tiles[y][x].kind === 'road') roads.push([x, y]);
     this.roadTiles = roads;
     this.cars = Array.from({ length: this.maxCars }, () => this.spawnCar());
   }
@@ -733,7 +765,7 @@ export class Renderer3D {
   }
   moveCar(car, dt) {
     car.t += dt * car.speed;
-    const isRoad = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && MAP.tiles[y][x].kind === 'road';
+    const isRoad = (x, y) => x >= 0 && y >= 0 && x < MAP.w && y < MAP.h && MAP.tiles[y][x].kind === 'road';
     while (car.t >= 1) {
       car.t -= 1;
       car.px = car.nx; car.py = car.ny;
@@ -805,9 +837,9 @@ export class Renderer3D {
     const k = 1 - Math.exp(-dt * 10);
     const c = this.cam, w = this.want;
     w.pitch = Math.max(0.35, Math.min(1.42, w.pitch));
-    w.dist = Math.max(2.5, Math.min(30, w.dist));
-    w.x = Math.max(-8, Math.min(8, w.x));
-    w.z = Math.max(-6.5, Math.min(6.5, w.z));
+    w.dist = Math.max(2.5, Math.min(30 * Math.max(1, MAP.w / 13), w.dist));
+    w.x = Math.max(-MAP.w / 2 - 1.5, Math.min(MAP.w / 2 + 1.5, w.x));
+    w.z = Math.max(-MAP.h / 2 - 1.5, Math.min(MAP.h / 2 + 1.5, w.z));
     for (const key of ['x', 'z', 'dist', 'yaw', 'pitch']) c[key] += (w[key] - c[key]) * k;
     const horiz = Math.cos(c.pitch) * c.dist;
     this.camera.position.set(c.x + Math.sin(c.yaw) * horiz, Math.sin(c.pitch) * c.dist, c.z + Math.cos(c.yaw) * horiz);
@@ -924,8 +956,8 @@ export class Renderer3D {
     // Fall back to the ground tile.
     const p = new THREE.Vector3();
     if (ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.1), p)) {
-      const tx = Math.floor(p.x + OX), ty = Math.floor(p.z + OZ);
-      if (tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H && MAP.tiles[ty][tx].lot >= 0) return { kind: 'lot', id: MAP.tiles[ty][tx].lot };
+      const tx = Math.floor(p.x + MAP.w / 2), ty = Math.floor(p.z + MAP.h / 2);
+      if (tx >= 0 && ty >= 0 && tx < MAP.w && ty < MAP.h && MAP.tiles[ty][tx].lot >= 0) return { kind: 'lot', id: MAP.tiles[ty][tx].lot };
     }
     return null;
   }

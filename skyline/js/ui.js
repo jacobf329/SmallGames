@@ -2,7 +2,7 @@
 // the live auction panel, toasts and modals. The city is drawn by render3d.js.
 
 import {
-  DISTRICTS, BUSINESSES, BIZ, FIT_LEVELS, MAX_STAFF, APT_NAMES, APT_RESIDENTS, MAX_APT, STATION_FARE,
+  DISTRICTS, BUSINESSES, BIZ, FIT_LEVELS, MAX_STAFF, APT_NAMES, APT_RESIDENTS, MAX_APT, stationFare, MAPS,
   UTILITY_CUT, SCENARIOS, RIVALS, LOAN_STEP, LOAN_RATE, OVERHEAD_BASE, OVERHEAD_RATE, NEEDS, SEGMENTS,
   PRICE_STEP, PRICE_MIN, PRICE_MAX, AUTO_STOCK_PREMIUM, TECH, priceLabel, bizName, eraName,
   STAFF_ROLES, PARKS, PROMOS, SURVEY_COST, SURVEY_DAYS, MAX_FLOORS, MAX_STARS,
@@ -13,11 +13,11 @@ import {
   aptRentFor, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, loanLimit, netWorth, playerAssets,
   capacity, districtPopulation, LEDGER_LABELS, operating, dayName, yearOf, techOf, bizOpen, bizLabel,
   petition, nextAuctionSlot, goalProgress, goalText, setsOwned, buildCost, floorCost, promoCost, buyoutPrice,
-  canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame, BIZ_LEDGER, utilityIncome, utilityPools,
+  canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame, BIZ_LEDGER, utilityIncome, utilityPools, raceGoal,
 } from './sim.js';
 import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } from './staff.js';
 import { LENSES, LENS, lensData } from './lens.js';
-import { auctionBid, settleRest, minBid, increment, canCall, reservePrice } from './auction.js';
+import { auctionBid, settleRest, minBid, increment, canCall, reservePrice, auctionGap } from './auction.js';
 import { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } from './citizens.js';
 import { SEG_COLORS } from './render3d.js';
 import { sfx, setSound, soundOn } from './audio.js';
@@ -202,7 +202,7 @@ export class UI {
       if (s.auction && s.auction.lotId === lot.id) h += '<p class="note warn"><b>🔨 Under the hammer right now!</b></p>';
       else {
         const chk = canCall(s, ME, lot.id);
-        h += `<p class="note">The city sells land only at auction, when a tycoon calls one. Auctions are at least 6 game hours apart.
+        h += `<p class="note">The city sells land only at auction, when a tycoon calls one. Auctions are at least ${auctionGap()} game hours apart.
           </p><div class="row"><button class="btn go" data-act="call" ${chk.ok ? '' : 'disabled'}>🔨 Call an auction · open at ${money(reservePrice(s, lot))}</button></div>
           <p class="note">${chk.ok ? 'You place the opening bid; rivals can outbid you.' : esc(chk.msg)}</p>`;
       }
@@ -589,7 +589,7 @@ export class UI {
   stationHTML(lot) {
     const s = this.s;
     const k = lot.owner >= 0 ? s.lots.filter(l => l.kind === 'station' && l.owner === lot.owner).length : 0;
-    const rows = [1, 2, 3, 4].map(n => `<div class="stat"><small>Own ${n}</small><b>${money(STATION_FARE[n])}</b></div>`).join('');
+    const rows = [1, 2, 3, 4].map(n => `<div class="stat"><small>Own ${n}</small><b>${money(stationFare(n))}</b></div>`).join('');
     return `<p class="note">Stations collect fares every night, paying more per station the more one company owns.
       Visitors arriving here shop on the nearby blocks.${lot.owner >= 0 ? ` Owner holds <b>${k}</b> of 4.` : ''}</p>
       <div class="stats" style="grid-template-columns:repeat(4,1fr)">${rows}</div><p class="note">Fare per station per day.</p>`;
@@ -716,7 +716,7 @@ export class UI {
     }
     // Standings.
     const rows = s.players.map(p => ({ p, w: p.bankrupt ? 0 : netWorth(s, p.id) })).sort((a, b) => b.w - a.w);
-    h += `<h3>Standings ${sc.mode === 'race' ? `<em>first to ${money(sc.goal)} · day ${Math.min(s.day, sc.days)}/${sc.days}</em>` : ''}</h3>`;
+    h += `<h3>Standings ${sc.mode === 'race' ? `<em>first to ${money(raceGoal(s))} · day ${Math.min(s.day, sc.days)}/${sc.days}</em>` : ''}</h3>`;
     rows.forEach(({ p, w }, i) => {
       const lots = s.lots.filter(l => l.owner === p.id).length;
       const shops = s.lots.filter(l => l.business && l.business.owner === p.id).length;

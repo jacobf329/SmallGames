@@ -4,8 +4,8 @@
 // (server.mjs) owns the city: this phone shows the state it receives, sends
 // actions, and proposes speed changes that the other players vote on.
 
-import { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, eraName } from './data.js';
-import { createGame, serialize, deserialize, money, netWorth, dayName, yearOf, operating, goalProgress, goalText } from './sim.js';
+import { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, MAPS, eraName } from './data.js';
+import { createGame, serialize, deserialize, money, netWorth, dayName, yearOf, operating, goalProgress, goalText, raceGoal, setMap, MAP } from './sim.js';
 import { advanceGame } from './game.js';
 import { auctionTick } from './auction.js';
 import { perform } from './actions.js';
@@ -95,6 +95,8 @@ const app = {
     this.ui.tickerQueue = [];
     ['title', 'lobby'].forEach(id => $(id).classList.add('hidden'));
     ['hud', 'nav', 'camctl'].forEach(id => $(id).classList.remove('hidden'));
+    if (MAP.id !== (s.mapId || 'town')) setMap(s.mapId || 'town');
+    if (this.renderer.mapId !== MAP.id) this.renderer.setCity();
     this.renderer.fit();
     this.ui.close();
     this.ui.hideModal();
@@ -106,6 +108,11 @@ const app = {
   toTitle() {
     if (this.mp) { this.mp.net.close(); this.mp = null; }
     this.s = null;
+    if (MAP.id !== 'town' || !this.demo) {
+      this.demo = createGame({ scenario: 'sandbox', seed: 4 });
+      this.demo.hour = 17;
+    }
+    if (this.renderer.mapId !== MAP.id) this.renderer.setCity();
     this.ui.close();
     ['hud', 'nav', 'sheet', 'auction', 'camctl', 'vote', 'lobby'].forEach(id => $(id).classList.add('hidden'));
     $('modal').classList.add('hidden');
@@ -139,8 +146,8 @@ const app = {
         text = `🎯 ${goalText(g)} · ${left} day${left === 1 ? '' : 's'} left`;
       } else text = 'All milestones complete!';
     } else if (sc.mode === 'race') {
-      pct = w / sc.goal * 100;
-      text = `Net worth ${money(w)} / ${money(sc.goal)} · ${Math.max(0, sc.days - s.day + 1)} days left`;
+      pct = w / raceGoal(s) * 100;
+      text = `Net worth ${money(w)} / ${money(raceGoal(s))} · ${Math.max(0, sc.days - s.day + 1)} days left`;
     } else text = `Net worth ${money(w)} · ${eraName(yearOf(s))}`;
     if (s.freePlay) {
       const r = s.result;
@@ -276,6 +283,7 @@ function applyState(m) {
   mp.vote = m.vote;
   mp.cooldowns = m.cooldowns || {};
   mp.seatInfo = m.seats;
+  if (s.mapId && s.mapId !== MAP.id) { setMap(s.mapId); app.renderer.setCity(); }
   app.s = s;
   if (!prev) {
     $('lobby').classList.add('hidden');
@@ -306,13 +314,16 @@ function renderLobby() {
     ${mp.host ? `
       <div class="seg wrap" id="lob-scenario">${Object.entries(SCENARIOS).map(([k, v]) => `<button data-v="${k}" class="${k === L.settings.scenario ? 'on' : ''}">${v.name}<small>${v.year}</small></button>`).join('')}</div>
       <p class="note">${esc(sc.blurb)}</p>
+      <div class="seg wrap" id="lob-map">${Object.entries(MAPS).map(([k, v]) => `<button data-v="${k}" class="${k === (L.settings.map || 'town') ? 'on' : ''}">${v.name}<small>${v.cols * v.rows - v.parks - v.transit - v.utility} blocks</small></button>`).join('')}</div>
+      <p class="note">${esc(MAPS[L.settings.map || 'town'].blurb)}</p>
       <div class="seg" id="lob-diff">${[['easy', 'Relaxed'], ['normal', 'Sharp'], ['hard', 'Ruthless']].map(([k, n]) => `<button data-v="${k}" class="${k === L.settings.difficulty ? 'on' : ''}">${n}</button>`).join('')}</div>
       <div class="row"><button class="btn go wide" id="lob-start">Start game for everyone</button></div>
       ${L.canResume ? '<div class="row"><button class="btn wide" id="lob-resume">Resume the saved LAN game</button></div>' : ''}`
-    : `<p class="note"><b>${esc(sc.name)}</b> (${sc.year}) · ${esc(sc.blurb)}<br>Waiting for the host to start…</p>`}
+    : `<p class="note"><b>${esc(sc.name)}</b> (${sc.year}) · ${esc(sc.blurb)}<br>Map: <b>${esc(MAPS[L.settings.map || 'town'].name)}</b> · ${esc(MAPS[L.settings.map || 'town'].blurb)}<br>Waiting for the host to start…</p>`}
     <div class="row"><button class="btn small" id="lob-leave">Back to title</button></div>`;
   const bind = (sel, fn) => document.querySelectorAll(sel).forEach(b => b.addEventListener('click', () => { sfx.tap(); fn(b); }));
   bind('#lob-scenario button', b => mp.net.send({ t: 'setup', scenario: b.dataset.v }));
+  bind('#lob-map button', b => mp.net.send({ t: 'setup', map: b.dataset.v }));
   bind('#lob-diff button', b => mp.net.send({ t: 'setup', difficulty: b.dataset.v }));
   bind('#lob-start', () => mp.net.send({ t: 'start' }));
   bind('#lob-resume', () => mp.net.send({ t: 'start', resume: true }));
@@ -391,7 +402,7 @@ window.addEventListener('keydown', e => {
 document.addEventListener('visibilitychange', () => { if (document.hidden) app.save(); });
 
 // --------------------------------------------------------------- title ----
-let scenario = 'boomtown', difficulty = 'normal';
+let scenario = 'boomtown', difficulty = 'normal', mapPick = 'town';
 const segPick = (id, cb) => document.querySelectorAll(`#${id} button`).forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll(`#${id} button`).forEach(x => x.classList.toggle('on', x === b));
   cb(b.dataset.v);
@@ -404,6 +415,10 @@ const blurb = () => {
 };
 segPick('seg-scenario', v => { scenario = v; blurb(); });
 segPick('seg-difficulty', v => { difficulty = v; });
+$('seg-map').innerHTML = Object.entries(MAPS).map(([k, v]) => `<button data-v="${k}" class="${k === mapPick ? 'on' : ''}">${v.name}<small>${v.cols * v.rows - v.parks - v.transit - v.utility} blocks</small></button>`).join('');
+const mapBlurb = () => { const m = MAPS[mapPick]; $('map-blurb').innerHTML = `<b>${m.name}</b> · ${m.blurb}${m.goalMult > 1 ? ` · race goals ×${m.goalMult}` : ''}`; };
+segPick('seg-map', v => { mapPick = v; mapBlurb(); });
+mapBlurb();
 blurb();
 $('in-company').value = localStorage.getItem('skyline-company') || '';
 $('in-name').value = localStorage.getItem('skyline-name') || '';
@@ -411,7 +426,7 @@ $('btn-new').addEventListener('click', () => {
   const company = $('in-company').value.trim() || 'Your Company';
   localStorage.setItem('skyline-company', company);
   sfx.build();
-  app.start(createGame({ scenario, difficulty, company, name: 'You' }));
+  app.start(createGame({ scenario, difficulty, company, name: 'You', map: mapPick }));
   setTimeout(() => app.ui.toast('Tap any empty lot to open a shop, or call an auction to buy city land.', 'good'), 600);
 });
 $('btn-continue').addEventListener('click', () => {

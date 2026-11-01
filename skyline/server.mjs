@@ -16,7 +16,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { attachWebSocket } from '../server/ws.js';
-import { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, DIFFICULTY, MAX_COMPANIES } from './js/data.js';
+import { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, DIFFICULTY, MAX_COMPANIES, MAPS } from './js/data.js';
 import { createGame, serialize, deserialize, news, continueGame } from './js/sim.js';
 import { advanceGame } from './js/game.js';
 import { auctionTick, maybeSettle } from './js/auction.js';
@@ -57,7 +57,7 @@ const server = http.createServer((req, res) => {
 // -------------------------------------------------------------- state ----
 let game = null;                 // the sim state while a game runs
 let seats = [];                  // [{ pid, token, name, company }]
-let settings = { scenario: 'boomtown', difficulty: 'normal' };
+let settings = { scenario: 'boomtown', difficulty: 'normal', map: 'town' };
 let speed = 1;
 let vote = null;                 // { id, from, speed, need: [pid], yes: [pid], expires }
 let voteSeq = 0;
@@ -84,7 +84,7 @@ function notice(text, kind = '') { broadcast({ t: 'notice', text, kind }); }
 
 function lobbyMsg() {
   const list = [...clients].sort((a, b) => a.joined - b.joined).map(c => ({ name: c.name, company: c.company, host: isHost(c), token: c.token.slice(0, 6) }));
-  return { t: 'lobby', players: list, settings, canResume: fs.existsSync(SAVE_FILE), max: MAX_COMPANIES };
+  return { t: 'lobby', players: list, settings, canResume: fs.existsSync(SAVE_FILE), max: Math.min(MAX_COMPANIES, MAPS[settings.map || 'town'].companies) };
 }
 function sendLobby() {
   const msg = lobbyMsg();
@@ -130,7 +130,7 @@ function startGame(fromSave) {
     settings = data.settings;
   } else {
     const people = [...clients].sort((a, b) => a.joined - b.joined).slice(0, MAX_COMPANIES);
-    game = createGame({ scenario: settings.scenario, difficulty: settings.difficulty, humans: people.map(c => ({ name: c.name, company: c.company })) });
+    game = createGame({ scenario: settings.scenario, difficulty: settings.difficulty, map: settings.map || 'town', humans: people.map(c => ({ name: c.name, company: c.company })) });
     seats = people.map((c, i) => ({ pid: i, token: c.token, name: c.name, company: c.company }));
   }
   game.liveAuctions = true;
@@ -141,7 +141,7 @@ function startGame(fromSave) {
     c.pid = seat ? seat.pid : -1;
     you(c);
   }
-  console.log(`game started: ${SCENARIOS[settings.scenario].name}, ${seats.length} player(s)`);
+  console.log(`game started: ${SCENARIOS[settings.scenario].name} on ${MAPS[settings.map || 'town'].name}, ${seats.length} player(s)`);
   sendState();
 }
 
@@ -234,6 +234,7 @@ attachWebSocket(server, conn => {
         if (game || !isHost(c)) break;
         if (SCENARIOS[m.scenario]) settings.scenario = m.scenario;
         if (DIFFICULTY[m.difficulty]) settings.difficulty = m.difficulty;
+        if (MAPS[m.map]) settings.map = m.map;
         sendLobby();
         break;
       case 'start':
