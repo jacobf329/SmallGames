@@ -433,3 +433,26 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
   background: transparent; color: inherit; opacity: 0.5; font-size: 13px; }
 .alerts.mini .alert { padding: 8px 10px; }
 .afilter button i, .afilter button i { font-style: normal; font-weight: 800; color: var(--gold); }
+
+/* Auction after you pass: a small strip that doesn't get in the way. */
+.auc-mini { display: none; }
+#auction.mini { top: calc(118px + var(--safe-t)); bottom: auto; max-height: none; overflow: hidden; padding: 6px 12px;
+  border-width: 1px; box-shadow: none; animation: none; pointer-events: none; opacity: 0.92; border-radius: 12px; }
+#auction.mini > *:not(.auc-mini):not(.meter) { display: none; }
+#auction.mini .auc-mini { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#auction.mini .meter { height: 3px; margin: 4px 0 0; }
+
+/* ------------------------------------------------- landmarks & city hall -- */
+.lm-icon { font-size: 26px; line-height: 1.1; min-width: 32px; text-align: center; }
+.lm-card .lm-icon { font-size: 34px; }
+.lm-list { display: flex; flex-direction: column; gap: 8px; }
+.lm-row { display: flex; gap: 10px; padding: 10px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); }
+.lm-row.locked { opacity: 0.5; }
+.lm-row.built { border-color: rgba(255, 210, 63, 0.5); }
+.lm-row small, .proj small { display: block; opacity: 0.85; line-height: 1.35; margin-top: 2px; }
+.lm-status { margin-top: 6px; font-size: 12px; }
+.lm-row .pill { display: inline-block; padding: 1px 8px; border-radius: 9px; color: #111; font-weight: 800; font-size: 11px; }
+.proj { padding: 10px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); margin-bottom: 8px; }
+.chain-card { margin: 8px 0; }
+.dim-list { opacity: 0.7; }
+#nav button span { white-space: nowrap; }

@@ -9,6 +9,8 @@ import { BIZ, DISTRICTS, SCENARIOS, QUIT_MORALE, MAX_FLOORS } from './data.js';
 import { MAP, bizLabel, money, setCount, goalProgress, goalText, netWorth, bizOpen, techOf, raceGoal } from './sim.js';
 import { avgMorale } from './staff.js';
 import { SHOP_COMMENTS } from './citizens.js';
+import { LM, landmarkSet, landmarkState, reqProgress, rushCost, activeProjects, chainOf } from './civic.js';
+import { PROJECTS, CHAIN_MIN } from './data.js';
 
 export const ALERT_CATS = {
   shops:  { name: 'Shops',  icon: '🏪' },
@@ -125,7 +127,7 @@ function landAlerts(s, pid, out, inbox) {
   const since = inbox.since;
   for (const l of s.lots) {
     const k = `idle:${l.id}`;
-    if (l.kind === 'prop' && l.owner === pid && !l.business && !l.apt) {
+    if (l.kind === 'prop' && l.owner === pid && !l.business && !l.apt && !l.landmark && !l.lmBuild) {
       since[k] ??= s.day;
       if (s.day - since[k] >= 2) {
         out.push({ key: k, cat: 'land', sev: 'info', icon: '🌾', lot: l.id, title: `${l.name} is standing empty`,
@@ -185,6 +187,53 @@ function goalAlerts(s, pid, out) {
   }
 }
 
+// Landmarks, City Hall jobs and chains.
+function civicAlerts(s, pid, out) {
+  const P = s.players, mine = (s.lmBuilds || []).find(b => b.pid === pid);
+  for (const id of landmarkSet(s)) {
+    const st = landmarkState(s, id), def = LM[id];
+    if (st.state !== 'open') continue;
+    if (mine?.id === id) {
+      const ahead = st.builds.filter(b => b.pid !== pid && b.left <= mine.left);
+      if (ahead.length) {
+        const r = P[ahead[0].pid];
+        out.push({ key: `lmrace:${id}`, cat: 'rivals', sev: 'warn', icon: '🏁', lot: mine.lot, title: `${r.company} is ahead in the ${def.name} race`,
+          text: `They finish in ${ahead[0].left} day${ahead[0].left === 1 ? '' : 's'}, you in ${mine.left}. Night shifts halve your time.`,
+          fix: !mine.rushed && mine.left > 1 ? { act: 'lmRush', args: [], label: `Night shifts · ${money(rushCost(s, mine))}` } : undefined });
+      }
+      continue;
+    }
+    if (!mine && reqProgress(s, pid, def).ok) {
+      const others = st.builds.map(b => P[b.pid].company);
+      out.push({ key: `lmready:${id}`, cat: 'tips', sev: others.length ? 'warn' : 'good', icon: def.icon, title: `You can build the ${def.name}`,
+        text: `${others.length ? `${others.join(' and ')} already started. ` : ''}${def.perk}`, tab: 'civic' });
+    }
+  }
+  for (const pr of activeProjects(s)) {
+    const def = PROJECTS[pr.type], left = Math.max(0, pr.closes - s.day);
+    if (pr.state === 'tender' && pr.bids[pid] == null) {
+      out.push({ key: `proj:${pr.id}`, cat: 'money', sev: 'good', icon: '🏛️', title: `City Hall: ${def.name} ${def.kind === 'tender' ? 'tender' : 'sponsorship'}`,
+        text: `${def.kind === 'tender' ? `Budget ${money(pr.budget)}, lowest quote wins.` : `Highest bid wins, from ${money(pr.budget)}.`} Closes ${left ? `in ${left} day${left === 1 ? '' : 's'}` : 'tonight'}.`, tab: 'civic' });
+    } else if (pr.state === 'open') {
+      out.push({ key: `grant:${pr.id}`, cat: 'money', sev: 'info', icon: def.icon, title: `${def.name}: city money on offer`,
+        text: `${pr.cap - pr.claimed} grant${pr.cap - pr.claimed === 1 ? '' : 's'} left, ${left} day${left === 1 ? '' : 's'} to go.`, tab: 'civic' });
+    }
+  }
+  const byType = {};
+  for (const l of s.lots) if (l.business?.owner === pid) (byType[l.business.type] ||= []).push(l);
+  for (const [type, ls] of Object.entries(byType)) {
+    if (ls.length === CHAIN_MIN - 1) {
+      out.push({ key: `chain2:${type}`, cat: 'tips', sev: 'info', icon: '🔗', lot: ls[0].id, title: `One more ${bizLabel(s, type)} makes a chain`,
+        text: 'Chains buy stock cheaper, share one reputation and keep fans loyal across branches.' });
+    } else if (ls.length >= CHAIN_MIN) {
+      const avg = ls.reduce((a, l) => a + (l.business.rep ?? 1), 0) / ls.length;
+      const weak = ls.filter(l => (l.business.rep ?? 1) < avg - 0.12).sort((a, b) => a.business.rep - b.business.rep)[0];
+      if (weak) out.push({ key: `chainrep:${weak.id}`, cat: 'shops', sev: 'warn', icon: '🔗', lot: weak.id, title: `${weak.name} is hurting your brand`,
+        text: `Its reputation drags the whole ${bizLabel(s, type)} chain down. Fix its service: staff, stock, prices.`, tab: 'staff' });
+    }
+  }
+}
+
 // ------------------------------------------------------------ events ----
 // One-off things: new shop types, a rival muscling in, staff walking out.
 function eventAlerts(s, pid, inbox, add) {
@@ -198,6 +247,8 @@ function eventAlerts(s, pid, inbox, add) {
   }
   for (const n of s.news) {
     if (n.seq <= (inbox.news ?? s.newsSeq - 1)) break;
+    if (n.who === pid && /lost the race|won the .* contract|opened the /.test(n.text))
+      add({ key: `ev:${n.seq}`, cat: n.kind === 'bad' ? 'rivals' : 'money', sev: n.kind === 'bad' ? 'bad' : 'good', icon: n.kind === 'bad' ? '🏁' : '🏆', title: n.text.split(/[.!] /)[0].replace(/^\S+ /, ''), text: n.text, tab: 'civic', ev: true });
     if (n.kind === 'staff' && n.who === pid) add({ key: `ev:${n.seq}`, cat: 'shops', sev: 'bad', icon: '🚪', title: 'Staff walked out', text: n.text, tab: 'staff', ev: true });
   }
   inbox.news = s.newsSeq;
@@ -239,6 +290,7 @@ export function advise(s) {
     landAlerts(s, pid, out, inbox);
     moneyAlerts(s, pid, out);
     goalAlerts(s, pid, out);
+    civicAlerts(s, pid, out);
     for (const a of out) if (!inbox.mute[a.cat] || a.sev === 'bad') add(a);
     const live = new Set(out.map(a => a.key));
     for (const a of inbox.list) {

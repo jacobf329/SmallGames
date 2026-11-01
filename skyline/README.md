@@ -62,6 +62,8 @@ countdown to at least 3.5 s. The rivals bid up to what a lot is worth to
 them, which is much more if it completes their colour set or blocks yours.
 Land sold back to the city, or seized from a bankrupt rival, can be called
 again. Otherwise land changes hands through offers between tycoons.
+Pass and the panel shrinks to a thin strip at the top of the screen, so you
+can get on with running your shops while the rivals fight it out.
 
 ### Colour sets
 The city has eight colour districts. Owning **every lot of a colour**
@@ -123,6 +125,68 @@ On **your own land** you can **buy out** a rival's shop, team and stock
 included. Owning the whole colour set makes buyouts much cheaper. Rivals do
 this to you as well.
 
+### Brands and chains
+
+Three or more shops of the same kind make a **chain** under your brand
+(for example "Vance Tea Room"). Chains:
+
+| Branches | Name | Stock discount |
+| --- | --- | --- |
+| 3+ | Chain | 3% |
+| 5+ | Brand | 6% |
+| 8+ | Household name | 9%, plus +3% pull |
+
+- **Shared reputation:** half of each branch's reputation is the brand's
+  average, so one badly run branch drags the others down (the advisor warns
+  you).
+- **Loyal fans:** a customer whose favourite is one branch also prefers the
+  others (×1.12).
+- **One tap** copies a branch's price, hours and stock policy to the whole
+  chain.
+
+### Landmarks
+
+One of each per city, built in a race. Meet the requirement, pick an
+empty lot of yours (no shop, no apartments) and pay up front. Building takes
+days; **night shifts** cost 30% more and halve the time left. Everyone can
+see who is building what. The first to finish owns the landmark; anyone
+else building it gets **half their money back**. Each landmark brings
+crowds (+8% for every shop on its block, +4% next door), costs upkeep, and
+gives its owner a perk:
+
+| Landmark | From | Needs | Perk |
+| --- | --- | --- | --- |
+| 🕰️ Clock Tower | 1930 | 3 shops | Your shops on its block and next door +12% |
+| 🚉 Grand Terminal | 1934 | 2 stations | Your station fares +50% |
+| 🎭 Opera House | 1940 | 1 colour set | Your smart shops (fit-out 2+) +15%; nightly tickets |
+| 🏟️ Stadium | 1950 | 6 shops | Weekend match days: food and fun nearby +40% (yours +60%); gate takings |
+| 📡 TV Tower | 1960 | 8 shops | Your promotions half price, 50% longer |
+| 🏛️ Convention Centre | 1970 | 2 sets | Your hotels and bistros +25%; tickets |
+| 🏙️ Glass HQ Tower | 1980 | $1M net worth | Half the loan interest, 50% more credit |
+| 🔭 Science Museum | 1990 | 10 shops | Weekend crowds: shops nearby +30% (yours +45%); tickets |
+| 💡 Tech Campus | 2000 | $3M net worth | New shop types 5 years early; free surveys |
+| 🎡 Harbour Wheel | 2010 | 3 sets | Shops on its block +20%; big daily ticket sales |
+
+Town offers five of them, City seven, and the larger maps all ten. A landmark
+lot can't be sold or traded; if its owner goes bankrupt, whoever wins the
+lot at auction gets the landmark.
+
+### City Hall
+
+Every week or so City Hall posts a job (the 🏛️ tab), and rivals bid too:
+
+- **Tenders** (tram line, street lighting): sealed quotes for two days, and
+  the **lowest quote wins**. The winner pays the build cost up front and is
+  paid the quote in daily instalments. A tram line gives +8% customers to
+  shops in the districts it runs through, for good. Street lighting gives
+  cinemas, arcades, clubs, bistros and hotels +8% citywide.
+- **Sponsorship** (city festival): the highest sealed bid wins. For two days
+  the sponsor's shops get +30% citywide, and every shop in the festival
+  district +20%.
+- **Grants** (housing drive, green spaces): the city pays anyone who builds
+  apartments, or parks in the named districts, before the deadline, until
+  the budget runs out.
+
 ### Advisor alerts
 
 The 🔔 button (top of the camera controls) opens your advisor's inbox. Every
@@ -139,7 +203,9 @@ game hour it looks over your company and files what needs attention:
   clear the loan, purchase offers
 - **Goals:** a milestone due within three days, a rival closing in on the race
   target
-- **Tips:** new kinds of shop as they are invented
+- **City Hall:** open tenders and grants, a landmark you can now build, a
+  rival ahead of you in a landmark race (with a one-tap night-shift fix)
+- **Tips:** new kinds of shop as they are invented, one more shop for a chain
 
 Alerts mark themselves **sorted** when the problem clears. Many have a one-tap
 fix (rush delivery, call auction, repay loan), and **Show** jumps to the lot and
@@ -281,6 +347,7 @@ skyline/
   js/citizens.js   the citizens: needs, choices, queues, grudges, comments, trips
   js/staff.js      shop staff: roles, skill, wages, morale, training, quitting
   js/sim.js        economy: shops, stock, rent, sets, apartments, goals, trades, bank
+  js/civic.js      chains, landmarks (race, perks), City Hall projects; hourly perk refresh
   js/advisor.js    the advisor inbox: alert rules, sorted/one-off tracking, mute
   js/auction.js    live land auctions
   js/ai.js         rival tycoons (build, tune, trade, bid)

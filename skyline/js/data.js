@@ -368,3 +368,69 @@ export const EVENTS = [
   { id: 'slump',     days: [1, 1], weight: 1, text: () => 'Market jitters: land values down 6%.', land: 0.94 },
   { id: 'concert',   days: [1, 1], weight: 2, district: true, text: d => `Open-air concert near ${d}: late-night crowds expected.`, tourists: 1200, mods: { club: 1.5, bistro: 1.2, burger: 1.2 } },
 ];
+
+// ------------------------------------------------------ brands & chains ----
+// Three or more shops of one type under one company make a chain. Chains buy
+// stock in bulk, share one reputation, and win loyal customers citywide.
+export const CHAIN_MIN = 3;
+export const CHAIN_TIERS = [            // [shops, bulk discount on stock, name]
+  [3, 0.03, 'Chain'], [5, 0.06, 'Brand'], [8, 0.09, 'Household name'],
+];
+export const CHAIN_LOYALTY = 1.12;      // a fan of one branch likes every branch
+export const CHAIN_REP_SHARE = 0.5;     // how much of a branch's reputation is the brand's
+export const FAMOUS_BOOST = 0.03;       // household names pull a little harder
+
+// ------------------------------------------------------------ landmarks ----
+// One of each per city. Meet the requirement, pick an empty lot of yours and
+// build. Rivals race you; whoever finishes first owns it for good, the rest
+// get half their money back. Every landmark draws crowds to its block.
+export const LANDMARKS = [
+  { id: 'clock',      name: 'Clock Tower',        icon: '🕰️', year: 1930, cost: 55000,  days: 5,  upkeep: 200,  tickets: 0,
+    req: { shops: 3 }, perk: 'Your shops on its block and the blocks next door get +12% appeal.' },
+  { id: 'terminal',   name: 'Grand Terminal',     icon: '🚉', year: 1934, cost: 70000,  days: 6,  upkeep: 300,  tickets: 0,
+    req: { stations: 2 }, perk: 'Your stations collect 50% more in fares.' },
+  { id: 'opera',      name: 'Opera House',        icon: '🎭', year: 1940, cost: 120000, days: 8,  upkeep: 600,  tickets: 900,
+    req: { sets: 1 }, perk: 'Your smart shops (fit-out level 2+) get +15% appeal citywide. Sells tickets every night.' },
+  { id: 'stadium',    name: 'Stadium',            icon: '🏟️', year: 1950, cost: 220000, days: 10, upkeep: 900,  tickets: 0, weekend: 6000,
+    req: { shops: 6 }, perk: 'Match days on weekends: food and fun nearby +40% (yours +60%). Gate takings every weekend.' },
+  { id: 'tvtower',    name: 'TV Tower',           icon: '📡', year: 1960, cost: 180000, days: 8,  upkeep: 700,  tickets: 0,
+    req: { shops: 8 }, perk: 'Your promotions cost half and run 50% longer.' },
+  { id: 'convention', name: 'Convention Centre',  icon: '🏛️', year: 1970, cost: 300000, days: 10, upkeep: 1200, tickets: 1500,
+    req: { sets: 2 }, perk: 'Business visitors: your hotels and bistros get +25% appeal citywide.' },
+  { id: 'glasshq',    name: 'Glass HQ Tower',     icon: '🏙️', year: 1980, cost: 400000, days: 12, upkeep: 1500, tickets: 0,
+    req: { worth: 1000000 }, perk: 'The banks love you: half the loan interest and 50% more credit.' },
+  { id: 'museum',     name: 'Science Museum',     icon: '🔭', year: 1990, cost: 350000, days: 10, upkeep: 1200, tickets: 0, weekend: 5000,
+    req: { shops: 10 }, perk: 'Weekend family crowds: every shop nearby +30% (yours +45%). Ticket sales every weekend.' },
+  { id: 'campus',     name: 'Tech Campus',        icon: '💡', year: 2000, cost: 600000, days: 14, upkeep: 2500, tickets: 0,
+    req: { worth: 3000000 }, perk: 'New kinds of shop reach you 5 years early, and market surveys are free.' },
+  { id: 'wheel',      name: 'Harbour Wheel',      icon: '🎡', year: 2010, cost: 500000, days: 12, upkeep: 1500, tickets: 7000,
+    req: { sets: 3 }, perk: 'The biggest tourist draw in town: every shop on its block +20%, and big ticket sales daily.' },
+];
+export const LANDMARK_SETS = {
+  town:  ['clock', 'opera', 'stadium', 'glasshq', 'wheel'],
+  city:  ['clock', 'terminal', 'opera', 'stadium', 'tvtower', 'glasshq', 'wheel'],
+  metro: LANDMARKS.map(l => l.id),
+  mega:  LANDMARKS.map(l => l.id),
+};
+export const LANDMARK_NEAR = [0.08, 0.04];   // footfall boost on its block / next door, for everyone
+export const LANDMARK_REFUND = 0.5;
+export const LANDMARK_RUSH = 0.3;            // share of the cost to halve the remaining days
+
+// --------------------------------------------------------- city projects ----
+// City Hall posts a job every week or so. Tenders go to the lowest quote and
+// are paid in instalments while you build; sponsorships go to the highest
+// bid; grants pay anyone who builds the right thing before the deadline.
+export const PROJECT_GAP = 8;                // days between postings on the Town map
+export const TENDER_DAYS = 2;                // days a tender or sponsorship stays open
+export const PROJECTS = {
+  tram:     { name: 'Tram line',         icon: '🚋', kind: 'tender',  budget: 60000, costShare: 0.6, work: 6,
+    text: 'Lay a tram line through {route}. Shops along it get +8% customers for good.' },
+  lights:   { name: 'Street lighting',   icon: '💡', kind: 'tender',  budget: 40000, costShare: 0.6, work: 4,
+    text: 'Light the streets citywide. Cinemas, arcades, clubs, bistros and hotels get +8% for good.' },
+  festival: { name: 'City festival',     icon: '🎪', kind: 'sponsor', budget: 8000,  days: 2,
+    text: 'Sponsor a two-day festival in {d}. The sponsor\'s shops get +30% citywide; every shop in {d} +20%.' },
+  housing:  { name: 'Housing drive',     icon: '🏘️', kind: 'grant',   budget: 3000,  days: 12, cap: 12,
+    text: 'The city pays {amt} for every apartment level built in the next {days} days (up to {cap} levels).' },
+  parks:    { name: 'Green spaces',      icon: '🌳', kind: 'grant',   budget: 0.5,   days: 10, cap: 3,
+    text: 'The city pays half the cost of any park built in {route} in the next {days} days (up to {cap} parks).' },
+};

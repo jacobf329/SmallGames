@@ -15,6 +15,7 @@ import {
   LOAN_LTV, START_CASH, RIVALS, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, DIFFICULTY, EVENTS, PRICE_MIN, PRICE_MAX,
   DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, TECH, YEAR_DAYS, GOAL_TEXT, bizName, eraName,
   BIZ_UTIL, STAFF_ROLES, MAX_FLOORS, FLOOR_COST, PARKS, PROMOS, SURVEY_COST, SURVEY_DAYS, BUYOUT_MULT, BUYOUT_SET_MULT,
+  CHAIN_TIERS, PROJECTS,
 } from './data.js';
 import { MAP, rand, setMap } from './map.js';
 import { NAT, bizOpen, defaultHours, yearOf, techOf, modFor, capacity, appeal, unitCost, blockStars, starFactor } from './demand.js';
@@ -91,8 +92,22 @@ export const LEDGER_LABELS = {
   sales: 'Sales', goods: 'Stock deliveries', storage: 'Storage', wages: 'Wages', rentPaid: 'Ground rent paid',
   rentIn: 'Ground rent received', overhead: 'Overheads & bills', fares: 'Station fares',
   utility: 'Utility income', aptRent: 'Apartment rents', interest: 'Loan interest',
+  landmarks: 'Landmarks', projects: 'City contracts & grants',
   trade: 'Land trades', capex: 'Building & land',
 };
+
+// Chains buy stock in bulk: the discount for a chain of n shops.
+export function chainBulk(n) {
+  let d = 0;
+  for (const [min, off] of CHAIN_TIERS) if (n >= min) d = off;
+  return d;
+}
+export const goodsUnit = b => unitCost(BIZ[b.type]) * (1 - (b.bulk || 0));
+// A shop type this company may build: invented already, or close enough for
+// a Tech Campus owner.
+export const canTech = (s, pid, type) => techOf(s).biz.has(type) || (!!s.players[pid]?.perks?.techAhead && BIZ[type].year <= yearOf(s) + s.players[pid].perks.techAhead);
+// Locked lots: a landmark stands (or is going up) here.
+export const lockedLot = lot => !!(lot.landmark || lot.lmBuild);
 export const operating = led => Object.entries(led).filter(([k]) => k !== 'capex' && k !== 'trade').reduce((a, [, v]) => a + v, 0);
 
 // ------------------------------------------------------ valuations ----
@@ -151,7 +166,7 @@ export function bizValue(b) { return Math.round(b.invested * 0.6 + b.stock * uni
 export function playerAssets(s, pid) {
   let land = 0, biz = 0, apt = 0;
   for (const l of s.lots) {
-    if (l.owner === pid) { land += landValue(s, l); apt += Math.round(l.aptInvested * 0.75); }
+    if (l.owner === pid) { land += landValue(s, l) + (l.lmValue || 0); apt += Math.round(l.aptInvested * 0.75); }
     if (l.business && l.business.owner === pid) biz += bizValue(l.business);
   }
   return { land, biz, apt, total: land + biz + apt };
@@ -162,7 +177,7 @@ export function netWorth(s, pid) {
 }
 export function loanLimit(s, pid) {
   const cap = Math.floor(playerAssets(s, pid).total * LOAN_LTV / LOAN_STEP) * LOAN_STEP;
-  return Math.max(0, cap + 20000);      // the bank always fronts a small line
+  return Math.max(0, Math.round(cap * (s.players[pid].perks?.credit || 1) / LOAN_STEP) * LOAN_STEP + 20000);   // the bank always fronts a small line
 }
 
 // --------------------------------------------------------- demand ----
@@ -296,7 +311,8 @@ export function estimate(s, lotId, type, ownerId, cfg = {}) {
   lot.business = saved;
   const rev = cust * def.ticket * b.price;
   // Goods sold, plus a little waste on perishables.
-  const goods = cust * unitCost(def) * (1 + def.perish * 0.15);
+  const mates = s.lots.filter(l => l.id !== lotId && l.business && l.business.owner === ownerId && l.business.type === type).length;
+  const goods = cust * unitCost(def) * (1 - chainBulk(mates + 1)) * (1 + def.perish * 0.15);
   const wages = teamWage(b) * hours;
   const rent = lot.owner === ownerId ? 0 : rentFor(s, lot);
   const overhead = billFor(def, b.floors);
@@ -359,7 +375,7 @@ export function deliver(s, lot) {
   const target = b.autoStock ? autoTarget(b) : b.stockTarget;
   const order = Math.max(0, Math.round(target - b.stock));
   if (!order) return 0;
-  const cost = order * unitCost(def) * (b.autoStock ? 1 + AUTO_STOCK_PREMIUM : 1);
+  const cost = order * goodsUnit(b) * (b.autoStock ? 1 + AUTO_STOCK_PREMIUM : 1);
   ledger(s.players[b.owner], 'goods', -cost);
   bizBook(b, 'goods', -cost);
   b.stock += order;
@@ -453,10 +469,10 @@ function endOfDay(s, hooks) {
     const utils = s.lots.filter(l => l.kind === 'utility' && l.owner === p.id);
     for (const u of utils) ledger(p, 'utility', utilityIncome(s, u, pools, p.id));
     const stations = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
-    if (stations) ledger(p, 'fares', stationFare(stations) * stations * (0.7 + 0.3 * s.touristMult) * (1 + 0.004 * (s.day - 1)));
+    if (stations) ledger(p, 'fares', stationFare(stations) * stations * (p.perks?.fares || 1) * (0.7 + 0.3 * s.touristMult) * (1 + 0.004 * (s.day - 1)));
   }
   for (const l of s.lots) if (l.apt > 0 && l.owner >= 0) ledger(P[l.owner], 'aptRent', aptRentFor(s, l));
-  for (const p of P) if (p.loan > 0) ledger(p, 'interest', -p.loan * LOAN_RATE);
+  for (const p of P) if (p.loan > 0) ledger(p, 'interest', -p.loan * LOAN_RATE * (p.perks?.loanRate || 1));
 
   // Close the books on the day.
   for (const l of s.lots) {
@@ -697,6 +713,7 @@ export function nextAuctionSlot(s) {
 export function sellLand(s, pid, lotId) {
   const p = s.players[pid], lot = s.lots[lotId];
   if (lot.owner !== pid) return fail('You do not own this.');
+  if (lockedLot(lot)) return fail('A landmark stands here: it cannot be sold.');
   const value = Math.round(landValue(s, lot) * SELL_LAND_RATE + lot.aptInvested * 0.5);
   ledger(p, 'capex', value);
   returnToCity(s, lot);
@@ -708,13 +725,13 @@ export function sellLand(s, pid, lotId) {
 
 export function canBuild(s, lotId) {
   const lot = s.lots[lotId];
-  return lot.kind === 'prop' && !lot.business;
+  return lot.kind === 'prop' && !lot.business && !lockedLot(lot);
 }
 
 export function build(s, pid, lotId, type, cfg = {}) {
   const p = s.players[pid], lot = s.lots[lotId], def = BIZ[type];
   if (!canBuild(s, lotId)) return fail('Lot is not free.');
-  if (!techOf(s).biz.has(type)) return fail(`Not invented yet: arrives in ${def.year}.`);
+  if (!canTech(s, pid, type)) return fail(`Not invented yet: arrives in ${def.year}.`);
   const conf = { ...newBizConfig(def), ...cfg };
   conf.floors = Math.max(1, Math.min(MAX_FLOORS, Math.round(conf.floors || 1)));
   const cost = buildCost(def, conf.floors);
@@ -875,13 +892,15 @@ export function startPromo(s, pid, lotId, id) {
   if (!pr) return fail('No such campaign.');
   if (yearOf(s) < pr.year) return fail(`${pr.name} arrives in ${pr.year}.`);
   if (b.promo) return fail('A campaign is already running.');
-  const c = promoCost(b, pr);
+  const perks = s.players[pid].perks || {};
+  const c = Math.round(promoCost(b, pr) * (perks.promo || 1));
   if (s.players[pid].cash < c) return fail(`Need ${money(c)}.`);
   ledger(s.players[pid], 'overhead', -c);
   bizBook(b, 'marketing', -c);
   b.today.cost += c;
-  b.promo = { id, boost: pr.boost, until: s.day + pr.days - 1 };
-  return { ok: true, msg: `${pr.icon} ${pr.name} running for ${pr.days} days.` };
+  const days = Math.round(pr.days * (perks.promoDays || 1));
+  b.promo = { id, boost: pr.boost, until: s.day + days - 1 };
+  return { ok: true, msg: `${pr.icon} ${pr.name} running for ${days} days.` };
 }
 
 // Parks: whoever holds at least half a block can landscape its open tiles.
@@ -915,8 +934,9 @@ export function buildPark(s, pid, d, type) {
   if (s.players[pid].cash < pk.cost) return fail(`Need ${money(pk.cost)}.`);
   ledger(s.players[pid], 'capex', -pk.cost);
   s.parks.push({ d, x: slot[0], y: slot[1], type, owner: pid, day: s.day });
+  const g = claimGrant(s, pid, 'parks', d, pk.cost);
   news(s, `${s.players[pid].company} built a ${pk.name.toLowerCase()} in ${DISTRICTS[d].name}. ${pk.icon}`, 'build', pid);
-  return { ok: true, msg: `${pk.icon} ${pk.name} built: ${DISTRICTS[d].name} now has ${blockStars(s, d)} stars.` };
+  return { ok: true, msg: `${pk.icon} ${pk.name} built: ${DISTRICTS[d].name} now has ${blockStars(s, d)} stars.${g ? ` The city paid ${money(g)} of it.` : ''}` };
 }
 
 // Landlords may buy out a rival's shop standing on their land.
@@ -946,8 +966,9 @@ export function buyout(s, pid, lotId) {
 // Market research: what would do best on this block, and what people miss.
 export function survey(s, pid, d) {
   if (d < 0 || d >= DISTRICTS.length) return fail('No such block.');
-  if (s.players[pid].cash < SURVEY_COST) return fail(`Need ${money(SURVEY_COST)}.`);
-  ledger(s.players[pid], 'overhead', -SURVEY_COST);
+  const fee = s.players[pid].perks?.freeSurvey ? 0 : SURVEY_COST;
+  if (s.players[pid].cash < fee) return fail(`Need ${money(fee)}.`);
+  if (fee) ledger(s.players[pid], 'overhead', -fee);
   const tech = techOf(s);
   const ids = MAP.districtLots[d];
   const probe = ids.find(id => !s.lots[id].business) ?? ids[0];
@@ -987,7 +1008,7 @@ export function rushDelivery(s, pid, lotId) {
   const target = b.autoStock ? autoTarget(b) : b.stockTarget;
   const order = Math.max(0, Math.round(target - b.stock));
   if (!order) return fail('Shelves are already full.');
-  const cost = order * unitCost(def) * 1.25;
+  const cost = order * goodsUnit(b) * 1.25;
   if (s.players[pid].cash < cost) return fail(`Need ${money(cost)}.`);
   ledger(s.players[pid], 'goods', -cost);
   bizBook(b, 'goods', -cost);
@@ -1019,6 +1040,7 @@ export function aptCheck(s, pid, lotId) {
   const lot = s.lots[lotId];
   if (lot.kind !== 'prop') return fail('Only district lots take apartments.');
   if (lot.owner !== pid) return fail('You must own the land.');
+  if (lockedLot(lot)) return fail('A landmark stands here.');
   if (lot.apt >= MAX_APT) return fail('Already a Skyline Tower.');
   const maxNow = techOf(s).apt;
   if (lot.apt >= maxNow) {
@@ -1035,9 +1057,10 @@ export function buildApt(s, pid, lotId) {
   ledger(p, 'capex', -chk.cost);
   lot.apt++; lot.aptInvested += chk.cost;
   syncResidents(s);
+  const g = claimGrant(s, pid, 'housing', lot.district, 0);
   if (lot.apt === MAX_APT) news(s, `${p.company} topped out a Skyline Tower on ${lot.name}!`, 'set', pid);
   else if (!p.human) news(s, `${p.company} added apartments on ${lot.name}.`, 'build', pid);
-  return { ok: true, msg: lot.apt === MAX_APT ? 'Skyline Tower complete!' : `Now ${lot.apt * 2} floors of apartments.` };
+  return { ok: true, msg: (lot.apt === MAX_APT ? 'Skyline Tower complete!' : `Now ${lot.apt * 2} floors of apartments.`) + (g ? ` Housing grant: +${money(g)}.` : '') };
 }
 export function sellApt(s, pid, lotId) {
   const p = s.players[pid], lot = s.lots[lotId];
@@ -1082,6 +1105,7 @@ export function transfer(s, buyerId, sellerId, lotId, amount) {
 export function makeOffer(s, buyerId, lotId, amount) {
   const lot = s.lots[lotId], buyer = s.players[buyerId];
   if (lot.owner < 0 || lot.owner === buyerId) return fail('Nobody to buy from.');
+  if (lockedLot(lot)) return fail('Landmarks are not for sale.');
   if (buyer.cash < amount) return fail(`You only have ${money(buyer.cash)}.`);
   const ask = askingPrice(s, lot.owner, lotId, buyerId);
   const seller = s.players[lot.owner];
@@ -1143,4 +1167,16 @@ export function deserialize(json) {
   setMap(s.mapId || 'town');
   buildCitizens(s);
   return s;
+}
+
+// City grants (housing drive, green spaces): pay whoever builds in time.
+export function claimGrant(s, pid, type, d, cost) {
+  const pr = (s.projects || []).find(x => x.type === type && x.state === 'open' && x.claimed < x.cap && (!x.route || x.route.includes(d)));
+  if (!pr) return 0;
+  const amt = Math.round(type === 'parks' ? cost * pr.amount : pr.amount);
+  pr.claimed++;
+  (pr.claims ||= {})[pid] = (pr.claims[pid] || 0) + amt;
+  ledger(s.players[pid], 'projects', amt);
+  if (pr.claimed >= pr.cap) { pr.state = 'done'; news(s, `${PROJECTS[type].icon} ${PROJECTS[type].name}: the city's budget is used up.`, 'info'); }
+  return amt;
 }

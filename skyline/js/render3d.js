@@ -376,7 +376,8 @@ export class Renderer3D {
   lotSig(s, lot) {
     const b = lot.business;
     const auction = s.auction && s.auction.lotId === lot.id ? 'A' : '';
-    return `${lot.owner}|${lot.apt}|${b ? b.type + b.owner + b.fit + 'f' + (b.floors || 1) + (b.promo ? 'P' : '') : ''}|${auction}`;
+    const lm = lot.landmark ? 'L' + lot.landmark : lot.lmBuild ? 'B' + lot.lmBuild + ((s.lmBuilds || []).find(x => x.lot === lot.id)?.left ?? '') : '';
+    return `${lot.owner}|${lot.apt}|${b ? b.type + b.owner + b.fit + 'f' + (b.floors || 1) + (b.promo ? 'P' : '') : ''}|${auction}|${lm}`;
   }
 
   syncLot(s, lot) {
@@ -433,6 +434,12 @@ export class Renderer3D {
         add(new THREE.CylinderGeometry(0.26, 0.26, 0.36, 20), std('#4ea8de', { roughness: 0.4 }), 0, GROUND + 0.52, 0);
         height = 0.75;
       }
+    } else if (lot.landmark) {
+      height = buildLandmark(add, std, lot.landmark, lot.owner >= 0 ? s.players[lot.owner].color : '#cfd3da', g);
+    } else if (lot.lmBuild) {
+      const bd = (s.lmBuilds || []).find(x => x.lot === lot.id);
+      const frac = bd ? 1 - bd.left / bd.days : 0.2;
+      height = buildScaffold(add, std, frac, lot.owner >= 0 ? s.players[lot.owner].color : '#ffd23f');
     } else if (b || lot.apt) {
       const def = b ? BIZ[b.type] : null;
       const wall = def ? def.wall : '#8d8f99';
@@ -484,6 +491,8 @@ export class Renderer3D {
     // Floating icon.
     let icon = null, ring = '#ffffff';
     if (b) { icon = BIZ[b.type].icon; ring = s.players[b.owner].color; }
+    else if (lot.landmark) { icon = LM_ICON[lot.landmark]; ring = lot.owner >= 0 ? s.players[lot.owner].color : '#ffd23f'; }
+    else if (lot.lmBuild) { icon = '🏗️'; ring = lot.owner >= 0 ? s.players[lot.owner].color : '#ffd23f'; }
     else if (lot.kind === 'station') icon = '🚇';
     else if (lot.kind === 'utility') icon = lot.name.startsWith('Volt') ? '⚡' : '💧';
     if (s.auction && s.auction.lotId === lot.id) { icon = '🔨'; ring = '#ffd23f'; }
@@ -988,6 +997,7 @@ export class Renderer3D {
       const o = this.syncLot(s, lot);
       if (o.group.userData.beacon) o.group.userData.beacon.visible = Math.sin(this.clock * 4 + lot.id) > 0;
       if (o.group.userData.moon) o.group.userData.moon.visible = !!lot.business && !bizOpen(lot.business, s.hour);
+      if (o.group.userData.wheel) o.group.userData.wheel.children.length && (o.group.userData.wheel.rotation.z += dt * 0.25);
     }
     // Set borders and the selection.
     const setSig = s.players.map(p => DISTRICTS.map((_, d) => ownsSet(s, p.id, d) ? 1 : 0).join('')).join('|');
@@ -1037,3 +1047,124 @@ function mixHex(a, b, t) {
   return '#' + A.lerp(B, t).getHexString();
 }
 export { SEG_COLORS, SEGMENTS };
+
+// ---------------------------------------------------------- landmarks ----
+const LM_ICON = { clock: '🕰️', terminal: '🚉', opera: '🎭', stadium: '🏟️', tvtower: '📡', convention: '🏛️', glasshq: '🏙️', museum: '🔭', campus: '💡', wheel: '🎡' };
+
+// Scaffolding that rises with the build.
+function buildScaffold(add, std, frac, color) {
+  const h = 0.25 + 1.1 * Math.max(0.1, frac);
+  const pole = std('#c9a227');
+  for (const [x, z] of [[-0.38, -0.38], [0.38, -0.38], [-0.38, 0.38], [0.38, 0.38]])
+    add(new THREE.BoxGeometry(0.03, h, 0.03), pole, x, GROUND + h / 2, z);
+  for (let y = 0.25; y < h; y += 0.25) {
+    add(new THREE.BoxGeometry(0.8, 0.02, 0.03), pole, 0, GROUND + y, -0.38, false);
+    add(new THREE.BoxGeometry(0.8, 0.02, 0.03), pole, 0, GROUND + y, 0.38, false);
+  }
+  add(new THREE.BoxGeometry(0.6, h * 0.8, 0.6), std('#9aa0a8'), 0, GROUND + h * 0.4, 0);
+  // A crane in the builder's colour.
+  add(new THREE.BoxGeometry(0.05, h + 0.5, 0.05), std(color), 0.42, GROUND + (h + 0.5) / 2, 0.42);
+  add(new THREE.BoxGeometry(0.8, 0.04, 0.05), std(color), 0.15, GROUND + h + 0.48, 0.42);
+  return h + 0.55;
+}
+
+// One model per landmark; returns the height for the floating badge.
+function buildLandmark(add, std, id, color, g) {
+  const stone = std('#e8e0cf'), dark = std('#5d6470'), glass = std('#9fd3ff', { roughness: 0.15, metalness: 0.4 }), trim = std(color);
+  add(new THREE.BoxGeometry(0.92, 0.06, 0.92), std('#d9d2c3'), 0, GROUND + 0.03, 0);
+  switch (id) {
+    case 'clock': {
+      add(new THREE.BoxGeometry(0.34, 1.3, 0.34), stone, 0, GROUND + 0.65, 0);
+      for (const r of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+        const face = add(new THREE.CylinderGeometry(0.12, 0.12, 0.02, 20), std('#fffaf0'), Math.sin(r) * 0.18, GROUND + 1.1, Math.cos(r) * 0.18, false);
+        face.rotation.x = Math.PI / 2; face.rotation.z = r;
+        face.rotation.set(Math.PI / 2, 0, -r);
+      }
+      add(new THREE.ConeGeometry(0.26, 0.4, 4), trim, 0, GROUND + 1.5, 0).rotation.y = Math.PI / 4;
+      return GROUND + 1.75;
+    }
+    case 'terminal': {
+      add(new THREE.BoxGeometry(0.86, 0.4, 0.6), stone, 0, GROUND + 0.2, 0);
+      const vault = add(new THREE.CylinderGeometry(0.3, 0.3, 0.86, 20, 1, false, 0, Math.PI), glass, 0, GROUND + 0.4, 0);
+      vault.rotation.z = Math.PI / 2;
+      add(new THREE.BoxGeometry(0.12, 0.7, 0.12), stone, 0.36, GROUND + 0.35, 0.24);
+      add(new THREE.BoxGeometry(0.88, 0.04, 0.62), trim, 0, GROUND + 0.42, 0);
+      return GROUND + 0.8;
+    }
+    case 'opera': {
+      add(new THREE.BoxGeometry(0.8, 0.36, 0.7), stone, 0, GROUND + 0.18, 0);
+      for (let i = -3; i <= 3; i++) add(new THREE.CylinderGeometry(0.025, 0.025, 0.34, 8), std('#ffffff'), i * 0.11, GROUND + 0.17, 0.37);
+      add(new THREE.SphereGeometry(0.3, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), std('#c9a227', { metalness: 0.5, roughness: 0.35 }), 0, GROUND + 0.36, -0.05);
+      add(new THREE.BoxGeometry(0.82, 0.04, 0.72), trim, 0, GROUND + 0.37, 0);
+      return GROUND + 0.75;
+    }
+    case 'stadium': {
+      const bowl = add(new THREE.CylinderGeometry(0.46, 0.4, 0.3, 28, 1, true), std('#d5d9e0', { side: THREE.DoubleSide }), 0, GROUND + 0.15, 0);
+      add(new THREE.CylinderGeometry(0.38, 0.38, 0.02, 28), std('#3fa34d'), 0, GROUND + 0.04, 0, false);
+      add(new THREE.TorusGeometry(0.45, 0.025, 6, 28), trim, 0, GROUND + 0.3, 0).rotation.x = Math.PI / 2;
+      for (const [x, z] of [[-0.42, -0.42], [0.42, 0.42]]) add(new THREE.BoxGeometry(0.03, 0.6, 0.03), dark, x, GROUND + 0.3, z);
+      g.userData.bowl = bowl;
+      return GROUND + 0.6;
+    }
+    case 'tvtower': {
+      add(new THREE.CylinderGeometry(0.05, 0.12, 1.8, 10), stone, 0, GROUND + 0.9, 0);
+      add(new THREE.SphereGeometry(0.16, 16, 10), glass, 0, GROUND + 1.45, 0);
+      add(new THREE.TorusGeometry(0.17, 0.02, 6, 20), trim, 0, GROUND + 1.45, 0).rotation.x = Math.PI / 2;
+      add(new THREE.CylinderGeometry(0.01, 0.02, 0.5, 6), dark, 0, GROUND + 2.05, 0);
+      const beacon = add(new THREE.SphereGeometry(0.03, 8, 6), new THREE.MeshBasicMaterial({ color: '#ff3b3b' }), 0, GROUND + 2.32, 0, false);
+      g.userData.beacon = beacon;
+      return GROUND + 2.35;
+    }
+    case 'convention': {
+      add(new THREE.BoxGeometry(0.88, 0.3, 0.8), glass, 0, GROUND + 0.15, 0);
+      const roof = add(new THREE.CylinderGeometry(0.55, 0.55, 0.9, 24, 1, false, 0, Math.PI * 0.5), std('#f4f4f4'), 0, GROUND + 0.05, -0.2);
+      roof.rotation.z = Math.PI / 2;
+      add(new THREE.BoxGeometry(0.9, 0.04, 0.82), trim, 0, GROUND + 0.31, 0);
+      return GROUND + 0.65;
+    }
+    case 'glasshq': {
+      add(new THREE.BoxGeometry(0.5, 2.3, 0.5), glass, 0, GROUND + 1.15, 0);
+      add(new THREE.BoxGeometry(0.4, 0.5, 0.4), glass, 0, GROUND + 2.55, 0);
+      for (let y = 0.4; y < 2.3; y += 0.4) add(new THREE.BoxGeometry(0.52, 0.02, 0.52), trim, 0, GROUND + y, 0, false);
+      add(new THREE.CylinderGeometry(0.01, 0.015, 0.4, 6), dark, 0, GROUND + 3, 0);
+      return GROUND + 3.2;
+    }
+    case 'museum': {
+      add(new THREE.BoxGeometry(0.84, 0.32, 0.6), stone, 0, GROUND + 0.16, 0);
+      add(new THREE.SphereGeometry(0.24, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), std('#7aa6c2', { metalness: 0.3 }), 0.12, GROUND + 0.32, 0);
+      const scope = add(new THREE.CylinderGeometry(0.04, 0.05, 0.36, 10), dark, 0.12, GROUND + 0.58, 0);
+      scope.rotation.z = -0.6;
+      add(new THREE.BoxGeometry(0.86, 0.04, 0.62), trim, 0, GROUND + 0.33, 0);
+      return GROUND + 0.8;
+    }
+    case 'campus': {
+      for (const [x, z, h] of [[-0.22, -0.2, 0.7], [0.22, -0.2, 0.5], [0, 0.22, 0.9]])
+        add(new THREE.BoxGeometry(0.34, h, 0.3), glass, x, GROUND + h / 2, z);
+      add(new THREE.TorusGeometry(0.42, 0.02, 6, 30), trim, 0, GROUND + 0.35, 0).rotation.x = Math.PI / 2;
+      add(new THREE.CylinderGeometry(0.15, 0.15, 0.02, 20), std('#3fa34d'), 0, GROUND + 0.07, -0.05, false);
+      return GROUND + 1.05;
+    }
+    case 'wheel': {
+      const wheel = new THREE.Group();
+      wheel.position.set(0, GROUND + 0.85, 0);
+      wheel.rotation.y = Math.PI / 4;
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.025, 8, 40), std('#f4f4f4'));
+      wheel.add(rim);
+      for (let i = 0; i < 8; i++) {
+        const a = i / 8 * Math.PI * 2;
+        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.015, 1.4, 0.015), std('#cfd3da'));
+        spoke.rotation.z = a; wheel.add(spoke);
+        const cab = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), std(i % 2 ? color : '#ffd23f'));
+        cab.position.set(Math.cos(a) * 0.7, Math.sin(a) * 0.7, 0); wheel.add(cab);
+      }
+      g.add(wheel);
+      g.userData.wheel = wheel;
+      for (const x of [-0.3, 0.3]) {
+        const leg = add(new THREE.BoxGeometry(0.04, 0.95, 0.04), dark, x * 0.7, GROUND + 0.45, x * 0.7);
+        leg.rotation.z = x > 0 ? 0.25 : -0.25;
+      }
+      return GROUND + 1.6;
+    }
+  }
+  return GROUND + 0.5;
+}

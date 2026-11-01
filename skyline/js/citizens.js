@@ -16,8 +16,7 @@
 
 import {
   DISTRICTS, NEEDS, BUSINESSES, BIZ, SEG_ELASTICITY, PEOPLE_PER_CITIZEN, WALK_RANGE, DISTANCE_FALLOFF,
-  OUTSIDE_WEIGHT, DEMAND_SCALE, APT_RESIDENTS, FIRST_NAMES, LAST_NAMES, bizName,
-} from './data.js';
+  OUTSIDE_WEIGHT, DEMAND_SCALE, APT_RESIDENTS, FIRST_NAMES, LAST_NAMES, bizName, CHAIN_LOYALTY, } from './data.js';
 import { MAP, rand, tileDist, BLOCK_TILES, STATION_TILES } from './map.js';
 import { NAT, bizOpen, modFor, capacity, appeal, techOf, yearOf, blockStars, starFactor } from './demand.js';
 import { avgMorale, avgSkill, manager } from './staff.js';
@@ -215,11 +214,13 @@ export function citizensHour(s, h) {
     const el = SEG_ELASTICITY[c.seg] * c.sens;
     let sum = 0, best = null, bestW = 0;
     const cand = [];
+    const fan = c.fav >= 0 ? s.lots[c.fav]?.business : null;   // brand loyalty
     for (const sh of shops[bi]) {
       const dist = tileDist(c.hx, c.hy, sh.l.tx, sh.l.ty);
       if (dist > WALK_RANGE) continue;
       let w = (sh.def.id === want ? 1 : 0.35) * sh.a * starFactor(sh.stars, c.seg) * Math.pow(1 / sh.b.price, el) * Math.min(1, Math.exp(-(dist - 2) / DISTANCE_FALLOFF));
       if (c.fav === sh.l.id) w *= 1.5;
+      else if (fan && sh.b.chain && fan.owner === sh.b.owner && fan.type === sh.b.type) w *= CHAIN_LOYALTY;
       if ((c.grudge[sh.l.id] || 0) > day) w *= 0.4;
       cand.push([sh, w, dist]);
       sum += w;

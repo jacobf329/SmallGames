@@ -9,6 +9,7 @@ import {
   hireStaff, fireStaff, trainStaff, raiseStaff, setRole, addFloor, startPromo, buildPark, buyout, survey,
 } from './sim.js';
 import { auctionBid, auctionPass, callAuction } from './auction.js';
+import { chainSync, startLandmark, rushLandmark, bidProject } from './civic.js';
 import { inboxRead, inboxDismiss, inboxClear, inboxMute } from './advisor.js';
 
 // Bad arguments throw; perform() turns that into a failed action.
@@ -46,6 +47,10 @@ const ACTIONS = {
   buyout:    (s, p, [l]) => buyout(s, p, lot(s, l)),
   survey:    (s, p, [d]) => survey(s, p, Math.round(num(d))),
   pass:      (s, p) => auctionPass(s, p),
+  chainSync: (s, p, [l]) => chainSync(s, p, lot(s, l)),
+  landmark:  (s, p, [l, id]) => startLandmark(s, p, lot(s, l), String(id)),
+  lmRush:    (s, p) => rushLandmark(s, p),
+  project:   (s, p, [id, amt]) => bidProject(s, p, num(id), num(amt)),
   inboxRead: (s, p, [ids]) => inboxRead(s, p, ids === 'all' ? 'all' : (Array.isArray(ids) ? ids.slice(0, 60).map(num) : [])),
   inboxDismiss: (s, p, [id]) => inboxDismiss(s, p, num(id)),
   inboxClear: (s, p) => inboxClear(s, p),

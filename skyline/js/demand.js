@@ -53,7 +53,7 @@ export function capacity(b) {
 }
 // How attractive the shop is before price and distance.
 export function appeal(b) {
-  return FIT_LEVELS[b.fit].appeal * (b.rep ?? 1) * serviceFactor(b) * (b.promo ? b.promo.boost : 1);
+  return FIT_LEVELS[b.fit].appeal * (b.crep ?? b.rep ?? 1) * serviceFactor(b) * (b.promo ? b.promo.boost : 1) * (b.boost || 1);
 }
 
 // Block appeal in stars: wealthier districts start higher, parks add more.

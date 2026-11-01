@@ -14,13 +14,16 @@ import {
   capacity, districtPopulation, LEDGER_LABELS, operating, dayName, yearOf, techOf, bizOpen, bizLabel,
   petition, nextAuctionSlot, goalProgress, goalText, setsOwned, buildCost, floorCost, promoCost, buyoutPrice,
   canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame, BIZ_LEDGER, utilityIncome, utilityPools, raceGoal,
+  canTech, chainBulk,
 } from './sim.js';
+import { PROJECTS, CHAIN_MIN, LANDMARKS } from './data.js';
 import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } from './staff.js';
 import { LENSES, LENS, lensData } from './lens.js';
 import { auctionBid, settleRest, minBid, increment, canCall, reservePrice, auctionGap } from './auction.js';
 import { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } from './citizens.js';
 import { SEG_COLORS } from './render3d.js';
 import { ALERT_CATS, unreadCount } from './advisor.js';
+import { LM, landmarkSet, landmarkState, reqProgress, canLandmark, freeLotsFor, rushCost, chainOf, chainTier, brandName, activeProjects, projectText, quoteRange } from './civic.js';
 import { sfx, setSound, soundOn } from './audio.js';
 
 const $ = id => document.getElementById(id);
@@ -123,7 +126,7 @@ export class UI {
     if (v.kind === 'lot') html = this.lotHTML(this.s.lots[v.id]);
     else if (v.kind === 'citizen') html = this.citizenHTML(v.id);
     else html = ({ empire: () => this.empireHTML(), sets: () => this.setsHTML(), goals: () => this.goalsHTML(), lens: () => this.lensHTML(),
-      bank: () => this.bankHTML(), menu: () => this.menuHTML(), inbox: () => this.inboxHTML() })[v.name]();
+      bank: () => this.bankHTML(), menu: () => this.menuHTML(), inbox: () => this.inboxHTML(), civic: () => this.civicHTML() })[v.name]();
     $('sheet-body').innerHTML = html;
     $('sheet').classList.remove('hidden');
     $('sheet').scrollTop = scroll;
@@ -233,13 +236,16 @@ export class UI {
     const b = lot.business;
     const year = yearOf(s);
     const tech = techOf(s);
+    if (lot.landmark) return this.landmarkCardHTML(lot);
+    if (lot.lmBuild) return this.constructionHTML(lot);
     if (!b) {
       const rentNote = lot.owner === ME ? 'Your land: no ground rent.' :
         lot.owner === -1 ? `You'd lease from the city: ${money(rentFor(s, lot))}/day rent.` :
         `You'd pay ${esc(s.players[lot.owner].company)} ${money(rentFor(s, lot))}/day rent.`;
       const floors = this.buildFloors || 1;
-      const open = BUSINESSES.filter(d => tech.biz.has(d.id));
-      const locked = BUSINESSES.filter(d => !tech.biz.has(d.id)).sort((a, b) => a.year - b.year);
+      const open = BUSINESSES.filter(d => canTech(s, ME, d.id));
+      const locked = BUSINESSES.filter(d => !canTech(s, ME, d.id)).sort((a, b) => a.year - b.year);
+      const mates = type => s.lots.filter(l => l.business?.owner === ME && l.business.type === type).length;
       const opts = open.map(def => ({ def, e: estimate(s, lot.id, def.id, ME, { floors, staff: 2 + floors }) })).sort((a, b) => b.e.profit - a.e.profit);
       const best = opts[0]?.def.id;
       return `<h3>Open a business</h3><p class="note">${rentNote} Forecasts assume fair prices and usual hours.</p>
@@ -248,11 +254,11 @@ export class UI {
         <div class="biz-list">${opts.map(({ def, e }) => `
           <button class="biz-opt ${def.id === best && e.profit > 0 ? 'best' : ''}" data-act="build" data-type="${def.id}" ${me.cash < buildCost(def, floors) ? 'disabled' : ''}>
             <i>${def.icon}</i>
-            <span><b>${esc(bizName(def, year))}</b><small>${money(buildCost(def, floors))} · ${hh(def.open[0])}–${hh(def.open[1])} · ~${Math.round(e.cust)} cust/day</small></span>
+            <span><b>${esc(bizName(def, year))}</b><small>${money(buildCost(def, floors))} · ${hh(def.open[0])}–${hh(def.open[1])} · ~${Math.round(e.cust)} cust/day${mates(def.id) + 1 >= CHAIN_MIN ? ` · <span class="pos">🔗 chain of ${mates(def.id) + 1}</span>` : ''}</small></span>
             <span class="est ${cls(e.profit)}">${sign(e.profit)}<small>per day</small></span>
           </button>`).join('')}
           ${locked.map(def => `<div class="biz-opt locked"><i>${def.icon}</i><span><b>${esc(bizName(def, def.year))}</b><small>Invented in ${def.year}</small></span><span class="est dim">🔒</span></div>`).join('')}
-        </div>`;
+        </div>${lot.owner === ME && !lot.apt ? this.landmarkPickHTML(lot) : ''}`;
     }
     const def = BIZ[b.type];
     const owner = s.players[b.owner];
@@ -284,6 +290,7 @@ export class UI {
     if (tab === 'customers') return h + this.customersTabHTML(lot, b);
     if (tab === 'promote') return h + this.promoTabHTML(lot, b);
     if (tab === 'books') return h + this.booksTabHTML(lot, b);
+    h += this.chainCardHTML(lot, b);
     const cap = capacity(b);
     const e = estimate(s, lot.id, b.type, ME, {});
     const fc = fitCost(b);
@@ -780,6 +787,121 @@ export class UI {
     return h;
   }
 
+  // ----------------------------------------------------- landmarks ----
+  landmarkCardHTML(lot) {
+    const s = this.s, id = lot.landmark, def = LM[id], L = s.landmarks[id], o = L && L.owner >= 0 ? s.players[L.owner] : null;
+    return `<h3>Landmark</h3><div class="card lm-card"><div class="row" style="margin:0"><span class="lm-icon">${def.icon}</span>
+      <div><b>${esc(def.name)}</b><div class="note" style="margin:0">${o ? `Owned by <b style="color:${o.color}">${esc(o.company)}</b>` : 'Run by the city'} · opened day ${L.day}</div></div></div>
+      <p class="note">⭐ ${esc(def.perk)}</p>
+      <p class="note">Brings crowds: shops on this block +8%, next door +4%. Upkeep ${money(def.upkeep)}/day${def.tickets || def.weekend ? `; tickets ${def.tickets ? `${money(def.tickets)}/day` : ''}${def.weekend ? `${def.tickets ? ' + ' : ''}${money(def.weekend)} on weekends` : ''}` : ''}.</p></div>`;
+  }
+  constructionHTML(lot) {
+    const s = this.s, b = (s.lmBuilds || []).find(x => x.lot === lot.id), def = LM[lot.lmBuild];
+    if (!b) return '';
+    const p = s.players[b.pid], rivals = s.lmBuilds.filter(x => x.id === b.id && x !== b);
+    return `<h3>Under construction</h3><div class="card lm-card"><div class="row" style="margin:0"><span class="lm-icon">🏗️</span>
+      <div><b>${def.icon} ${esc(def.name)}</b><div class="note" style="margin:0">Built by <b style="color:${p.color}">${esc(p.company)}</b> · ${b.left} day${b.left === 1 ? '' : 's'} to go${b.rushed ? ' · ⏩ night shifts' : ''}</div></div></div>
+      <div class="meter"><i style="width:${Math.round((1 - b.left / b.days) * 100)}%"></i></div>
+      ${rivals.length ? `<p class="note warn">⚠ Racing ${rivals.map(r => `<b style="color:${s.players[r.pid].color}">${esc(s.players[r.pid].company)}</b> (${r.left}d)`).join(', ')}. First to finish wins; the rest get half back.</p>` : '<p class="note">Nobody else is building it yet.</p>'}
+      <p class="note">⭐ ${esc(def.perk)}</p>
+      ${b.pid === ME && !b.rushed && b.left > 1 ? `<div class="row"><button class="btn gold wide" data-act="lm-rush">⏩ Night shifts: halve the time · ${money(rushCost(s, b))}</button></div>` : ''}</div>`;
+  }
+  landmarkPickHTML(lot) {
+    const s = this.s, me = s.players[ME];
+    const ids = landmarkSet(s).filter(id => landmarkState(s, id).state === 'open');
+    if (!ids.length) return '';
+    return `<h3>Or build a landmark <em>one per city</em></h3><div class="biz-list">${ids.map(id => {
+      const def = LM[id], chk = canLandmark(s, ME, id), r = reqProgress(s, ME, def);
+      const racing = (s.lmBuilds || []).filter(b => b.id === id).length;
+      return `<button class="biz-opt" data-act="landmark" data-id="${id}" ${chk.ok && me.cash >= chk.cost ? '' : 'disabled'}>
+        <i>${def.icon}</i><span><b>${esc(def.name)}</b><small>${r.ok ? '✓' : '✗'} ${esc(r.label)} · ${def.days} days${racing ? ` · <span class="warn">${racing} building it</span>` : ''}</small><small class="dim">${esc(def.perk)}</small></span>
+        <span class="est">${money(chk.cost || def.cost)}</span></button>`;
+    }).join('')}</div>`;
+  }
+  chainCardHTML(lot, b) {
+    const s = this.s, n = chainOf(s, b).length;
+    if (n < 2) return '';
+    if (n < CHAIN_MIN) return `<p class="note">🔗 One more ${esc(bizLabel(s, b.type))} makes a chain: ${Math.round(chainBulk(CHAIN_MIN) * 100)}% off stock, a shared reputation and loyal fans in every branch.</p>`;
+    const tier = chainTier(n), rep = b.crep ?? b.rep ?? 1;
+    return `<div class="card chain-card"><b>🔗 ${esc(brandName(s, b))}</b> <em class="dim">${tier[2]} · ${n} branches</em>
+      <div class="note" style="margin:2px 0 6px">Stock ${Math.round(tier[1] * 100)}% cheaper · brand reputation ${'★'.repeat(Math.round(rep * 2.5))} · fans of any branch prefer all of them${n >= 8 ? ' · famous: +3% pull' : ''}</div>
+      <button class="btn small" data-act="chain-sync">Copy this shop's price, hours &amp; stock to all branches</button></div>`;
+  }
+
+  // ------------------------------------------------------ city hall ----
+  civicHTML() {
+    const s = this.s, me = s.players[ME];
+    const lms = landmarkSet(s).map(id => LM[id]);
+    const land = lms.map(def => {
+      const st = landmarkState(s, def.id);
+      let status;
+      if (st.state === 'built') {
+        const o = st.owner >= 0 ? s.players[st.owner] : null;
+        status = `<span class="pill" style="background:${o ? o.color : '#888'}">${o ? (o.id === ME ? 'Yours' : esc(o.company)) : 'City'}</span> on ${esc(s.lots[st.lot].name)}`;
+      } else if (st.state === 'locked') status = `<span class="dim">🔒 ${def.year}</span>`;
+      else {
+        const r = reqProgress(s, ME, def);
+        status = (st.builds.length ? st.builds.map(b => `<span style="color:${s.players[b.pid].color}">🏗️ ${esc(b.pid === ME ? 'You' : s.players[b.pid].company)} ${b.left}d</span>`).join(' · ') + '<br>' : '') +
+          `<small class="${r.ok ? 'pos' : 'dim'}">${r.ok ? '✓' : '✗'} ${esc(r.label)}${r.ok ? '' : ` (${r.key === 'worth' ? money(r.have) : r.have})`}</small>`;
+      }
+      const chk = st.state === 'open' ? canLandmark(s, ME, def.id) : null;
+      const lots = chk?.ok ? freeLotsFor(s, ME) : [];
+      const pick = chk?.ok ? (lots.length ? `<div class="a-btns">${lots.slice(0, 4).map(l => `<button class="btn small go" data-act="landmark" data-id="${def.id}" data-lot="${l.id}" ${me.cash < chk.cost ? 'disabled' : ''}>Build on ${esc(l.name)}</button>`).join('')}</div>`
+        : '<small class="dim">You need an empty lot of your own (no shop or apartments).</small>') : '';
+      return `<div class="lm-row ${st.state}"><span class="lm-icon">${def.icon}</span><div class="grow"><b>${esc(def.name)}</b> <em class="dim">${money(chk?.cost || def.cost)} · ${def.days}d</em>
+        <small>${esc(def.perk)}</small><div class="lm-status">${status}</div>${pick}</div></div>`;
+    }).join('');
+    const mine = (s.lmBuilds || []).find(b => b.pid === ME);
+    const projs = activeProjects(s).map(pr => this.projectHTML(pr)).join('') || '<p class="note">No open jobs right now. City Hall posts one every week or so.</p>';
+    const recent = (s.projects || []).filter(pr => ['done', 'lapsed'].includes(pr.state)).map(pr => {
+      const def = PROJECTS[pr.type], w = pr.winner != null ? s.players[pr.winner] : null;
+      return `<div class="list-item"><span>${def.icon}</span><span class="grow">${esc(def.name)}<small>${pr.state === 'lapsed' ? 'Shelved: no bids' : w ? `Won by ${esc(w.company)} at ${money(pr.price)}` : `${pr.claimed || 0} grant${pr.claimed === 1 ? '' : 's'} paid`}</small></span></div>`;
+    }).join('');
+    const groups = {};
+    for (const l of s.lots) if (l.business?.owner === ME) (groups[l.business.type] ||= []).push(l);
+    const chains = Object.entries(groups).filter(([, ls]) => ls.length >= 2).sort((a, b) => b[1].length - a[1].length).map(([type, ls]) => {
+      const tier = chainTier(ls.length), b = ls[0].business;
+      return `<div class="list-item" data-act="goto" data-id="${ls[0].id}"><span>${BIZ[type].icon}</span><span class="grow"><b>${esc(tier ? brandName(s, b) : bizLabel(s, type))}</b><small>${ls.length} shops · ${tier ? `${tier[2]} · stock −${Math.round(tier[1] * 100)}%` : `${CHAIN_MIN - ls.length} more for a chain`}</small></span></div>`;
+    }).join('');
+    return `<div class="sh-head"><div class="chip" style="background:#6b4f2a">🏛️</div><div><div class="sh-title">City Hall</div><div class="sh-sub">Landmarks, city contracts and your brands</div></div></div>
+      <h3>City jobs <em>tenders, sponsorships, grants</em></h3>${projs}${recent ? `<div class="dim-list">${recent}</div>` : ''}
+      <h3>Landmarks <em>one of each · first to finish wins</em></h3>
+      ${mine ? `<p class="note">🏗️ You're building the <b>${esc(LM[mine.id].name)}</b>: ${mine.left} day${mine.left === 1 ? '' : 's'} to go. <a data-act="goto" data-id="${mine.lot}">Show</a></p>` : ''}
+      <div class="lm-list">${land}</div>
+      <p class="note">Lose a race and you get half your money back. Every landmark brings crowds: +8% on its block, +4% next door.</p>
+      <h3>Your brands <em>${CHAIN_MIN}+ shops of a kind</em></h3>${chains || '<p class="note">Open three shops of the same kind to start a chain: cheaper stock, one shared reputation, loyal fans.</p>'}`;
+  }
+  projectHTML(pr) {
+    const s = this.s, def = PROJECTS[pr.type];
+    const left = Math.max(0, pr.closes - s.day);
+    const head = `<div class="proj"><div class="row" style="margin:0"><span class="lm-icon">${def.icon}</span><div class="grow"><b>${esc(def.name)}</b>
+      <small>${esc(projectText(pr))}</small></div></div>`;
+    if (pr.state === 'tender') {
+      const [lo, hi] = quoteRange(pr), mine = pr.bids[ME];
+      const step = Math.max(500, Math.round(pr.budget * 0.05 / 500) * 500);
+      const draft = (this.projDraft ||= {})[pr.id] ??= mine ?? (def.kind === 'tender' ? Math.round(pr.budget * 0.9 / 500) * 500 : pr.budget);
+      const others = Object.keys(pr.bids).filter(k => +k !== ME).length;
+      const info = def.kind === 'tender'
+        ? `City budget ${money(pr.budget)} · it costs you ${money(pr.cost)} to build, paid back over ${pr.work} days. Lowest quote wins.`
+        : `Minimum ${money(lo)} · highest sealed bid wins.`;
+      const profit = def.kind === 'tender' ? draft - pr.cost : null;
+      return head + `<p class="note">${info} Closes ${left ? `in ${left} day${left === 1 ? '' : 's'}` : 'tonight'} · ${others} rival bid${others === 1 ? '' : 's'} sealed${mine ? ` · <b class="pos">your bid ${money(mine)}</b>` : ''}</p>
+        <div class="ctl"><span>${def.kind === 'tender' ? 'Your quote' : 'Your bid'}${profit != null ? ` <small class="${cls(profit)}">${sign(profit)} profit</small>` : ''}</span>
+        <div class="stepper"><button data-act="proj-adj" data-id="${pr.id}" data-v="-${step}">−</button><b style="min-width:84px">${money(draft)}</b><button data-act="proj-adj" data-id="${pr.id}" data-v="${step}">+</button></div></div>
+        <div class="row"><button class="btn go wide" data-act="proj-bid" data-id="${pr.id}">${mine ? 'Change my bid' : def.kind === 'tender' ? 'Submit quote' : 'Place sealed bid'}</button></div></div>`;
+    }
+    if (pr.state === 'work') {
+      const w = s.players[pr.winner];
+      return head + `<p class="note">Being built by <b style="color:${w.color}">${esc(w.company)}</b> for ${money(pr.price)} · ${pr.left} day${pr.left === 1 ? '' : 's'} to go${pr.winner === ME ? ` · you're paid ${money(pr.perDay)} a day` : ''}.</p></div>`;
+    }
+    if (pr.state === 'festival') {
+      const w = s.players[pr.winner];
+      return head + `<p class="note">🎪 On now, sponsored by <b style="color:${w.color}">${esc(w.company)}</b>.</p></div>`;
+    }
+    const mine = pr.claims?.[ME] || 0;
+    return head + `<p class="note">Open for ${left} more day${left === 1 ? '' : 's'} · ${pr.claimed}/${pr.cap} claimed${mine ? ` · you've received <b class="pos">${money(mine)}</b>` : ''}.</p></div>`;
+  }
+
   // ---------------------------------------------------------- inbox ----
   inbox() { return this.s?.players[ME]?.inbox || { list: [], mute: {} }; }
   alerts() { return this.inbox().list.filter(a => !a.snooze); }
@@ -885,7 +1007,8 @@ export class UI {
           <div class="row"><button class="btn small wide" data-act="pass">Pass, let them fight it out</button></div>
           <p class="note" data-r="loan"></p>
         </div>
-        <div class="row" data-r="out"><button class="btn wide" disabled>You stepped out. Going, going…</button></div>`;
+        <div class="row" data-r="out"><button class="btn wide" disabled>You stepped out. Going, going…</button></div>
+        <div class="auc-mini" data-r="mini"></div>`;
     }
     const q = r => el.querySelector(`[data-r="${r}"]`);
     const bar = el.querySelector('.auc-timer i');
@@ -911,6 +1034,9 @@ export class UI {
     q('log').innerHTML = a.bids.slice(0, 4).map(b => `<span style="color:${s.players[b.pid].color}">${esc(who(s.players[b.pid]))} ${money(b.amount)}</span>`).join(' · ') || '<span class="dim">Waiting for an opening bid…</span>';
     q('live').classList.toggle('hidden', !!out);
     q('out').classList.toggle('hidden', !out);
+    // Once you're out, shrink to a strip so the city is yours again.
+    el.classList.toggle('mini', !!out);
+    q('mini').innerHTML = `🔨 <b>${esc(lot.name)}</b> · ${money(a.price)}${leader ? ` · <span style="color:${leader.color}">${esc(who(leader))}</span> leads` : ''} <span class="dim">· you passed</span>`;
     const [b0, b2] = el.querySelectorAll('[data-act=bid]');
     const leading = a.leader === ME;
     b0.textContent = leading ? 'You lead' : `Bid ${money(next)}`;
@@ -1087,6 +1213,23 @@ export class UI {
       case 'pass': act$('pass').then(r => { if (!r.ok && r.msg) this.toast(r.msg, 'bad'); }); sfx.tap(); return;
       case 'goto': this.openLot(+el.dataset.id); sfx.tap(); return;
       case 'afilter': this.inboxFilter = el.dataset.v; sfx.tap(); break;
+      case 'landmark': {
+        const id = el.dataset.id, at = el.dataset.lot != null ? +el.dataset.lot : lotId, def = LM[id];
+        const chk = canLandmark(s, ME, id);
+        this.confirm(`Build the ${def.name}?`, `${money(chk.cost || def.cost)} up front, ${def.days} days to build on ${s.lots[at].name}. If a rival finishes first you get half back. ${def.perk}`,
+          () => act$('landmark', at, id).then(r => { if (res(r)) { sfx.build(); this.openLot(at); } }));
+        return;
+      }
+      case 'lm-rush': act$('lmRush').then(r => res(r) && sfx.buy()); return;
+      case 'chain-sync': act$('chainSync', lotId).then(res); sfx.tap(); return;
+      case 'proj-adj': {
+        const pr = s.projects.find(x => x.id === +el.dataset.id);
+        if (!pr) return;
+        const [lo, hi] = quoteRange(pr);
+        this.projDraft[pr.id] = Math.max(lo, Math.min(hi, (this.projDraft[pr.id] || lo) + +el.dataset.v));
+        sfx.tap(); break;
+      }
+      case 'proj-bid': act$('project', +el.dataset.id, this.projDraft?.[+el.dataset.id]).then(r => res(r) && sfx.coin()); return;
       case 'amute': { const k = el.dataset.v; act$('inboxMute', k, !this.inbox().mute[k]).then(res); sfx.tap(); return; }
       case 'aclear': act$('inboxClear').then(done); sfx.tap(); return;
       case 'adismiss': act$('inboxDismiss', +el.dataset.id).then(done); sfx.tap(); return;
