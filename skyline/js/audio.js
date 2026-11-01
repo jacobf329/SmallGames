@@ -5,6 +5,8 @@ let enabled = true;
 export function setSound(on) { enabled = on; }
 export function soundOn() { return enabled; }
 
+export const audioCtx = () => ctx();
+
 function ctx() {
   if (!ac) {
     const AC = window.AudioContext || window.webkitAudioContext;

@@ -25,6 +25,7 @@ import { SEG_COLORS } from './render3d.js';
 import { ALERT_CATS, unreadCount } from './advisor.js';
 import { LM, landmarkSet, landmarkState, reqProgress, canLandmark, freeLotsFor, rushCost, chainOf, chainTier, brandName, activeProjects, projectText, quoteRange } from './civic.js';
 import { sfx, setSound, soundOn } from './audio.js';
+import { setMusic, musicOn, setMusicVolume, musicVolume } from './music.js';
 
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -949,6 +950,9 @@ export class UI {
     const q = this.app.renderer.quality;
     return `<div class="sh-head"><div class="chip" style="background:#5b6475">☰</div><div><div class="sh-title">Menu</div>
       <div class="sh-sub">Saved automatically every midnight</div></div></div>
+      <div class="row"><button class="btn" data-act="music">${musicOn() ? '🎵 Music on' : '🔕 Music off'}</button>
+        <div class="seg" style="flex:1">${[[0.3, 'Soft'], [0.6, 'Medium'], [1, 'Loud']].map(([v, n]) => `<button data-act="mvol" data-v="${v}" class="${Math.abs(musicVolume() - v) < 0.05 ? 'on' : ''}">${n}</button>`).join('')}</div></div>
+      <p class="note">🎶 Now playing: ${esc(eraName(yearOf(this.s)))} style. Every era has its own sound, and the tunes are made up as you play.</p>
       <div class="row"><button class="btn" data-act="sound">${soundOn() ? '🔊 Sound on' : '🔇 Sound off'}</button><button class="btn" data-act="quality">${q === 'high' ? '✨ Graphics: high' : q === 'medium' ? '⚖️ Graphics: medium' : '🔋 Graphics: battery'}</button></div>
       <div class="row"><button class="btn" data-act="save">💾 Save now</button><button class="btn" data-act="help">❓ How to play</button></div>
       ${this.app.mp ? `<div class="card"><b>📶 LAN game</b><div class="note">${this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
@@ -1245,6 +1249,8 @@ export class UI {
       case 'loan': act$('loan').then(r => res(r) && sfx.buy()); return;
       case 'repay': act$('repay').then(res); sfx.tap(); return;
       case 'repay-all': act$('repay', s.players[ME].loan).then(res); sfx.tap(); return;
+      case 'music': setMusic(!musicOn()); localStorage.setItem('skyline-music', musicOn() ? '1' : '0'); break;
+      case 'mvol': setMusicVolume(+el.dataset.v); localStorage.setItem('skyline-music-vol', el.dataset.v); if (!musicOn()) { setMusic(true); localStorage.setItem('skyline-music', '1'); } break;
       case 'sound': setSound(!soundOn()); localStorage.setItem('skyline-sound', soundOn() ? '1' : '0'); break;
       case 'quality': { const q = this.app.renderer.quality; this.app.renderer.setQuality(q === 'high' ? 'medium' : q === 'medium' ? 'low' : 'high'); break; }
       case 'save': this.app.save(); this.toast(this.app.mp ? 'The server saves the LAN game every midnight.' : 'Game saved.', 'good'); break;

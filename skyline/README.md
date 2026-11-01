@@ -318,6 +318,26 @@ Sharp / Ruthless) changes how often they think, the returns they insist on,
 how carefully they re-tune their shops, whether they borrow, how much they
 will pay at auction, and their starting cash.
 
+### Era music
+
+The soundtrack is synthesised live in the browser (no audio files) and
+changes with the era:
+
+| Era | From | Sound |
+| --- | --- | --- |
+| Jazz Age | 1930 | Swung hot jazz: walking bass, stride piano, muted trumpet, brushes, record crackle |
+| Post-war Boom | 1945 | Boogie shuffle: piano, sax, snappy backbeat |
+| Space Age | 1960 | Lounge: bossa bass, vibraphone, a gliding theremin, echo |
+| Disco Decade | 1975 | Four on the floor, octave bass, string pads and stabs, open hats |
+| Digital Age | 1990 | Synth-pop: square bass, arpeggios, FM bells, drum machine |
+| Smart City | 2005 | Chill beats: electric piano, sub bass, soft plucks, lazy swing |
+
+Melodies are composed as you play from each era's chords and rhythms, so no
+two sessions sound the same. At night the band plays softer, a live auction
+switches to a faster, tense rhythm, and a new era fades the old music out.
+Music has its own on/off switch and three volume levels in the Menu, separate
+from sound effects.
+
 ## Controls
 
 | | Phone | Computer |

@@ -14,6 +14,7 @@ import { Renderer3D } from './render3d.js';
 import { UI, getMe, setMe } from './ui.js';
 import { Net, lanAvailable } from './net.js';
 import { sfx, setSound } from './audio.js';
+import { musicUpdate, unlockMusic, pauseMusic, setMusic, setMusicVolume } from './music.js';
 
 const SAVE_KEY = 'skyline-hustle-save-v4';
 const $ = id => document.getElementById(id);
@@ -385,6 +386,7 @@ function frame(now) {
     }
     app.ui.tickTicker(now);
     app.renderer.draw(s, s.hour + s.t, dt, app.running() ? SPEEDS[app.speed] : 0);
+    musicUpdate(eraName(yearOf(s)), { night: s.hour >= 21 || s.hour < 6, auction: !!s.auction });
   } else {
     // Title screen: a slowly turning city behind the menu.
     if (!app.demo) { app.demo = createGame({ scenario: 'sandbox', seed: 4 }); app.demo.hour = 17; }
@@ -392,6 +394,7 @@ function frame(now) {
     if (app.demo.t >= 1) { app.demo.t -= 1; app.demo.hour = (app.demo.hour + 1) % 24; }
     app.renderer.want.yaw += dt * 0.08;
     app.renderer.draw(app.demo, app.demo.hour + app.demo.t, dt, 1);
+    musicUpdate('Jazz Age', { title: true });
   }
   requestAnimationFrame(frame);
 }
@@ -406,7 +409,9 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'e') app.renderer.rotate(Math.PI / 4);
   else if (e.key === 'Escape' && app.ui.view) app.ui.close();
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden) app.save(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) app.save(); pauseMusic(document.hidden); });
+// Browsers only start audio after the first tap.
+for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => unlockMusic(), { passive: true });
 
 // --------------------------------------------------------------- title ----
 let scenario = 'boomtown', difficulty = 'normal', mapPick = 'town';
@@ -442,6 +447,8 @@ $('btn-continue').addEventListener('click', () => {
 });
 $('btn-lan').addEventListener('click', () => { sfx.tap(); joinLan(); });
 setSound(localStorage.getItem('skyline-sound') !== '0');
+setMusic(localStorage.getItem('skyline-music') !== '0');
+setMusicVolume(+(localStorage.getItem('skyline-music-vol') || 0.6));
 app.toTitle();
 // The LAN button only appears when the page comes from server.mjs.
 lanAvailable().then(info => {
