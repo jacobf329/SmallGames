@@ -393,3 +393,16 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .lens-now b { flex: 1; font-size: 14px; }
 .lens-now .btn.small { min-height: 32px; padding: 5px 10px; }
 @media (min-width: 720px) { #layers { left: auto; right: 64px; transform: none; } }
+
+/* ------------------------------------------------------------ books -- */
+.seg.tabs button { display: flex; flex-direction: column; align-items: center; font-size: 16px; line-height: 1.1; padding: 4px 1px; }
+.seg.tabs button small { font-size: 10px; }
+.seg.periods { margin: 8px 0 2px; }
+.chart.big { display: flex; gap: 4px; align-items: stretch; margin: 4px 0 0; }
+.chart.big svg { height: 110px; flex: 1; }
+.chart .axis { display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: var(--dim); text-align: right; min-width: 44px; padding: 2px 0; }
+.chart-foot { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--dim); margin: 2px 0 6px 48px; }
+.metric-pick { display: flex; gap: 5px; overflow-x: auto; padding: 2px 0 6px; touch-action: pan-x; scrollbar-width: none; }
+.metric-pick::-webkit-scrollbar { display: none; }
+.metric-pick button { flex: none; border: 1px solid var(--line); background: rgba(255,255,255,0.05); color: var(--dim); border-radius: 999px; padding: 6px 11px; font-size: 12px; font-weight: 600; }
+.metric-pick button.on { background: var(--you); color: #032530; border-color: transparent; }

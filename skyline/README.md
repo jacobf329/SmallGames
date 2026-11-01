@@ -99,6 +99,19 @@ Each shop sheet has four tabs:
   satisfaction breakdown, and who shops there and which blocks they come from.
 - **Promote**: ad campaigns that unlock by era (flyers, radio, TV, social
   media) and pull more customers for a few days.
+- **Books**: the shop's own ledger (sales, stock deliveries, storage, wages,
+  training and severance, ground rent, power and water, advertising) for
+  today, yesterday, the last 7 or 30 days, or all recorded days, with stock
+  spoiled, money invested, money earned back, and payback %. Below it, a chart
+  of any metric over the last 60 days: profit, revenue, costs, customers,
+  turned away, average ticket, price, **stock at close**, deliveries, spoilage,
+  staff, wage bill, morale, reputation, happiness, busiest hour and opening
+  hours. A second chart shows **shelf stock hour by hour** for today.
+
+The **Bank** tab charts the company over time: net worth, cash, loan,
+operating profit, sales, stock, wages, rent paid and received, apartment rent
+and number of shops. In LAN games these histories are fetched only when you
+open them, so the regular city updates stay small.
 
 ### Block appeal, parks and buyouts
 Every block has **appeal stars**. Wealthier districts start higher. Hold at

@@ -32,6 +32,16 @@ const app = {
   lastDay: 0,
   mp: null,                 // LAN session: { net, pid, host, vote, cooldowns, pending, ... }
   citizenCache: new Map(),
+  histCache: new Map(),
+  histAsked: new Map(),
+  // LAN: ask the server for a business's (or the company's) daily history.
+  fetchHistory(lot) {
+    if (!this.mp) return;
+    const now = performance.now();
+    if (now - (this.histAsked.get(lot) || 0) < 2500) return;
+    this.histAsked.set(lot, now);
+    this.mp.net.send({ t: 'hist', lot });
+  },
 
   // ---------------------------------------------------------- actions ----
   act(name, ...args) {
@@ -247,6 +257,10 @@ function onNet(m) {
       break;
     }
     case 'notice': app.ui.toast(m.text, m.kind || ''); break;
+    case 'hist':
+      app.histCache.set(m.lot, m.days);
+      if (app.ui.view) app.ui.refresh();
+      break;
     case 'citizen':
       if (m.c) app.citizenCache.set(m.id, m.c);
       if (app.ui.view?.kind === 'citizen' && app.ui.view.id === m.id) app.ui.render();

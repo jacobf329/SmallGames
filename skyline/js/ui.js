@@ -13,7 +13,7 @@ import {
   aptRentFor, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, loanLimit, netWorth, playerAssets,
   capacity, districtPopulation, LEDGER_LABELS, operating, dayName, yearOf, techOf, bizOpen, bizLabel,
   petition, nextAuctionSlot, goalProgress, goalText, setsOwned, buildCost, floorCost, promoCost, buyoutPrice,
-  canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame,
+  canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame, BIZ_LEDGER,
 } from './sim.js';
 import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } from './staff.js';
 import { LENSES, LENS, lensData } from './lens.js';
@@ -273,11 +273,12 @@ export class UI {
         <div class="stat"><small>Customers</small><b>${Math.round(t.cust)}</b></div>
         <div class="stat"><small>Turned away</small><b class="${t.turned > 5 ? 'warn' : ''}">${Math.round(t.turned)}</b></div>
       </div>
-      <div class="seg tabs">${[['manage', '⚙️ Manage'], ['staff', '👥 Staff'], ['customers', '💬 Customers'], ['promote', '📣 Promote']]
+      <div class="seg tabs">${[['manage', '⚙️<small>Manage</small>'], ['staff', '👥<small>Staff</small>'], ['customers', '💬<small>Reviews</small>'], ['promote', '📣<small>Promote</small>'], ['books', '📒<small>Books</small>']]
         .map(([k, n]) => `<button data-act="ltab" data-v="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
     if (tab === 'staff') return h + this.staffTabHTML(lot, b);
     if (tab === 'customers') return h + this.customersTabHTML(lot, b);
     if (tab === 'promote') return h + this.promoTabHTML(lot, b);
+    if (tab === 'books') return h + this.booksTabHTML(lot, b);
     const cap = capacity(b);
     const e = estimate(s, lot.id, b.type, ME, {});
     const fc = fitCost(b);
@@ -319,6 +320,113 @@ export class UI {
   }
 
   // Small SVG bar chart of daily values.
+  // ---------------------------------------------------------- books ----
+  // History rows for a business (or the company, lotId -1). LAN games fetch
+  // them from the server on demand instead of shipping them every update.
+  history(lotId) {
+    const s = this.s;
+    const local = lotId >= 0 ? s.lots[lotId].business?.days : s.players[ME].days;
+    if (local) return local;
+    this.app.fetchHistory?.(lotId);
+    return this.app.histCache?.get(lotId) || [];
+  }
+
+  // Line or bar chart of one metric over days, with axis labels.
+  chartHTML(rows, key, fmt, kind = 'line') {
+    const pts = rows.map(r => (typeof key === 'function' ? key(r) : r[key])).map(v => (v == null ? null : +v));
+    const vals = pts.filter(v => v != null);
+    if (vals.length < 2) return '<p class="note">Not enough history yet: check back after a couple of days.</p>';
+    let max = Math.max(...vals), min = Math.min(...vals);
+    if (kind === 'bar') { max = Math.max(max, 0); min = Math.min(min, 0); }
+    if (max === min) { max += 1; min -= kind === 'bar' ? 0 : 1; }
+    const W = 100, H = 60, n = pts.length;
+    const y = v => H - 4 - (v - min) / (max - min) * (H - 8);
+    let body;
+    if (kind === 'bar') {
+      const w = W / n, zero = y(0);
+      body = pts.map((v, i) => v == null ? '' : `<rect x="${(i * w + w * 0.15).toFixed(2)}" y="${Math.min(y(v), zero).toFixed(2)}" width="${(w * 0.7).toFixed(2)}" height="${Math.max(0.6, Math.abs(zero - y(v))).toFixed(2)}" fill="${v >= 0 ? '#3ddc84' : '#ff5a6e'}"/>`).join('')
+        + `<line x1="0" x2="100" y1="${zero.toFixed(2)}" y2="${zero.toFixed(2)}" stroke="rgba(255,255,255,0.3)" stroke-width="0.4"/>`;
+    } else {
+      const xy = pts.map((v, i) => v == null ? null : `${(i / (n - 1) * W).toFixed(2)},${y(v).toFixed(2)}`).filter(Boolean);
+      body = `<polyline points="0,${H} ${xy.join(' ')} ${W},${H}" fill="rgba(46,230,255,0.12)" stroke="none"/>
+        <polyline points="${xy.join(' ')}" fill="none" stroke="#2ee6ff" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`;
+    }
+    const avg = vals.reduce((a, v) => a + v, 0) / vals.length;
+    const first = rows[0]?.d, last = rows[rows.length - 1]?.d;
+    return `<div class="chart big"><div class="axis"><span>${fmt(max)}</span><span>${fmt(min)}</span></div>
+      <svg viewBox="0 0 100 60" preserveAspectRatio="none">${body}</svg></div>
+      <div class="chart-foot"><span>${first !== undefined ? 'day ' + first : ''}</span><span>avg ${fmt(avg)} · latest ${fmt(vals[vals.length - 1])}</span><span>${last !== undefined ? 'day ' + last : ''}</span></div>`;
+  }
+
+  booksTabHTML(lot, b) {
+    const s = this.s;
+    const rows = this.history(lot.id);
+    const period = this.booksPeriod || '7';
+    const def = BIZ[b.type];
+    const fm = v => money(v), int = v => Math.round(v).toLocaleString(), pc = v => Math.round(v * 100) + '%';
+    // Ledger for the chosen period.
+    let led = {}, label;
+    const add = l => { for (const [k, v] of Object.entries(l || {})) led[k] = (led[k] || 0) + v; };
+    if (period === 'today') { add(b.today.led); label = 'today so far'; }
+    else if (period === 'yesterday') { add(rows[rows.length - 1]?.led); label = 'yesterday'; }
+    else {
+      const n = period === 'all' ? rows.length : +period;
+      rows.slice(-n).forEach(r => add(r.led));
+      label = period === 'all' ? `all ${rows.length} days on record` : `last ${Math.min(n, rows.length)} days`;
+    }
+    const keys = Object.keys(BIZ_LEDGER).filter(k => led[k]);
+    const op = keys.reduce((a, k) => a + led[k], 0);
+    const lifetime = rows.reduce((a, r) => a + r.profit, 0) + (b.today.rev - b.today.cost);
+    let h = `<div class="seg small periods">${[['today', 'Today'], ['yesterday', 'Yest.'], ['7', '7 days'], ['30', '30 days'], ['all', 'All']]
+      .map(([k, n]) => `<button data-act="bperiod" data-v="${k}" class="${period === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <h3>Books <em>${label}</em></h3>`;
+    h += keys.length ? `<table class="ledger">${keys.map(k => `<tr><td>${BIZ_LEDGER[k]}</td><td class="${cls(led[k])}">${sign(led[k])}</td></tr>`).join('')}
+      <tr class="total"><td>Operating profit</td><td class="${cls(op)}">${sign(op)}</td></tr></table>` : '<p class="note">Nothing booked yet for this period.</p>';
+    const spoiled = period === 'today' ? 0 : rows.slice(period === 'yesterday' ? -1 : period === 'all' ? 0 : -(+period)).reduce((a, r) => a + (r.wasteV || 0), 0);
+    if (spoiled) h += `<p class="note">Included in deliveries: <b>${money(spoiled)}</b> of stock spoiled unsold.</p>`;
+    h += `<div class="stats">
+      <div class="stat"><small>Invested</small><b>${money(b.invested)}</b></div>
+      <div class="stat"><small>Earned since day ${b.opened}</small><b class="${cls(lifetime)}">${sign(lifetime)}</b></div>
+      <div class="stat"><small>Paid back</small><b>${Math.max(0, Math.round(lifetime / b.invested * 100))}%</b></div></div>`;
+    // Metric over time.
+    const METRICS = [
+      ['profit', 'Profit', fm, 'bar'], ['rev', 'Revenue', fm], ['cost', 'Costs', fm], ['cust', 'Customers', int], ['turned', 'Turned away', int],
+      ['ticket', 'Avg ticket', v => '$' + v.toFixed(2)], ['price', 'Price', pc], ['stock', 'Stock at close', int], ['deliv', 'Delivered', int],
+      ['waste', 'Spoiled', int], ['staff', 'Staff', int], ['wage', 'Wage bill / hr', fm], ['morale', 'Morale', pc], ['rep', 'Reputation', v => v.toFixed(2)],
+      ['happy', 'Happiness', pc], ['peak', 'Busiest hour', pc], ['hours', 'Hours open', int],
+    ];
+    const mk = this.booksMetric || 'profit';
+    const m = METRICS.find(x => x[0] === mk) || METRICS[0];
+    const span = period === 'all' ? rows.length : period === '30' ? 30 : 14;
+    h += `<h3>Over time <em>${m[1]}</em></h3>
+      <div class="metric-pick">${METRICS.map(([k, n]) => `<button data-act="bmetric" data-v="${k}" class="${mk === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+      ${this.chartHTML(rows.slice(-span), m[0], m[2], m[3] || 'line')}`;
+    // Today's shelves hour by hour.
+    const sh = (b.today.stockH || []).map((v, i) => ({ d: i, v }));
+    const yh = (b.yesterday?.stockH || []).map((v, i) => ({ d: i, v }));
+    const use = sh.filter(x => x.v != null).length >= 2 ? sh : yh;
+    if (use.length >= 2) h += `<h3>Shelves hour by hour <em>${use === sh ? 'today' : 'yesterday'}</em></h3>
+      ${this.chartHTML(use, 'v', int).replace(/day (\d+)/g, (_, x) => hh(+x))}
+      <p class="note">Deliveries arrive at 06:00${clerks(b) ? ' and 13:00' : ''}. ${def.perish ? `${Math.round(def.perish * 100)}% of what's left spoils at midnight.` : 'Unsold stock costs 1% a day to store.'}</p>`;
+    return h;
+  }
+
+  companyChartHTML() {
+    const rows = this.history(-1);
+    const fm = v => money(v);
+    const METRICS = [
+      ['worth', 'Net worth', r => r.worth], ['cash', 'Cash', r => r.cash], ['loan', 'Loan', r => r.loan], ['op', 'Operating profit', r => r.op, 'bar'],
+      ['sales', 'Sales', r => r.led.sales || 0], ['goods', 'Stock', r => -(r.led.goods || 0)], ['wages', 'Wages', r => -(r.led.wages || 0)],
+      ['rentPaid', 'Rent paid', r => -(r.led.rentPaid || 0)], ['rentIn', 'Rent received', r => r.led.rentIn || 0], ['aptRent', 'Apartment rent', r => r.led.aptRent || 0],
+      ['shops', 'Shops', r => r.shops],
+    ];
+    const mk = this.bankMetric || 'worth';
+    const m = METRICS.find(x => x[0] === mk) || METRICS[0];
+    return `<h3>Company over time <em>${m[1]}</em></h3>
+      <div class="metric-pick">${METRICS.map(([k, n]) => `<button data-act="cmetric" data-v="${k}" class="${mk === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+      ${this.chartHTML(rows.slice(-30), m[2], mk === 'shops' ? v => Math.round(v) : fm, m[3] || 'line')}`;
+  }
+
   barsHTML(vals, label) {
     if (!vals || vals.length < 2) return '';
     const max = Math.max(1, ...vals.map(Math.abs));
@@ -652,7 +760,7 @@ export class UI {
         <button class="btn small" data-act="repay" ${!me.loan || me.cash < Math.min(LOAN_STEP, me.loan) ? 'disabled' : ''}>Repay ${money(Math.min(LOAN_STEP, me.loan || LOAN_STEP))}</button>
         <button class="btn small" data-act="repay-all" ${!me.loan || me.cash < me.loan ? 'disabled' : ''}>Repay all</button>
       </div>
-      ${this.barsHTML((me.profitHist || []).slice(-30), 'Operating profit, last 30 days')}
+      ${this.companyChartHTML()}
       <h3>Yesterday's books <em class="${cls(op)}">${sign(op)}</em></h3>`;
     if (!keys.length) h += '<p class="note">Nothing to report yet. Come back after midnight.</p>';
     else h += `<table class="ledger">${keys.map(k => `<tr><td>${LEDGER_LABELS[k]}</td><td class="${cls(y[k])}">${sign(y[k])}</td></tr>`).join('')}
@@ -880,6 +988,9 @@ export class UI {
       }
       case 'bfloors': this.buildFloors = Math.max(1, Math.min(MAX_FLOORS, (this.buildFloors || 1) + +el.dataset.v)); sfx.tap(); break;
       case 'ltab': this.lotTab = el.dataset.v; sfx.tap(); break;
+      case 'bperiod': this.booksPeriod = el.dataset.v; sfx.tap(); break;
+      case 'bmetric': this.booksMetric = el.dataset.v; sfx.tap(); break;
+      case 'cmetric': this.bankMetric = el.dataset.v; sfx.tap(); break;
       case 'hire': act$('hire', lotId, +el.dataset.id, el.dataset.v).then(r => res(r) && sfx.buy()); return;
       case 'sfire': this.confirm('Let them go?', 'They get ten hours of pay as severance, and the rest of the team gets a little nervous.', () => act$('fire', lotId, +el.dataset.id).then(res)); return;
       case 'strain': act$('train', lotId, +el.dataset.id).then(r => res(r) && sfx.buy()); return;

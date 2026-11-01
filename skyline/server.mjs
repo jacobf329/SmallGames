@@ -95,7 +95,8 @@ function sendLobby() {
 // no secret rival auction limits, plus the trips currently on the streets.
 let stateDirty = false;
 function stateMsg() {
-  const json = JSON.stringify(game, (k, v) => (k === 'cz' || k === 'bidders' ? undefined : v));
+  // Daily histories ('days') are large: phones fetch them on demand ('hist').
+  const json = JSON.stringify(game, (k, v) => (k === 'cz' || k === 'bidders' || k === 'days' ? undefined : v));
   const T = game.day * 24 + game.hour + game.t;
   const trips = game.cz.trips.filter(t => t.t0 + 2 * t.walk + t.stay > T - 0.1 && t.t0 < T + 1.7);
   const now = Date.now();
@@ -261,6 +262,14 @@ attachWebSocket(server, conn => {
       }
       case 'speed': requestSpeed(c, m.speed); break;
       case 'vote': castVote(c, m.id, !!m.yes); break;
+      case 'hist': {
+        // Books history for one of your businesses (lot >= 0) or your company (-1).
+        if (!game || c.pid < 0) break;
+        const lot = game.lots[m.lot];
+        const days = m.lot === -1 ? game.players[c.pid].days : lot && lot.business && lot.business.owner === c.pid ? lot.business.days : null;
+        send(c, { t: 'hist', lot: m.lot, days: days || [] });
+        break;
+      }
       case 'citizen': {
         if (!game) break;
         const ct = game.cz.list.find(x => x.id === m.id);

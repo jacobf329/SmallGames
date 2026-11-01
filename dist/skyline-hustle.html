@@ -406,6 +406,19 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .lens-now .btn.small { min-height: 32px; padding: 5px 10px; }
 @media (min-width: 720px) { #layers { left: auto; right: 64px; transform: none; } }
 
+/* ------------------------------------------------------------ books -- */
+.seg.tabs button { display: flex; flex-direction: column; align-items: center; font-size: 16px; line-height: 1.1; padding: 4px 1px; }
+.seg.tabs button small { font-size: 10px; }
+.seg.periods { margin: 8px 0 2px; }
+.chart.big { display: flex; gap: 4px; align-items: stretch; margin: 4px 0 0; }
+.chart.big svg { height: 110px; flex: 1; }
+.chart .axis { display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: var(--dim); text-align: right; min-width: 44px; padding: 2px 0; }
+.chart-foot { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--dim); margin: 2px 0 6px 48px; }
+.metric-pick { display: flex; gap: 5px; overflow-x: auto; padding: 2px 0 6px; touch-action: pan-x; scrollbar-width: none; }
+.metric-pick::-webkit-scrollbar { display: none; }
+.metric-pick button { flex: none; border: 1px solid var(--line); background: rgba(255,255,255,0.05); color: var(--dim); border-radius: 999px; padding: 6px 11px; font-size: 12px; font-weight: 600; }
+.metric-pick button.on { background: var(--you); color: #032530; border-color: transparent; }
+
 </style>
 </head>
 <body>
@@ -1609,7 +1622,7 @@ const {
 } = __mods.data;
 const { MAP, rand } = __mods.map;
 const { NAT, bizOpen, defaultHours, yearOf, techOf, modFor, capacity, appeal, unitCost, blockStars, starFactor } = __mods.demand;
-const { makeStaff, refreshCandidates, teamWage, staffNight, syncHeadcount, servers, clerks, manager, maxStaff, fairPay, TRAIN_DAYS } = __mods.staff;
+const { makeStaff, refreshCandidates, teamWage, staffNight, syncHeadcount, servers, clerks, manager, maxStaff, fairPay, avgMorale, TRAIN_DAYS } = __mods.staff;
 const { buildCitizens, syncResidents, syncTourists, touristsIn, citizensHour } = __mods.citizens;
 
 
@@ -1889,8 +1902,20 @@ function stepHour(s, hooks = {}) {
 }
 
 function freshBizDay() {
-  return { cust: 0, turned: 0, rev: 0, cost: 0, peak: 0, rent: 0, waste: 0, delivered: 0, outHours: 0, fb: {}, seg: [0, 0, 0, 0], from: {} };
+  return { cust: 0, turned: 0, rev: 0, cost: 0, peak: 0, rent: 0, waste: 0, delivered: 0, outHours: 0, fb: {}, seg: [0, 0, 0, 0], from: {}, led: {}, stockH: [] };
 }
+
+// A business's own books: every money movement it causes, by category.
+function bizBook(b, cat, amt) {
+  const led = b.today.led || (b.today.led = {});
+  led[cat] = (led[cat] || 0) + amt;
+}
+const BIZ_LEDGER = {
+  sales: 'Sales', goods: 'Stock deliveries', storage: 'Storage', wages: 'Wages', staffx: 'Training & severance',
+  rent: 'Ground rent', bills: 'Power & water bills', marketing: 'Advertising',
+};
+// Keep this many days of history per business and per company.
+const HISTORY_DAYS = 60;
 
 function deliver(s, lot) {
   const b = lot.business, def = BIZ[b.type];
@@ -1899,6 +1924,7 @@ function deliver(s, lot) {
   if (!order) return 0;
   const cost = order * unitCost(def) * (b.autoStock ? 1 + AUTO_STOCK_PREMIUM : 1);
   ledger(s.players[b.owner], 'goods', -cost);
+  bizBook(b, 'goods', -cost);
   b.stock += order;
   b.today.cost += cost;
   b.today.delivered += order;
@@ -1926,6 +1952,8 @@ function runHour(s, h) {
     const wages = teamWage(b);
     ledger(p, 'sales', rev);
     ledger(p, 'wages', -wages);
+    bizBook(b, 'sales', rev);
+    bizBook(b, 'wages', -wages);
     const t = b.today;
     t.cust += v.cust; t.turned += v.turned;
     t.rev += rev; t.cost += wages;
@@ -1934,6 +1962,8 @@ function runHour(s, h) {
     s.cityCustomersToday += v.cust;
     s.lastHour[l.id] = rev - wages;
   }
+  // Shelf level at the end of every hour, for the stock chart.
+  for (const l of s.lots) if (l.business) (l.business.today.stockH ||= [])[h] = Math.round(l.business.stock);
 }
 
 function endOfDay(s, hooks) {
@@ -1948,12 +1978,14 @@ function endOfDay(s, hooks) {
     if (l.owner !== b.owner) {
       const r = rentFor(s, l);
       ledger(tenant, 'rentPaid', -r);
+      bizBook(b, 'rent', -r);
       b.today.rent = r;
       b.today.cost += r;
       if (l.owner >= 0) ledger(P[l.owner], 'rentIn', r);
     }
     const o = billFor(def, b.floors);
     ledger(tenant, 'overhead', -o);
+    bizBook(b, 'bills', -o);
     b.today.cost += o;
     const water = BIZ_UTIL[def.id]?.[1] ?? 0.3;
     pools.water += o * water;
@@ -1963,9 +1995,11 @@ function endOfDay(s, hooks) {
       const lost = Math.floor(b.stock * def.perish * (1 - Math.min(0.6, 0.3 * clerks(b))));
       b.stock -= lost;
       b.today.waste = lost;
+      b.today.wasteV = lost * unitCost(def);
     } else if (b.stock > 0) {
       const hold = b.stock * unitCost(def) * HOLD_COST;
       ledger(tenant, 'storage', -hold);
+      bizBook(b, 'storage', -hold);
       b.today.cost += hold;
     }
     // Reputation follows service: full shelves and short queues build it.
@@ -1992,6 +2026,19 @@ function endOfDay(s, hooks) {
     const b = l.business;
     if (!b) continue;
     b.yesterday = b.today;
+    // One row of history per day: the shop's books and its vital signs.
+    const t = b.today;
+    let good = 0, said = 0;
+    for (const [k, v] of Object.entries(t.fb || {})) { said += v; if (k === 'great' || k === 'happy') good += v; }
+    (b.days ||= []).push({
+      d: s.day, cust: Math.round(t.cust), turned: Math.round(t.turned), rev: Math.round(t.rev), cost: Math.round(t.cost),
+      profit: Math.round(t.rev - t.cost), led: Object.fromEntries(Object.entries(t.led || {}).map(([k, v]) => [k, Math.round(v)])),
+      stock: Math.round(b.stock), deliv: Math.round(t.delivered), waste: Math.round(t.waste || 0), wasteV: Math.round(t.wasteV || 0),
+      peak: Math.round(t.peak * 100) / 100, price: b.price, ticket: t.cust ? Math.round(t.rev / t.cust * 100) / 100 : 0,
+      staff: b.team ? b.team.length : b.staff, wage: Math.round(teamWage(b)), morale: Math.round(avgMorale(b) * 100) / 100,
+      rep: Math.round((b.rep ?? 1) * 100) / 100, happy: said ? Math.round(good / said * 100) / 100 : null, hours: b.len,
+    });
+    if (b.days.length > HISTORY_DAYS) b.days.shift();
     b.hist.push(Math.round(b.today.rev - b.today.cost));
     if (b.hist.length > 14) b.hist.shift();
     // What customers say about the shop, remembered over a few days.
@@ -2013,6 +2060,12 @@ function endOfDay(s, hooks) {
     p.profitHist = p.profitHist || [];
     p.profitHist.push(Math.round(operating(p.today)));
     if (p.profitHist.length > 60) p.profitHist.shift();
+    (p.days ||= []).push({
+      d: s.day, cash: Math.round(p.cash), loan: p.loan, worth: netWorth(s, p.id), op: Math.round(operating(p.today)),
+      led: Object.fromEntries(Object.entries(p.today).map(([k, v]) => [k, Math.round(v)])),
+      shops: s.lots.filter(l => l.business && l.business.owner === p.id).length, lots: s.lots.filter(l => l.owner === p.id).length,
+    });
+    if (p.days.length > HISTORY_DAYS) p.days.shift();
     p.yesterday = p.today;
     p.today = {};
     p.worthHist.push(netWorth(s, p.id));
@@ -2289,6 +2342,7 @@ function setStaff(s, pid, lotId, count) {
 }
 function severance(s, b, m) {
   ledger(s.players[b.owner], 'wages', -m.pay * 10);
+  bizBook(b, 'staffx', -m.pay * 10);
   b.team = b.team.filter(x => x !== m);
   for (const o of b.team) o.morale = Math.max(0, o.morale - 0.04);
 }
@@ -2329,6 +2383,7 @@ function trainStaff(s, pid, lotId, sid) {
   const cost = Math.round(fairPay(b.type, m.role, m.skill) * 40);
   if (s.players[pid].cash < cost) return fail(`Need ${money(cost)}.`);
   ledger(s.players[pid], 'wages', -cost);
+  bizBook(b, 'staffx', -cost);
   m.train = TRAIN_DAYS;
   return { ok: true, msg: `${m.name} is on a course for ${TRAIN_DAYS} days (${money(cost)}).` };
 }
@@ -2383,6 +2438,8 @@ function startPromo(s, pid, lotId, id) {
   const c = promoCost(b, pr);
   if (s.players[pid].cash < c) return fail(`Need ${money(c)}.`);
   ledger(s.players[pid], 'overhead', -c);
+  bizBook(b, 'marketing', -c);
+  b.today.cost += c;
   b.promo = { id, boost: pr.boost, until: s.day + pr.days - 1 };
   return { ok: true, msg: `${pr.icon} ${pr.name} running for ${pr.days} days.` };
 }
@@ -2493,8 +2550,10 @@ function rushDelivery(s, pid, lotId) {
   const cost = order * unitCost(def) * 1.25;
   if (s.players[pid].cash < cost) return fail(`Need ${money(cost)}.`);
   ledger(s.players[pid], 'goods', -cost);
+  bizBook(b, 'goods', -cost);
   b.stock += order;
   b.today.cost += cost;
+  b.today.delivered += order;
   return { ok: true, msg: `Rush delivery: ${order} units for ${money(cost)}.` };
 }
 
@@ -2645,7 +2704,7 @@ function deserialize(json) {
   return s;
 }
 
-return { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars, createGame, news, bizLabel, ledger, LEDGER_LABELS, operating, dayName, districtStats, parkStars, landValue, setCount, ownsSet, setsOwned, rentFor, aptCost, aptRentFor, bizValue, playerAssets, netWorth, loanLimit, districtPopulation, allocate, newBizConfig, estimate, billFor, stepHour, deliver, autoTarget, runHour, bankrupt, goalProgress, goalText, humans, continueGame, grantLand, petition, nextAuctionSlot, sellLand, canBuild, build, buildCost, sellBusiness, setPrice, setStaff, hireStaff, fireStaff, trainStaff, trainCost, raiseStaff, setRole, floorCost, addFloor, promoCost, startPromo, parkSlots, canLandscape, buildPark, buyoutPrice, buyout, survey, setHours, setStock, rushDelivery, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize };
+return { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars, createGame, news, bizLabel, ledger, LEDGER_LABELS, operating, dayName, districtStats, parkStars, landValue, setCount, ownsSet, setsOwned, rentFor, aptCost, aptRentFor, bizValue, playerAssets, netWorth, loanLimit, districtPopulation, allocate, newBizConfig, estimate, billFor, stepHour, bizBook, BIZ_LEDGER, HISTORY_DAYS, deliver, autoTarget, runHour, bankrupt, goalProgress, goalText, humans, continueGame, grantLand, petition, nextAuctionSlot, sellLand, canBuild, build, buildCost, sellBusiness, setPrice, setStaff, hireStaff, fireStaff, trainStaff, trainCost, raiseStaff, setRole, floorCost, addFloor, promoCost, startPromo, parkSlots, canLandscape, buildPark, buyoutPrice, buyout, survey, setHours, setStock, rushDelivery, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize };
 })();
 
 /* ===== ai.js ===== */
@@ -4492,7 +4551,7 @@ const {
   aptRentFor, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, loanLimit, netWorth, playerAssets,
   capacity, districtPopulation, LEDGER_LABELS, operating, dayName, yearOf, techOf, bizOpen, bizLabel,
   petition, nextAuctionSlot, goalProgress, goalText, setsOwned, buildCost, floorCost, promoCost, buyoutPrice,
-  canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame,
+  canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame, BIZ_LEDGER,
 } = __mods.sim;
 const { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } = __mods.staff;
 const { LENSES, LENS, lensData } = __mods.lens;
@@ -4752,11 +4811,12 @@ class UI {
         <div class="stat"><small>Customers</small><b>${Math.round(t.cust)}</b></div>
         <div class="stat"><small>Turned away</small><b class="${t.turned > 5 ? 'warn' : ''}">${Math.round(t.turned)}</b></div>
       </div>
-      <div class="seg tabs">${[['manage', '⚙️ Manage'], ['staff', '👥 Staff'], ['customers', '💬 Customers'], ['promote', '📣 Promote']]
+      <div class="seg tabs">${[['manage', '⚙️<small>Manage</small>'], ['staff', '👥<small>Staff</small>'], ['customers', '💬<small>Reviews</small>'], ['promote', '📣<small>Promote</small>'], ['books', '📒<small>Books</small>']]
         .map(([k, n]) => `<button data-act="ltab" data-v="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
     if (tab === 'staff') return h + this.staffTabHTML(lot, b);
     if (tab === 'customers') return h + this.customersTabHTML(lot, b);
     if (tab === 'promote') return h + this.promoTabHTML(lot, b);
+    if (tab === 'books') return h + this.booksTabHTML(lot, b);
     const cap = capacity(b);
     const e = estimate(s, lot.id, b.type, ME, {});
     const fc = fitCost(b);
@@ -4798,6 +4858,113 @@ class UI {
   }
 
   // Small SVG bar chart of daily values.
+  // ---------------------------------------------------------- books ----
+  // History rows for a business (or the company, lotId -1). LAN games fetch
+  // them from the server on demand instead of shipping them every update.
+  history(lotId) {
+    const s = this.s;
+    const local = lotId >= 0 ? s.lots[lotId].business?.days : s.players[ME].days;
+    if (local) return local;
+    this.app.fetchHistory?.(lotId);
+    return this.app.histCache?.get(lotId) || [];
+  }
+
+  // Line or bar chart of one metric over days, with axis labels.
+  chartHTML(rows, key, fmt, kind = 'line') {
+    const pts = rows.map(r => (typeof key === 'function' ? key(r) : r[key])).map(v => (v == null ? null : +v));
+    const vals = pts.filter(v => v != null);
+    if (vals.length < 2) return '<p class="note">Not enough history yet: check back after a couple of days.</p>';
+    let max = Math.max(...vals), min = Math.min(...vals);
+    if (kind === 'bar') { max = Math.max(max, 0); min = Math.min(min, 0); }
+    if (max === min) { max += 1; min -= kind === 'bar' ? 0 : 1; }
+    const W = 100, H = 60, n = pts.length;
+    const y = v => H - 4 - (v - min) / (max - min) * (H - 8);
+    let body;
+    if (kind === 'bar') {
+      const w = W / n, zero = y(0);
+      body = pts.map((v, i) => v == null ? '' : `<rect x="${(i * w + w * 0.15).toFixed(2)}" y="${Math.min(y(v), zero).toFixed(2)}" width="${(w * 0.7).toFixed(2)}" height="${Math.max(0.6, Math.abs(zero - y(v))).toFixed(2)}" fill="${v >= 0 ? '#3ddc84' : '#ff5a6e'}"/>`).join('')
+        + `<line x1="0" x2="100" y1="${zero.toFixed(2)}" y2="${zero.toFixed(2)}" stroke="rgba(255,255,255,0.3)" stroke-width="0.4"/>`;
+    } else {
+      const xy = pts.map((v, i) => v == null ? null : `${(i / (n - 1) * W).toFixed(2)},${y(v).toFixed(2)}`).filter(Boolean);
+      body = `<polyline points="0,${H} ${xy.join(' ')} ${W},${H}" fill="rgba(46,230,255,0.12)" stroke="none"/>
+        <polyline points="${xy.join(' ')}" fill="none" stroke="#2ee6ff" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`;
+    }
+    const avg = vals.reduce((a, v) => a + v, 0) / vals.length;
+    const first = rows[0]?.d, last = rows[rows.length - 1]?.d;
+    return `<div class="chart big"><div class="axis"><span>${fmt(max)}</span><span>${fmt(min)}</span></div>
+      <svg viewBox="0 0 100 60" preserveAspectRatio="none">${body}</svg></div>
+      <div class="chart-foot"><span>${first !== undefined ? 'day ' + first : ''}</span><span>avg ${fmt(avg)} · latest ${fmt(vals[vals.length - 1])}</span><span>${last !== undefined ? 'day ' + last : ''}</span></div>`;
+  }
+
+  booksTabHTML(lot, b) {
+    const s = this.s;
+    const rows = this.history(lot.id);
+    const period = this.booksPeriod || '7';
+    const def = BIZ[b.type];
+    const fm = v => money(v), int = v => Math.round(v).toLocaleString(), pc = v => Math.round(v * 100) + '%';
+    // Ledger for the chosen period.
+    let led = {}, label;
+    const add = l => { for (const [k, v] of Object.entries(l || {})) led[k] = (led[k] || 0) + v; };
+    if (period === 'today') { add(b.today.led); label = 'today so far'; }
+    else if (period === 'yesterday') { add(rows[rows.length - 1]?.led); label = 'yesterday'; }
+    else {
+      const n = period === 'all' ? rows.length : +period;
+      rows.slice(-n).forEach(r => add(r.led));
+      label = period === 'all' ? `all ${rows.length} days on record` : `last ${Math.min(n, rows.length)} days`;
+    }
+    const keys = Object.keys(BIZ_LEDGER).filter(k => led[k]);
+    const op = keys.reduce((a, k) => a + led[k], 0);
+    const lifetime = rows.reduce((a, r) => a + r.profit, 0) + (b.today.rev - b.today.cost);
+    let h = `<div class="seg small periods">${[['today', 'Today'], ['yesterday', 'Yest.'], ['7', '7 days'], ['30', '30 days'], ['all', 'All']]
+      .map(([k, n]) => `<button data-act="bperiod" data-v="${k}" class="${period === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <h3>Books <em>${label}</em></h3>`;
+    h += keys.length ? `<table class="ledger">${keys.map(k => `<tr><td>${BIZ_LEDGER[k]}</td><td class="${cls(led[k])}">${sign(led[k])}</td></tr>`).join('')}
+      <tr class="total"><td>Operating profit</td><td class="${cls(op)}">${sign(op)}</td></tr></table>` : '<p class="note">Nothing booked yet for this period.</p>';
+    const spoiled = period === 'today' ? 0 : rows.slice(period === 'yesterday' ? -1 : period === 'all' ? 0 : -(+period)).reduce((a, r) => a + (r.wasteV || 0), 0);
+    if (spoiled) h += `<p class="note">Included in deliveries: <b>${money(spoiled)}</b> of stock spoiled unsold.</p>`;
+    h += `<div class="stats">
+      <div class="stat"><small>Invested</small><b>${money(b.invested)}</b></div>
+      <div class="stat"><small>Earned since day ${b.opened}</small><b class="${cls(lifetime)}">${sign(lifetime)}</b></div>
+      <div class="stat"><small>Paid back</small><b>${Math.max(0, Math.round(lifetime / b.invested * 100))}%</b></div></div>`;
+    // Metric over time.
+    const METRICS = [
+      ['profit', 'Profit', fm, 'bar'], ['rev', 'Revenue', fm], ['cost', 'Costs', fm], ['cust', 'Customers', int], ['turned', 'Turned away', int],
+      ['ticket', 'Avg ticket', v => '$' + v.toFixed(2)], ['price', 'Price', pc], ['stock', 'Stock at close', int], ['deliv', 'Delivered', int],
+      ['waste', 'Spoiled', int], ['staff', 'Staff', int], ['wage', 'Wage bill / hr', fm], ['morale', 'Morale', pc], ['rep', 'Reputation', v => v.toFixed(2)],
+      ['happy', 'Happiness', pc], ['peak', 'Busiest hour', pc], ['hours', 'Hours open', int],
+    ];
+    const mk = this.booksMetric || 'profit';
+    const m = METRICS.find(x => x[0] === mk) || METRICS[0];
+    const span = period === 'all' ? rows.length : period === '30' ? 30 : 14;
+    h += `<h3>Over time <em>${m[1]}</em></h3>
+      <div class="metric-pick">${METRICS.map(([k, n]) => `<button data-act="bmetric" data-v="${k}" class="${mk === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+      ${this.chartHTML(rows.slice(-span), m[0], m[2], m[3] || 'line')}`;
+    // Today's shelves hour by hour.
+    const sh = (b.today.stockH || []).map((v, i) => ({ d: i, v }));
+    const yh = (b.yesterday?.stockH || []).map((v, i) => ({ d: i, v }));
+    const use = sh.filter(x => x.v != null).length >= 2 ? sh : yh;
+    if (use.length >= 2) h += `<h3>Shelves hour by hour <em>${use === sh ? 'today' : 'yesterday'}</em></h3>
+      ${this.chartHTML(use, 'v', int).replace(/day (\d+)/g, (_, x) => hh(+x))}
+      <p class="note">Deliveries arrive at 06:00${clerks(b) ? ' and 13:00' : ''}. ${def.perish ? `${Math.round(def.perish * 100)}% of what's left spoils at midnight.` : 'Unsold stock costs 1% a day to store.'}</p>`;
+    return h;
+  }
+
+  companyChartHTML() {
+    const rows = this.history(-1);
+    const fm = v => money(v);
+    const METRICS = [
+      ['worth', 'Net worth', r => r.worth], ['cash', 'Cash', r => r.cash], ['loan', 'Loan', r => r.loan], ['op', 'Operating profit', r => r.op, 'bar'],
+      ['sales', 'Sales', r => r.led.sales || 0], ['goods', 'Stock', r => -(r.led.goods || 0)], ['wages', 'Wages', r => -(r.led.wages || 0)],
+      ['rentPaid', 'Rent paid', r => -(r.led.rentPaid || 0)], ['rentIn', 'Rent received', r => r.led.rentIn || 0], ['aptRent', 'Apartment rent', r => r.led.aptRent || 0],
+      ['shops', 'Shops', r => r.shops],
+    ];
+    const mk = this.bankMetric || 'worth';
+    const m = METRICS.find(x => x[0] === mk) || METRICS[0];
+    return `<h3>Company over time <em>${m[1]}</em></h3>
+      <div class="metric-pick">${METRICS.map(([k, n]) => `<button data-act="cmetric" data-v="${k}" class="${mk === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+      ${this.chartHTML(rows.slice(-30), m[2], mk === 'shops' ? v => Math.round(v) : fm, m[3] || 'line')}`;
+  }
+
   barsHTML(vals, label) {
     if (!vals || vals.length < 2) return '';
     const max = Math.max(1, ...vals.map(Math.abs));
@@ -5131,7 +5298,7 @@ class UI {
         <button class="btn small" data-act="repay" ${!me.loan || me.cash < Math.min(LOAN_STEP, me.loan) ? 'disabled' : ''}>Repay ${money(Math.min(LOAN_STEP, me.loan || LOAN_STEP))}</button>
         <button class="btn small" data-act="repay-all" ${!me.loan || me.cash < me.loan ? 'disabled' : ''}>Repay all</button>
       </div>
-      ${this.barsHTML((me.profitHist || []).slice(-30), 'Operating profit, last 30 days')}
+      ${this.companyChartHTML()}
       <h3>Yesterday's books <em class="${cls(op)}">${sign(op)}</em></h3>`;
     if (!keys.length) h += '<p class="note">Nothing to report yet. Come back after midnight.</p>';
     else h += `<table class="ledger">${keys.map(k => `<tr><td>${LEDGER_LABELS[k]}</td><td class="${cls(y[k])}">${sign(y[k])}</td></tr>`).join('')}
@@ -5359,6 +5526,9 @@ class UI {
       }
       case 'bfloors': this.buildFloors = Math.max(1, Math.min(MAX_FLOORS, (this.buildFloors || 1) + +el.dataset.v)); sfx.tap(); break;
       case 'ltab': this.lotTab = el.dataset.v; sfx.tap(); break;
+      case 'bperiod': this.booksPeriod = el.dataset.v; sfx.tap(); break;
+      case 'bmetric': this.booksMetric = el.dataset.v; sfx.tap(); break;
+      case 'cmetric': this.bankMetric = el.dataset.v; sfx.tap(); break;
       case 'hire': act$('hire', lotId, +el.dataset.id, el.dataset.v).then(r => res(r) && sfx.buy()); return;
       case 'sfire': this.confirm('Let them go?', 'They get ten hours of pay as severance, and the rest of the team gets a little nervous.', () => act$('fire', lotId, +el.dataset.id).then(res)); return;
       case 'strain': act$('train', lotId, +el.dataset.id).then(r => res(r) && sfx.buy()); return;
@@ -5589,6 +5759,16 @@ const app = {
   lastDay: 0,
   mp: null,                 // LAN session: { net, pid, host, vote, cooldowns, pending, ... }
   citizenCache: new Map(),
+  histCache: new Map(),
+  histAsked: new Map(),
+  // LAN: ask the server for a business's (or the company's) daily history.
+  fetchHistory(lot) {
+    if (!this.mp) return;
+    const now = performance.now();
+    if (now - (this.histAsked.get(lot) || 0) < 2500) return;
+    this.histAsked.set(lot, now);
+    this.mp.net.send({ t: 'hist', lot });
+  },
 
   // ---------------------------------------------------------- actions ----
   act(name, ...args) {
@@ -5804,6 +5984,10 @@ function onNet(m) {
       break;
     }
     case 'notice': app.ui.toast(m.text, m.kind || ''); break;
+    case 'hist':
+      app.histCache.set(m.lot, m.days);
+      if (app.ui.view) app.ui.refresh();
+      break;
     case 'citizen':
       if (m.c) app.citizenCache.set(m.id, m.c);
       if (app.ui.view?.kind === 'citizen' && app.ui.view.id === m.id) app.ui.render();

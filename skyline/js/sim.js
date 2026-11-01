@@ -18,7 +18,7 @@ import {
 } from './data.js';
 import { MAP, rand } from './map.js';
 import { NAT, bizOpen, defaultHours, yearOf, techOf, modFor, capacity, appeal, unitCost, blockStars, starFactor } from './demand.js';
-import { makeStaff, refreshCandidates, teamWage, staffNight, syncHeadcount, servers, clerks, manager, maxStaff, fairPay, TRAIN_DAYS } from './staff.js';
+import { makeStaff, refreshCandidates, teamWage, staffNight, syncHeadcount, servers, clerks, manager, maxStaff, fairPay, avgMorale, TRAIN_DAYS } from './staff.js';
 import { buildCitizens, syncResidents, syncTourists, touristsIn, citizensHour } from './citizens.js';
 
 export { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars };
@@ -298,8 +298,20 @@ export function stepHour(s, hooks = {}) {
 }
 
 function freshBizDay() {
-  return { cust: 0, turned: 0, rev: 0, cost: 0, peak: 0, rent: 0, waste: 0, delivered: 0, outHours: 0, fb: {}, seg: [0, 0, 0, 0], from: {} };
+  return { cust: 0, turned: 0, rev: 0, cost: 0, peak: 0, rent: 0, waste: 0, delivered: 0, outHours: 0, fb: {}, seg: [0, 0, 0, 0], from: {}, led: {}, stockH: [] };
 }
+
+// A business's own books: every money movement it causes, by category.
+export function bizBook(b, cat, amt) {
+  const led = b.today.led || (b.today.led = {});
+  led[cat] = (led[cat] || 0) + amt;
+}
+export const BIZ_LEDGER = {
+  sales: 'Sales', goods: 'Stock deliveries', storage: 'Storage', wages: 'Wages', staffx: 'Training & severance',
+  rent: 'Ground rent', bills: 'Power & water bills', marketing: 'Advertising',
+};
+// Keep this many days of history per business and per company.
+export const HISTORY_DAYS = 60;
 
 export function deliver(s, lot) {
   const b = lot.business, def = BIZ[b.type];
@@ -308,6 +320,7 @@ export function deliver(s, lot) {
   if (!order) return 0;
   const cost = order * unitCost(def) * (b.autoStock ? 1 + AUTO_STOCK_PREMIUM : 1);
   ledger(s.players[b.owner], 'goods', -cost);
+  bizBook(b, 'goods', -cost);
   b.stock += order;
   b.today.cost += cost;
   b.today.delivered += order;
@@ -335,6 +348,8 @@ export function runHour(s, h) {
     const wages = teamWage(b);
     ledger(p, 'sales', rev);
     ledger(p, 'wages', -wages);
+    bizBook(b, 'sales', rev);
+    bizBook(b, 'wages', -wages);
     const t = b.today;
     t.cust += v.cust; t.turned += v.turned;
     t.rev += rev; t.cost += wages;
@@ -343,6 +358,8 @@ export function runHour(s, h) {
     s.cityCustomersToday += v.cust;
     s.lastHour[l.id] = rev - wages;
   }
+  // Shelf level at the end of every hour, for the stock chart.
+  for (const l of s.lots) if (l.business) (l.business.today.stockH ||= [])[h] = Math.round(l.business.stock);
 }
 
 function endOfDay(s, hooks) {
@@ -357,12 +374,14 @@ function endOfDay(s, hooks) {
     if (l.owner !== b.owner) {
       const r = rentFor(s, l);
       ledger(tenant, 'rentPaid', -r);
+      bizBook(b, 'rent', -r);
       b.today.rent = r;
       b.today.cost += r;
       if (l.owner >= 0) ledger(P[l.owner], 'rentIn', r);
     }
     const o = billFor(def, b.floors);
     ledger(tenant, 'overhead', -o);
+    bizBook(b, 'bills', -o);
     b.today.cost += o;
     const water = BIZ_UTIL[def.id]?.[1] ?? 0.3;
     pools.water += o * water;
@@ -372,9 +391,11 @@ function endOfDay(s, hooks) {
       const lost = Math.floor(b.stock * def.perish * (1 - Math.min(0.6, 0.3 * clerks(b))));
       b.stock -= lost;
       b.today.waste = lost;
+      b.today.wasteV = lost * unitCost(def);
     } else if (b.stock > 0) {
       const hold = b.stock * unitCost(def) * HOLD_COST;
       ledger(tenant, 'storage', -hold);
+      bizBook(b, 'storage', -hold);
       b.today.cost += hold;
     }
     // Reputation follows service: full shelves and short queues build it.
@@ -401,6 +422,19 @@ function endOfDay(s, hooks) {
     const b = l.business;
     if (!b) continue;
     b.yesterday = b.today;
+    // One row of history per day: the shop's books and its vital signs.
+    const t = b.today;
+    let good = 0, said = 0;
+    for (const [k, v] of Object.entries(t.fb || {})) { said += v; if (k === 'great' || k === 'happy') good += v; }
+    (b.days ||= []).push({
+      d: s.day, cust: Math.round(t.cust), turned: Math.round(t.turned), rev: Math.round(t.rev), cost: Math.round(t.cost),
+      profit: Math.round(t.rev - t.cost), led: Object.fromEntries(Object.entries(t.led || {}).map(([k, v]) => [k, Math.round(v)])),
+      stock: Math.round(b.stock), deliv: Math.round(t.delivered), waste: Math.round(t.waste || 0), wasteV: Math.round(t.wasteV || 0),
+      peak: Math.round(t.peak * 100) / 100, price: b.price, ticket: t.cust ? Math.round(t.rev / t.cust * 100) / 100 : 0,
+      staff: b.team ? b.team.length : b.staff, wage: Math.round(teamWage(b)), morale: Math.round(avgMorale(b) * 100) / 100,
+      rep: Math.round((b.rep ?? 1) * 100) / 100, happy: said ? Math.round(good / said * 100) / 100 : null, hours: b.len,
+    });
+    if (b.days.length > HISTORY_DAYS) b.days.shift();
     b.hist.push(Math.round(b.today.rev - b.today.cost));
     if (b.hist.length > 14) b.hist.shift();
     // What customers say about the shop, remembered over a few days.
@@ -422,6 +456,12 @@ function endOfDay(s, hooks) {
     p.profitHist = p.profitHist || [];
     p.profitHist.push(Math.round(operating(p.today)));
     if (p.profitHist.length > 60) p.profitHist.shift();
+    (p.days ||= []).push({
+      d: s.day, cash: Math.round(p.cash), loan: p.loan, worth: netWorth(s, p.id), op: Math.round(operating(p.today)),
+      led: Object.fromEntries(Object.entries(p.today).map(([k, v]) => [k, Math.round(v)])),
+      shops: s.lots.filter(l => l.business && l.business.owner === p.id).length, lots: s.lots.filter(l => l.owner === p.id).length,
+    });
+    if (p.days.length > HISTORY_DAYS) p.days.shift();
     p.yesterday = p.today;
     p.today = {};
     p.worthHist.push(netWorth(s, p.id));
@@ -698,6 +738,7 @@ export function setStaff(s, pid, lotId, count) {
 }
 function severance(s, b, m) {
   ledger(s.players[b.owner], 'wages', -m.pay * 10);
+  bizBook(b, 'staffx', -m.pay * 10);
   b.team = b.team.filter(x => x !== m);
   for (const o of b.team) o.morale = Math.max(0, o.morale - 0.04);
 }
@@ -738,6 +779,7 @@ export function trainStaff(s, pid, lotId, sid) {
   const cost = Math.round(fairPay(b.type, m.role, m.skill) * 40);
   if (s.players[pid].cash < cost) return fail(`Need ${money(cost)}.`);
   ledger(s.players[pid], 'wages', -cost);
+  bizBook(b, 'staffx', -cost);
   m.train = TRAIN_DAYS;
   return { ok: true, msg: `${m.name} is on a course for ${TRAIN_DAYS} days (${money(cost)}).` };
 }
@@ -792,6 +834,8 @@ export function startPromo(s, pid, lotId, id) {
   const c = promoCost(b, pr);
   if (s.players[pid].cash < c) return fail(`Need ${money(c)}.`);
   ledger(s.players[pid], 'overhead', -c);
+  bizBook(b, 'marketing', -c);
+  b.today.cost += c;
   b.promo = { id, boost: pr.boost, until: s.day + pr.days - 1 };
   return { ok: true, msg: `${pr.icon} ${pr.name} running for ${pr.days} days.` };
 }
@@ -902,8 +946,10 @@ export function rushDelivery(s, pid, lotId) {
   const cost = order * unitCost(def) * 1.25;
   if (s.players[pid].cash < cost) return fail(`Need ${money(cost)}.`);
   ledger(s.players[pid], 'goods', -cost);
+  bizBook(b, 'goods', -cost);
   b.stock += order;
   b.today.cost += cost;
+  b.today.delivered += order;
   return { ok: true, msg: `Rush delivery: ${order} units for ${money(cost)}.` };
 }
 
