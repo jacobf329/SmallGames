@@ -367,6 +367,24 @@ switches to a faster, tense rhythm, and a new era fades the old music out.
 Music has its own on/off switch and three volume levels in the Menu, separate
 from sound effects.
 
+### Faces
+
+Every company has an illustrated portrait. Pick yours from eight on the
+title screen (or in the LAN lobby). Rivals' portraits appear in the
+standings, the auction panel, offers and the news ticker; tap a company in
+the standings for its profile (style, holdings, landmarks, suppliers).
+Citizens and staff get generated faces dressed for the era, with
+expressions that follow their mood.
+
+### Graphics
+
+Tone-mapped lighting, a gradient sky with a sun glow and stars at night,
+clouds and boats around the island, kerbs and zebra crossings, lamp posts
+that light the pavement after dark, awnings in the owner's colour over
+every shopfront, rooftop plant and water tanks, soft contact shadows under
+buildings, and shimmering water. The Menu's graphics setting trades detail
+for battery: Battery mode drops shadows, the sky shader, clouds and boats.
+
 ## Controls
 
 | | Phone | Computer |
@@ -405,6 +423,8 @@ skyline/
   js/actions.js    every player action by name, validated (single-player and server)
   js/net.js        LAN WebSocket client with auto-reconnect
   js/lens.js       city lenses: one number per block for heat maps and rankings
+  js/portraits.js  embedded illustrated portraits (rivals and player avatars)
+  js/faces.js      portrait lookup and generated SVG faces for citizens and staff
   js/render3d.js   three.js city, people, cars, day/night, free camera, picking
   js/music.js      era music: synth instruments, drums, era styles, live melody generator
   js/ui.js         bottom sheet, auction panel, tabs, toasts, modals

@@ -26,7 +26,7 @@ export { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars, setMap };
 
 // ------------------------------------------------------------ setup ----
 // humans: [{ name, company }] for LAN games; otherwise one player from name/company.
-export function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You', company = 'Your Company', seed, humans, map = 'town' } = {}) {
+export function createGame({ scenario = 'boomtown', difficulty = 'normal', name = 'You', company = 'Your Company', seed, humans, map = 'town', avatar = 0 } = {}) {
   setMap(map);
   const diff = DIFFICULTY[difficulty] || DIFFICULTY.normal;
   const sc = SCENARIOS[scenario];
@@ -46,9 +46,10 @@ export function createGame({ scenario = 'boomtown', difficulty = 'normal', name 
     over: false, winner: -1, endReason: '',
   };
   const companies = MAPS[MAP.id].companies;
-  const people = (humans && humans.length ? humans : [{ name, company }]).slice(0, Math.min(MAX_COMPANIES, companies));
+  const people = (humans && humans.length ? humans : [{ name, company, avatar }]).slice(0, Math.min(MAX_COMPANIES, companies));
   people.forEach((h, i) => {
     const p = makePlayer(i, h.name || `Player ${i + 1}`, h.company || `Company ${i + 1}`, HUMAN_COLORS[i], true, 'human', START_CASH);
+    p.avatar = Number.isInteger(h.avatar) ? h.avatar : i;
     p.goals = s.goals.map(g => ({ done: false, doneDay: 0 }));
     p.failed = false;
     s.players.push(p);

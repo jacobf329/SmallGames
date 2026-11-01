@@ -83,7 +83,7 @@ function broadcast(msg) {
 function notice(text, kind = '') { broadcast({ t: 'notice', text, kind }); }
 
 function lobbyMsg() {
-  const list = [...clients].sort((a, b) => a.joined - b.joined).map(c => ({ name: c.name, company: c.company, host: isHost(c), token: c.token.slice(0, 6) }));
+  const list = [...clients].sort((a, b) => a.joined - b.joined).map(c => ({ name: c.name, company: c.company, avatar: c.avatar || 0, host: isHost(c), token: c.token.slice(0, 6) }));
   return { t: 'lobby', players: list, settings, canResume: fs.existsSync(SAVE_FILE), max: Math.min(MAX_COMPANIES, MAPS[settings.map || 'town'].companies) };
 }
 function sendLobby() {
@@ -130,7 +130,7 @@ function startGame(fromSave) {
     settings = data.settings;
   } else {
     const people = [...clients].sort((a, b) => a.joined - b.joined).slice(0, MAX_COMPANIES);
-    game = createGame({ scenario: settings.scenario, difficulty: settings.difficulty, map: settings.map || 'town', humans: people.map(c => ({ name: c.name, company: c.company })) });
+    game = createGame({ scenario: settings.scenario, difficulty: settings.difficulty, map: settings.map || 'town', humans: people.map(c => ({ name: c.name, company: c.company, avatar: c.avatar || 0 })) });
     seats = people.map((c, i) => ({ pid: i, token: c.token, name: c.name, company: c.company }));
   }
   game.liveAuctions = true;
@@ -211,6 +211,7 @@ attachWebSocket(server, conn => {
         c.token = String(m.token || Math.random()).slice(0, 40);
         c.name = String(m.name || 'Player').slice(0, 20);
         c.company = String(m.company || 'Company').slice(0, 22);
+        c.avatar = Math.max(0, Math.min(7, Math.floor(+m.avatar || 0)));
         // A reconnecting phone kicks out its own stale connection.
         for (const o of clients) if (o.token === c.token && o !== c) { clients.delete(o); o.conn.destroy?.(); }
         clients.add(c);
@@ -228,6 +229,7 @@ attachWebSocket(server, conn => {
         if (game) break;
         c.name = String(m.name || c.name).slice(0, 20);
         c.company = String(m.company || c.company).slice(0, 22);
+        if (m.avatar != null) c.avatar = Math.max(0, Math.min(7, Math.floor(+m.avatar || 0)));
         sendLobby();
         break;
       case 'setup':

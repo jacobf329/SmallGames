@@ -24,6 +24,7 @@ import { auctionBid, settleRest, minBid, increment, canCall, reservePrice, aucti
 import { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } from './citizens.js';
 import { SEG_COLORS } from './render3d.js';
 import { ALERT_CATS, unreadCount } from './advisor.js';
+import { faceHTML, faceSrc, svgFaceHTML } from './faces.js';
 import { LM, landmarkSet, landmarkState, reqProgress, canLandmark, freeLotsFor, rushCost, chainOf, chainTier, brandName, activeProjects, projectText, quoteRange } from './civic.js';
 import { sfx, setSound, soundOn } from './audio.js';
 import { setMusic, musicOn, setMusicVolume, musicVolume } from './music.js';
@@ -469,7 +470,7 @@ export class UI {
       const fair = fairPay(b.type, m.role, m.skill);
       const role = STAFF_ROLES[m.role];
       return `<div class="card staff">
-        <div class="row" style="margin:0"><span style="font-size:20px">${role.icon}</span>
+        <div class="row" style="margin:0"><span class="face-wrap">${svgFaceHTML(m.name, yearOf(this.s), m.morale, 1, 40)}<i>${role.icon}</i></span>
           <span class="grow"><b>${esc(m.name)}</b><small>${role.name}${m.train ? ' · 🎓 training' : ''} · ${m.days}d · ${money(m.pay)}/hr${m.pay < fair * 0.95 ? ' <span class="warn">(underpaid)</span>' : ''}</small></span>
           <span class="skill">${'★'.repeat(Math.round(m.skill * 3))}</span></div>
         <div class="row" style="margin:4px 0 0"><span style="font-size:16px">${mood(m)}</span><div class="meter grow"><i class="${m.morale < 0.35 ? 'hot' : ''}" style="width:${Math.round(m.morale * 100)}%"></i></div></div>
@@ -631,7 +632,8 @@ export class UI {
       const v = Math.min(1.5, c.needs[i] / c.th);
       return `<div class="need"><span>${n.icon}</span><span class="grow">${n.label}</span><div class="meter" style="width:45%"><i class="${v >= 1 ? 'hot' : ''}" style="width:${Math.round(Math.min(1, v) * 100)}%"></i></div></div>`;
     }).join('');
-    return `<div class="sh-head"><div class="chip" style="background:${SEG_COLORS[c.seg]}">${c.tourist ? '📷' : '🙂'}</div><div>
+    const happy = Math.max(0, 1 - NEEDS.reduce((a, n, i) => a + Math.max(0, c.needs[i] / c.th - 0.6), 0) / 2);
+    return `<div class="sh-head">${svgFaceHTML(citizenName(c) + c.id, yearOf(s), c.thought && /rip-off|gave up|sold out|shut|wish/.test(c.thought) ? 0.2 : happy, c.seg, 52, 'citizen')}<div>
       <div class="sh-title">${esc(citizenName(c))}</div>
       <div class="sh-sub">${c.tourist ? 'Visitor' : SEGMENTS[c.seg] + ' household'} · ${c.tourist ? 'exploring' : 'lives in'} ${esc(D.name)}${c.lot >= 0 ? ' (apartments)' : ''}</div></div></div>
       ${c.thought ? `<div class="card thought">💭 “${esc(c.thought)}”</div>` : ''}
@@ -645,7 +647,7 @@ export class UI {
     const s = this.s, me = s.players[ME];
     const op = operating(me.yesterday);
     const mine = s.lots.filter(l => (l.business && l.business.owner === ME) || l.owner === ME);
-    let h = `<div class="sh-head"><div class="chip" style="background:var(--you)">💼</div><div><div class="sh-title">${esc(me.company)}</div>
+    let h = `<div class="sh-head" data-act="rival" data-id="${ME}">${faceHTML(me, 52)}<div><div class="sh-title">${esc(me.company)}</div>
       <div class="sh-sub">Net worth ${money(netWorth(s, ME))} · yesterday <span class="${cls(op)}">${sign(op)}</span></div></div></div>`;
     if (!mine.length) return h + `<p class="note">You don't own anything yet. Tap any empty lot to open a business on leased land,
       and bid at the land auctions to buy plots outright. Tea rooms and grocers are quick earners.</p>`;
@@ -737,7 +739,7 @@ export class UI {
       const lots = s.lots.filter(l => l.owner === p.id).length;
       const shops = s.lots.filter(l => l.business && l.business.owner === p.id).length;
       const sets = setsOwned(s, p.id);
-      h += `<div class="card rival"><span class="bar" style="background:${p.color}"></span>
+      h += `<div class="card rival" data-act="rival" data-id="${p.id}">${faceHTML(p, 52)}
         <div><b>${i + 1}. ${esc(p.company)}</b> ${p.bankrupt ? '<span class="neg">BANKRUPT</span>' : ''}
           <div class="note" style="margin:2px 0">${p.id === ME ? 'You' : p.human ? esc(p.name) + ' · human player' : esc(p.name) + ' · ' + esc(p.blurb || '')}</div>
           <div class="note" style="margin:0">${lots} lots · ${shops} shops · ${sets} set${sets === 1 ? '' : 's'} · cash ${money(p.cash)}${p.loan ? ` · owes ${money(p.loan)}` : ''}</div>
@@ -1068,7 +1070,7 @@ export class UI {
           <div><div class="sh-title">${esc(lot.name)}</div><div class="sh-sub">${D ? esc(D.name) + ' · ' : ''}land value ${money(landValue(s, lot))}</div></div></div>
         ${lot.kind === 'prop' ? this.setBarHTML(lot.district, lot.id) : ''}${setNote}
         <div class="auc-bid"><div><small data-r="label"></small><b data-r="price"></b></div>
-          <div style="text-align:right"><small>Leader</small><b data-r="leader"></b></div></div>
+          <div class="auc-leader"><img class="face" data-r="lface" width="40" height="40" alt=""><div style="text-align:right"><small>Leader</small><b data-r="leader"></b></div></div></div>
         <div class="meter auc-timer"><i></i></div>
         <div class="auc-log" data-r="log"></div>
         <div data-r="live">
@@ -1103,6 +1105,9 @@ export class UI {
     q('price').textContent = money(a.price);
     q('leader').textContent = leader ? (leader.id === ME ? 'You!' : who(leader)) : 'no bids';
     q('leader').style.color = leader ? leader.color : 'var(--dim)';
+    const lf = q('lface');
+    lf.style.visibility = leader ? 'visible' : 'hidden';
+    if (leader && lf.dataset.pid !== String(leader.id)) { lf.src = faceSrc(leader); lf.dataset.pid = leader.id; lf.style.setProperty('--ring', leader.color); }
     q('log').innerHTML = a.bids.slice(0, 4).map(b => `<span style="color:${s.players[b.pid].color}">${esc(who(s.players[b.pid]))} ${money(b.amount)}</span>`).join(' · ') || '<span class="dim">Waiting for an opening bid…</span>';
     q('live').classList.toggle('hidden', !!out);
     q('out').classList.toggle('hidden', !out);
@@ -1284,6 +1289,7 @@ export class UI {
       }
       case 'pass': act$('pass').then(r => { if (!r.ok && r.msg) this.toast(r.msg, 'bad'); }); sfx.tap(); return;
       case 'goto': this.openLot(+el.dataset.id); sfx.tap(); return;
+      case 'rival': this.rivalProfile(+el.dataset.id); sfx.tap(); return;
       case 'afilter': this.inboxFilter = el.dataset.v; sfx.tap(); break;
       case 'landmark': {
         const id = el.dataset.id, at = el.dataset.lot != null ? +el.dataset.lot : lotId, def = LM[id];
@@ -1408,8 +1414,33 @@ export class UI {
     const t = $('ticker');
     if (!n) { if (t.textContent) t.textContent = ''; return; }
     const p = n.who >= 0 ? this.s.players[n.who] : null;
-    t.innerHTML = (p ? `<b style="color:${p.color}">●</b> ` : '📰 ') + esc(n.text);
+    t.innerHTML = (p ? faceHTML(p, 18, 'tick') + ' ' : '📰 ') + esc(n.text);
     this.tickerUntil = now + (this.tickerQueue.length > 3 ? 2200 : 4200);
+  }
+
+  // A company's profile: portrait, style and holdings.
+  rivalProfile(pid) {
+    const s = this.s, p = s.players[pid];
+    if (!p) return;
+    const shops = s.lots.filter(l => l.business?.owner === pid);
+    const byType = {};
+    for (const l of shops) byType[l.business.type] = (byType[l.business.type] || 0) + 1;
+    const lots = s.lots.filter(l => l.owner === pid).length;
+    const lms = Object.entries(s.landmarks || {}).filter(([, L]) => L.owner === pid).map(([id]) => LM[id]);
+    const sups = suppliers(s).filter(l => l.supplier.owner === pid);
+    const style = { baron: 'Land baron', cutter: 'Price cutter', premium: 'Premium operator', human: p.id === ME ? 'You' : 'Human player' }[p.style] || '';
+    const quote = { baron: '"Land is the only thing they aren’t making more of."', cutter: '"Why pay more? Nobody beats my prices."', premium: '"People pay for quality. They always have."' }[p.style] || '';
+    this.modal(`<div class="profile"><div class="modal-face">${faceHTML(p, 128)}</div>
+      <h2 style="color:${p.color}">${esc(p.company)}</h2>
+      <p class="note" style="text-align:center;margin-top:-6px">${esc(p.name)} · ${style}${p.bankrupt ? ' · <span class="neg">bankrupt</span>' : ''}</p>
+      ${quote ? `<p class="quote">${esc(quote)}</p>` : ''}${p.blurb ? `<p class="note" style="text-align:center">${esc(p.blurb)}</p>` : ''}
+      <div class="stats"><div class="stat"><small>Net worth</small><b>${money(netWorth(s, pid))}</b></div><div class="stat"><small>Cash</small><b>${money(p.cash)}</b></div><div class="stat"><small>Loan</small><b>${money(p.loan)}</b></div></div>
+      <div class="stats"><div class="stat"><small>Land</small><b>${lots}</b></div><div class="stat"><small>Shops</small><b>${shops.length}</b></div><div class="stat"><small>Sets</small><b>${setsOwned(s, pid)}</b></div></div>
+      ${shops.length ? `<p class="note" style="text-align:center;font-size:18px">${Object.entries(byType).map(([t, n]) => `${BIZ[t].icon}<small>×${n}</small>`).join(' ')}</p>` : ''}
+      ${lms.length ? `<p class="note" style="text-align:center">Landmarks: ${lms.map(d => `${d.icon} ${esc(d.name)}`).join(', ')}</p>` : ''}
+      ${sups.length ? `<p class="note" style="text-align:center">Suppliers: ${sups.map(l => `${SUPPLY_LINES[l.supplier.line].icon} ${esc(SUPPLY_LINES[l.supplier.line].name)}`).join(', ')}</p>` : ''}
+      ${this.spark(p)}
+      <div class="row"><button class="btn wide" data-act="modal-cancel">Close</button></div></div>`);
   }
 
   showOffer(o) {
@@ -1419,7 +1450,7 @@ export class UI {
     const completes = lot.kind === 'prop' && setCount(s, o.from, lot.district) === MAP.districtLots[lot.district].length - 1;
     if (!this.app.mp) this.app.pauseFor('offer');       // LAN games keep running
     sfx.offer();
-    this.modal(`<h2><span style="color:${p.color}">●</span> Offer from ${esc(p.name)}</h2>
+    this.modal(`<div class="modal-face">${faceHTML(p, 84)}</div><h2>Offer from ${esc(p.name)}</h2>
       <p>${esc(p.company)} wants to buy <b>${esc(lot.name)}</b>${lot.kind === 'prop' ? ` (${esc(DISTRICTS[lot.district].name)})` : ''}.</p>
       <div class="big-amt pos">${money(o.amount)}</div>
       <p class="note" style="text-align:center">Land value ${money(landValue(s, lot))}${lot.aptInvested ? ' + apartments' : ''}</p>
@@ -1473,7 +1504,7 @@ export class UI {
     won ? sfx.win() : sfx.bad();
     this.modal(`<h2>${won ? '🏆 You win!' : s.winner < 0 ? '💸 Game over' : `${esc(s.players[s.winner].company)} wins`}</h2>
       <p>${esc(s.endReason)}</p>
-      ${rows.map(({ p, w }, i) => `<div class="list-item"><span class="rank">${i + 1}</span><span class="grow"><b style="color:${p.color}">${esc(p.company)}</b><small>${p.bankrupt ? 'bankrupt' : esc(p.name)}</small></span><span class="amt">${money(w)}</span></div>`).join('')}
+      ${rows.map(({ p, w }, i) => `<div class="list-item">${faceHTML(p, 36)}<span class="grow"><b style="color:${p.color}">${i + 1}. ${esc(p.company)}</b><small>${p.bankrupt ? 'bankrupt' : esc(p.name)}</small></span><span class="amt">${money(w)}</span></div>`).join('')}
       ${this.app.mp && !this.app.mp.host ? '<p class="note">The host decides whether to keep playing or go back to the lobby.</p>' : ''}
       <div class="row"><button class="btn buy wide" data-act="keep-playing" ${this.app.mp && !this.app.mp.host ? 'disabled' : ''}>▶ Keep playing</button></div>
       <p class="note" style="text-align:center">${s.players[ME].bankrupt ? 'You get a fresh start with half the usual cash. ' : ''}No more goals or deadlines: the city and the rivals carry on.</p>

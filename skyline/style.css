@@ -457,3 +457,26 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .dim-list { opacity: 0.7; }
 #nav button span { white-space: nowrap; }
 .biz-opt span small { display: block; }
+
+/* ------------------------------------------------------------- faces -- */
+.face { border-radius: 50%; border: 2px solid var(--ring, #ffffff55); object-fit: cover; background: #0003; flex: none; display: inline-block; vertical-align: middle; }
+.face.gen { border-color: #ffffff33; background: transparent; }
+.face.tick { border-width: 1px; vertical-align: -4px; margin-right: 2px; }
+.face.citizen { margin-right: 2px; }
+.sh-head .face { margin-right: 4px; }
+.card.rival { display: flex; gap: 10px; align-items: center; cursor: pointer; }
+.card.rival > div:nth-child(2) { flex: 1; min-width: 0; }
+.list-item .face { margin-right: 8px; }
+.modal-face { text-align: center; margin: 2px 0 6px; }
+.modal-face .face { border-width: 3px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+.profile .quote { text-align: center; font-style: italic; opacity: 0.85; margin: 6px 0; }
+.profile .stats { margin: 6px 0; }
+.avatars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+.avatars button { padding: 0; border: 2px solid transparent; border-radius: 50%; background: none; aspect-ratio: 1; overflow: hidden; opacity: 0.6; transition: transform .12s, opacity .12s; }
+.avatars button img { width: 100%; height: 100%; display: block; border-radius: 50%; }
+.avatars button.on { border-color: var(--you); opacity: 1; transform: scale(1.08); }
+.face-wrap { position: relative; display: inline-block; flex: none; }
+.face-wrap i { position: absolute; right: -4px; bottom: -4px; font-style: normal; font-size: 13px; background: var(--panel, #1b2238); border-radius: 50%; padding: 1px; line-height: 1; }
+.auc-leader { display: flex; gap: 8px; align-items: center; }
+.auc-leader .face { border-width: 2px; }
+.profile h2 { text-align: center; margin-bottom: 4px; }

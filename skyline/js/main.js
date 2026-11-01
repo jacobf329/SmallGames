@@ -8,6 +8,7 @@ import { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, MAPS, eraName } from './data.js';
 import { createGame, serialize, deserialize, money, netWorth, dayName, yearOf, operating, goalProgress, goalText, raceGoal, setMap, MAP } from './sim.js';
 import { advanceGame } from './game.js';
 import { unreadCount } from './advisor.js';
+import { AVATARS, faceHTML } from './faces.js';
 import { auctionTick } from './auction.js';
 import { perform } from './actions.js';
 import { Renderer3D } from './render3d.js';
@@ -230,7 +231,7 @@ function joinLan() {
     $('net-status').textContent = status === 'online' ? '' : '📶 Reconnecting…';
     $('net-status').classList.toggle('hidden', status === 'online');
   });
-  mp.net.connect({ token, name, company });
+  mp.net.connect({ token, name, company, avatar: avatarPick });
   $('title').classList.add('hidden');
   $('lobby').classList.remove('hidden');
   $('lobby-body').innerHTML = '<p class="note">Connecting…</p>';
@@ -316,8 +317,9 @@ function renderLobby() {
   $('lobby-body').innerHTML = `
     <p class="note">${mp.addresses.length ? `Friends on the same wifi open <b>${esc(mp.addresses[0])}</b> and tap <b>LAN multiplayer</b>.` : 'Friends on the same wifi open this same address.'}</p>
     <h3>Players <em>${Math.min(L.players.length, L.max)} / ${L.max}${L.players.length < L.max ? ' · rivals fill the rest' : ''}</em></h3>
-    ${L.players.map((p, i) => `<div class="list-item"><span class="rank">${i + 1}</span><span class="grow"><b>${esc(p.company)}</b><small>${esc(p.name)}${p.host ? ' · host' : ''}${p.token === L.you ? ' · you' : ''}${i >= L.max ? ' · no seat (game full)' : ''}</small></span></div>`).join('')}
+    ${L.players.map((p, i) => `<div class="list-item">${faceHTML({ human: true, avatar: p.avatar, name: p.name, color: '#2ee6ff' }, 36)}<span class="grow"><b>${esc(p.company)}</b><small>${esc(p.name)}${p.host ? ' · host' : ''}${p.token === L.you ? ' · you' : ''}${i >= L.max ? ' · no seat (game full)' : ''}</small></span></div>`).join('')}
     ${full ? '<p class="note warn">Only the first 4 players get a company.</p>' : ''}
+    <h3>Your face</h3><div class="avatars small" id="lob-avatar"></div>
     <h3>Game</h3>
     ${mp.host ? `
       <div class="seg wrap" id="lob-scenario">${Object.entries(SCENARIOS).map(([k, v]) => `<button data-v="${k}" class="${k === L.settings.scenario ? 'on' : ''}">${v.name}<small>${v.year}</small></button>`).join('')}</div>
@@ -336,6 +338,7 @@ function renderLobby() {
   bind('#lob-start', () => mp.net.send({ t: 'start' }));
   bind('#lob-resume', () => mp.net.send({ t: 'start', resume: true }));
   bind('#lob-leave', () => app.toTitle());
+  avatarRow($('lob-avatar'), () => mp.net.send({ t: 'profile', avatar: avatarPick }));
 }
 
 // Joined a game already under way without a seat: take over a free one.
@@ -415,6 +418,18 @@ for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => u
 
 // --------------------------------------------------------------- title ----
 let scenario = 'boomtown', difficulty = 'normal', mapPick = 'town';
+let avatarPick = Math.max(0, Math.min(AVATARS.length - 1, +(localStorage.getItem('skyline-avatar') || 0)));
+function avatarRow(el, onPick) {
+  el.innerHTML = AVATARS.map((src, i) => `<button data-v="${i}" class="${i === avatarPick ? 'on' : ''}" aria-label="Face ${i + 1}"><img src="${src}" alt=""></button>`).join('');
+  el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    avatarPick = +b.dataset.v;
+    localStorage.setItem('skyline-avatar', avatarPick);
+    el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    sfx.tap();
+    onPick?.();
+  }));
+}
+avatarRow($('seg-avatar'));
 const segPick = (id, cb) => document.querySelectorAll(`#${id} button`).forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll(`#${id} button`).forEach(x => x.classList.toggle('on', x === b));
   cb(b.dataset.v);
@@ -438,7 +453,7 @@ $('btn-new').addEventListener('click', () => {
   const company = $('in-company').value.trim() || 'Your Company';
   localStorage.setItem('skyline-company', company);
   sfx.build();
-  app.start(createGame({ scenario, difficulty, company, name: 'You', map: mapPick }));
+  app.start(createGame({ scenario, difficulty, company, name: 'You', map: mapPick, avatar: avatarPick }));
   setTimeout(() => app.ui.toast('Tap any empty lot to open a shop, or call an auction to buy city land.', 'good'), 600);
 });
 $('btn-continue').addEventListener('click', () => {
