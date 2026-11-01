@@ -376,6 +376,7 @@ skyline/
   js/net.js        LAN WebSocket client with auto-reconnect
   js/lens.js       city lenses: one number per block for heat maps and rankings
   js/render3d.js   three.js city, people, cars, day/night, free camera, picking
+  js/music.js      era music: synth instruments, drums, era styles, live melody generator
   js/ui.js         bottom sheet, auction panel, tabs, toasts, modals
   js/main.js       game loop and title screen
   tools/bundle.mjs   single-file build
