@@ -123,6 +123,30 @@ On **your own land** you can **buy out** a rival's shop, team and stock
 included. Owning the whole colour set makes buyouts much cheaper. Rivals do
 this to you as well.
 
+### Advisor alerts
+
+The 🔔 button (top of the camera controls) opens your advisor's inbox. Every
+game hour it looks over your company and files what needs attention:
+
+- **Shops:** sold out right now, running dry day after day, customers giving
+  up on queues, three days of losses, staff close to quitting, stock spoiling,
+  and the loudest customer complaint
+- **Land:** one lot from completing a set, a rival holding your last lot,
+  land standing empty
+- **Rivals:** a rival one lot from a set (when you can block it), a rival
+  opening the same kind of shop near yours
+- **Money:** overdrawn, days of cash left at the current losses, spare cash to
+  clear the loan, purchase offers
+- **Goals:** a milestone due within three days, a rival closing in on the race
+  target
+- **Tips:** new kinds of shop as they are invented
+
+Alerts mark themselves **sorted** when the problem clears. Many have a one-tap
+fix (rush delivery, call auction, repay loan), and **Show** jumps to the lot and
+the right tab. A lot's own alerts also appear at the top of its sheet. Urgent
+alerts pop up as a toast and turn the bell red. You can mute any topic; urgent
+alerts still come through.
+
 ### Research and city lenses
 Commission a **market survey** of any block ($1,500, valid 5 days). It ranks
 every kind of business there by expected customers and profit, shows nearby
@@ -257,6 +281,7 @@ skyline/
   js/citizens.js   the citizens: needs, choices, queues, grudges, comments, trips
   js/staff.js      shop staff: roles, skill, wages, morale, training, quitting
   js/sim.js        economy: shops, stock, rent, sets, apartments, goals, trades, bank
+  js/advisor.js    the advisor inbox: alert rules, sorted/one-off tracking, mute
   js/auction.js    live land auctions
   js/ai.js         rival tycoons (build, tune, trade, bid)
   js/game.js       the clock: advances the sim, wakes the AI, opens auctions

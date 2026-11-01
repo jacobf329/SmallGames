@@ -419,6 +419,33 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .metric-pick button { flex: none; border: 1px solid var(--line); background: rgba(255,255,255,0.05); color: var(--dim); border-radius: 999px; padding: 6px 11px; font-size: 12px; font-weight: 600; }
 .metric-pick button.on { background: var(--you); color: #032530; border-color: transparent; }
 
+/* ---------------------------------------------------------- advisor -- */
+#bell { position: relative; }
+#bell-n { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+  background: var(--gold); color: #1a1405; font: 800 11px/18px system-ui, sans-serif; font-style: normal; text-align: center; }
+#bell.urgent { border-color: #ff6b6b; animation: bellpulse 1.4s ease-in-out infinite; }
+#bell.urgent #bell-n { background: #ff5a5a; color: #fff; }
+@keyframes bellpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 90, 90, 0.55); } 50% { box-shadow: 0 0 0 6px rgba(255, 90, 90, 0); } }
+.alerts { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px; }
+.alerts.mini { margin: 6px 0 10px; }
+.alert { display: flex; gap: 10px; align-items: flex-start; padding: 10px 10px 10px 12px; border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-left: 4px solid #7d8bb3; position: relative; }
+.alert.sev-bad { border-left-color: #ff5a5a; background: rgba(255, 90, 90, 0.09); }
+.alert.sev-warn { border-left-color: var(--gold); }
+.alert.sev-good { border-left-color: #4cd68a; }
+.alert.new::after { content: ''; position: absolute; top: 10px; right: 34px; width: 8px; height: 8px; border-radius: 50%; background: var(--you); }
+.alert.done { opacity: 0.55; }
+.alert .a-icon { font-size: 22px; line-height: 1.1; }
+.alert b { display: block; font-size: 14px; padding-right: 18px; }
+.alert small { display: block; opacity: 0.85; margin-top: 2px; line-height: 1.35; }
+.alert small.when { opacity: 0.55; font-size: 11px; margin-top: 4px; }
+.alert .sorted { font-style: normal; color: #4cd68a; font-size: 11px; font-weight: 800; }
+.alert .a-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.alert .a-x { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border: 0; border-radius: 8px;
+  background: transparent; color: inherit; opacity: 0.5; font-size: 13px; }
+.alerts.mini .alert { padding: 8px 10px; }
+.afilter button i, .afilter button i { font-style: normal; font-weight: 800; color: var(--gold); }
+
 </style>
 </head>
 <body>
@@ -452,6 +479,7 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 <div id="floaters"></div>
 
 <div id="camctl" class="hidden">
+  <button data-cam="inbox" id="bell" aria-label="Advisor alerts">🔔<i id="bell-n" class="hidden"></i></button>
   <button data-cam="left" aria-label="Rotate left">⟲</button>
   <button data-cam="right" aria-label="Rotate right">⟳</button>
   <button data-cam="tilt" aria-label="Tilt">⛰</button>
@@ -3380,6 +3408,305 @@ function closeAuction(s) {
 return { increment, reservePrice, minBid, auctionGap, canCall, callAuction, aiCallAuctions, openAuction, auctionBid, auctionTick, auctionPass, maybeSettle, settleRest, closeAuction };
 })();
 
+/* ===== advisor.js ===== */
+__mods.advisor = (() => {
+// Skyline Hustle - the advisor. Every game hour it looks over each human
+// company and keeps an inbox of things worth a look: shops that sold out or
+// turn people away, losses, unhappy staff, sets one lot from done, rivals
+// closing in, money trouble, deadlines. Most alerts track a live condition
+// and mark themselves "sorted" once it clears; a few are one-off events.
+// DOM-free: the server runs it for LAN games and the inbox travels in state.
+
+const { BIZ, DISTRICTS, SCENARIOS, QUIT_MORALE, MAX_FLOORS } = __mods.data;
+const { MAP, bizLabel, money, setCount, goalProgress, goalText, netWorth, bizOpen, techOf, raceGoal } = __mods.sim;
+const { avgMorale } = __mods.staff;
+const { SHOP_COMMENTS } = __mods.citizens;
+
+const ALERT_CATS = {
+  shops:  { name: 'Shops',  icon: '🏪' },
+  land:   { name: 'Land',   icon: '🧱' },
+  rivals: { name: 'Rivals', icon: '🦈' },
+  money:  { name: 'Money',  icon: '💰' },
+  goals:  { name: 'Goals',  icon: '🎯' },
+  tips:   { name: 'Tips',   icon: '💡' },
+};
+const MAX_ALERTS = 40;
+const KEEP_DONE_HOURS = 36;      // sorted alerts linger this long, then go
+const KEEP_EVENT_HOURS = 72;     // one-off events
+
+const nowH = s => s.day * 24 + s.hour;
+const pct = v => `${Math.round(v * 100)}%`;
+
+function inboxOf(p) {
+  return (p.inbox ||= { seq: 0, list: [], mute: {}, since: {} });
+}
+const unreadCount = p => (p?.inbox?.list || []).filter(a => !a.read && !a.done && !p.inbox.mute[a.cat]).length;
+
+// What a bad customer comment means you should do.
+const COMPLAINT_FIX = {
+  slow: 'Hire or train servers, or appoint a manager.',
+  grumpy: 'Give the team a raise or hire a manager: morale shows.',
+  pricey: 'Try a lower price, or a smarter fit-out to justify it.',
+  closed: 'Stretch the opening hours to when people want you.',
+};
+
+// --------------------------------------------------------- conditions ----
+// Each returns the alerts that hold right now, keyed so the same problem is
+// never reported twice.
+function shopAlerts(s, pid, out) {
+  for (const l of s.lots) {
+    const b = l.business;
+    if (!b || b.owner !== pid) continue;
+    const name = `${bizLabel(s, b.type)} on ${l.name}`;
+    const y = b.yesterday;
+    const age = s.day - b.opened;
+    if (b.stock < 4 && b.today.outHours >= 2 && bizOpen(b, s.hour)) {
+      out.push({ key: `out:${l.id}`, cat: 'shops', sev: 'bad', icon: '📦', lot: l.id, title: `Sold out: ${name}`,
+        text: b.autoStock ? 'Customers are leaving empty-handed until the 6:00 delivery.' : 'Auto-restock is off, so nothing more is coming.',
+        fix: { act: 'rush', args: [l.id], label: 'Rush delivery' } });
+    }
+    if (y && y.outHours >= 3) {
+      out.push({ key: `outy:${l.id}`, cat: 'shops', sev: 'warn', icon: '📉', lot: l.id, title: `Ran dry for ${y.outHours}h yesterday`,
+        text: `${name} keeps selling out. Raise its stock target or hire a stock clerk.`, tab: 'manage' });
+    }
+    const asked = y ? y.cust + y.turned : 0;
+    if (y && asked >= 20 && y.turned / asked > 0.2) {
+      const full = (b.floors || 1) >= MAX_FLOORS;
+      out.push({ key: `queue:${l.id}`, cat: 'shops', sev: 'warn', icon: '⏳', lot: l.id, title: `Turned away ${Math.round(y.turned)} customers`,
+        text: `${pct(y.turned / asked)} of yesterday's customers at ${name} gave up on the queue. ${full ? 'Hire more servers.' : 'Hire servers or add a floor.'}`, tab: 'staff' });
+    }
+    const last = (b.days || []).slice(-3);
+    if (age >= 4 && last.length === 3 && last.every(d => d.profit < 0)) {
+      const avg = last.reduce((a, d) => a + d.profit, 0) / 3;
+      out.push({ key: `loss:${l.id}`, cat: 'shops', sev: 'bad', icon: '🩸', lot: l.id, title: `Losing money: ${name}`,
+        text: `Three days in the red, about ${money(-avg)} a day. Check its books for the leak.`, tab: 'books' });
+    }
+    if (b.team?.length) {
+      const m = avgMorale(b);
+      if (m < QUIT_MORALE + 0.12) {
+        out.push({ key: `morale:${l.id}`, cat: 'shops', sev: 'warn', icon: '😤', lot: l.id, title: `Unhappy staff: ${name}`,
+          text: `Team morale is ${pct(m)}. Someone may quit tonight. Pay, shorter hours or a manager help.`, tab: 'staff' });
+      }
+    }
+    if (y && y.wasteV > 150 && y.wasteV > 0.12 * y.rev) {
+      out.push({ key: `waste:${l.id}`, cat: 'shops', sev: 'info', icon: '🗑️', lot: l.id, title: `Stock going off: ${name}`,
+        text: `${y.waste} units (${money(y.wasteV)}) spoiled overnight. Lower the stock target or hire a clerk.`, tab: 'manage' });
+    }
+    // The loudest complaint, once enough people have said it.
+    let total = 0, top = null;
+    for (const [k, v] of Object.entries(b.fb || {})) { total += v; if (COMPLAINT_FIX[k] && (!top || v > b.fb[top])) top = k; }
+    if (top && total >= 8 && b.fb[top] / total > 0.35) {
+      out.push({ key: `fb:${l.id}:${top}`, cat: 'shops', sev: 'info', icon: SHOP_COMMENTS[top]?.icon || '💬', lot: l.id,
+        title: `Customers: "${SHOP_COMMENTS[top]?.text(bizLabel(s, b.type)) || top}"`,
+        text: `${pct(b.fb[top] / total)} of the talk about ${name}. ${COMPLAINT_FIX[top]}`, tab: 'customers' });
+    }
+  }
+}
+
+function landAlerts(s, pid, out, inbox) {
+  const P = s.players;
+  DISTRICTS.forEach((D, d) => {
+    const ids = MAP.districtLots[d];
+    if (!ids?.length) return;
+    const n = ids.length;
+    if (setCount(s, pid, d) === n - 1) {
+      const m = ids.find(id => s.lots[id].owner !== pid), lot = s.lots[m];
+      if (lot.owner === -1) {
+        out.push({ key: `setfree:${d}`, cat: 'land', sev: 'good', icon: '🧩', lot: m, title: `One lot from the ${D.name} set`,
+          text: `${lot.name} is still city land. Win it at auction to complete the set: rents double and apartments open up.`,
+          fix: { act: 'call', args: [m], label: 'Call auction' } });
+      } else if (!P[lot.owner].bankrupt) {
+        out.push({ key: `setrival:${d}:${lot.owner}`, cat: 'land', sev: 'info', icon: '🧩', lot: m, title: `${P[lot.owner].company} holds your last ${D.name} lot`,
+          text: `Make them an offer for ${lot.name}, or buy out their shop if they have one there.` });
+      }
+    }
+    for (const r of P) {
+      if (r.id === pid || r.bankrupt || n < 3 || setCount(s, r.id, d) !== n - 1) continue;
+      const m = ids.find(id => s.lots[id].owner !== r.id), lot = s.lots[m];
+      if (lot.owner === pid) {
+        out.push({ key: `threat:${d}:${r.id}`, cat: 'rivals', sev: 'warn', icon: '🦈', lot: m, title: `${r.company} needs your ${lot.name}`,
+          text: `It's the last lot of their ${D.name} set. Hold on to it, or make them pay a lot for it.` });
+      } else if (lot.owner === -1) {
+        out.push({ key: `threat:${d}:${r.id}`, cat: 'rivals', sev: 'warn', icon: '🦈', lot: m, title: `${r.company} is one lot from ${D.name}`,
+          text: `${lot.name} is the last free lot. Win it yourself to block the set.`,
+          fix: { act: 'call', args: [m], label: 'Call auction' } });
+      }
+    }
+  });
+  // Land that has sat empty for two days.
+  const since = inbox.since;
+  for (const l of s.lots) {
+    const k = `idle:${l.id}`;
+    if (l.kind === 'prop' && l.owner === pid && !l.business && !l.apt) {
+      since[k] ??= s.day;
+      if (s.day - since[k] >= 2) {
+        out.push({ key: k, cat: 'land', sev: 'info', icon: '🌾', lot: l.id, title: `${l.name} is standing empty`,
+          text: 'Idle land earns nothing. Open a shop or build apartments, or lease it to a rival by selling.' });
+      }
+    } else delete since[k];
+  }
+}
+
+function moneyAlerts(s, pid, out) {
+  const p = s.players[pid];
+  if (p.cash < 0) {
+    out.push({ key: 'overdrawn', cat: 'money', sev: 'bad', icon: '🚨', title: 'You are overdrawn',
+      text: p.debtDays ? `Day ${p.debtDays} of 3 with no credit left. Sell a shop or land before the bank closes you down.` : 'The bank will advance a loan at midnight if you have credit left.', tab: 'bank' });
+  }
+  const op = p.days?.at(-1)?.op;
+  if (op < 0 && p.cash >= 0 && p.cash < -op * 3) {
+    const days = Math.max(0, Math.floor(p.cash / -op));
+    out.push({ key: 'runway', cat: 'money', sev: 'warn', icon: '⏱️', title: `About ${days} day${days === 1 ? '' : 's'} of cash left`,
+      text: `Yesterday lost ${money(-op)}. Cut the losers, or borrow before it runs out.`, tab: 'bank' });
+  }
+  if (p.loan > 0 && p.cash > p.loan + 25000) {
+    out.push({ key: 'repay', cat: 'money', sev: 'good', icon: '🏦', title: 'You could clear the loan',
+      text: `You have ${money(p.cash)} and owe ${money(p.loan)}. Repaying stops the daily interest.`,
+      fix: { act: 'repay', args: [p.loan], label: `Repay ${money(p.loan)}` } });
+  }
+  for (const o of s.offers || []) {
+    if (o.to !== pid) continue;
+    out.push({ key: `offer:${o.id}`, cat: 'money', sev: 'info', icon: '✉️', lot: o.lotId, title: `${s.players[o.from].company} offers ${money(o.amount)}`,
+      text: `For your ${s.lots[o.lotId].name}. Open the lot to accept or turn it down. Expires day ${o.expires}.` });
+  }
+}
+
+function goalAlerts(s, pid, out) {
+  const p = s.players[pid], sc = SCENARIOS[s.scenario];
+  if (!sc || s.over) return;
+  if (sc.mode === 'goals' && !p.failed) {
+    const gi = (p.goals || []).findIndex(x => !x.done);
+    const g = s.goals?.[gi];
+    if (g) {
+      const left = g.by - s.day + 1, prog = goalProgress(s, g, pid) / g.n;
+      if (left <= 3 && prog < 1) {
+        out.push({ key: `goal:${gi}`, cat: 'goals', sev: left <= 1 ? 'bad' : 'warn', icon: '🎯', title: `${left} day${left === 1 ? '' : 's'} left: ${goalText(g)}`,
+          text: `You're ${pct(Math.min(1, prog))} of the way. Miss it and the scenario is lost.`, tab: 'goals' });
+      }
+    }
+  } else if (sc.mode === 'race') {
+    const goal = raceGoal(s), mine = netWorth(s, pid);
+    for (const r of s.players) {
+      if (r.id === pid || r.bankrupt) continue;
+      const w = netWorth(s, r.id);
+      if (w >= goal * 0.75 && w > mine) {
+        out.push({ key: `race:${r.id}`, cat: 'goals', sev: 'warn', icon: '🏁', title: `${r.company} is closing on the target`,
+          text: `They're worth ${money(w)} of the ${money(goal)} needed; you're at ${money(mine)}.`, tab: 'goals' });
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------ events ----
+// One-off things: new shop types, a rival muscling in, staff walking out.
+function eventAlerts(s, pid, inbox, add) {
+  const tech = techOf(s);
+  if (!inbox.tech) inbox.tech = [...tech.biz];
+  else for (const t of tech.biz) {
+    if (inbox.tech.includes(t)) continue;
+    inbox.tech.push(t);
+    add({ key: `tech:${t}`, cat: 'tips', sev: 'good', icon: BIZ[t].icon, title: `New: the ${bizLabel(s, t)}`,
+      text: `Customers have a new way to spend on ${BIZ[t].need}. It costs ${money(BIZ[t].cost)} to open on a free lot.`, ev: true });
+  }
+  for (const n of s.news) {
+    if (n.seq <= (inbox.news ?? s.newsSeq - 1)) break;
+    if (n.kind === 'staff' && n.who === pid) add({ key: `ev:${n.seq}`, cat: 'shops', sev: 'bad', icon: '🚪', title: 'Staff walked out', text: n.text, tab: 'staff', ev: true });
+  }
+  inbox.news = s.newsSeq;
+}
+
+// A rival opened the same kind of shop next to one of yours.
+function competition(s) {
+  const seen = (s.advSeen ||= {});
+  const fresh = [];
+  for (const l of s.lots) {
+    const b = l.business, sig = b ? `${b.owner}:${b.type}` : '';
+    if ((seen[l.id] || '') !== sig) { if (b && seen[l.id] !== undefined) fresh.push(l); seen[l.id] = sig; }
+  }
+  return fresh;
+}
+
+// -------------------------------------------------------------- scan ----
+function advise(s) {
+  if (!s.players.some(p => p.human)) return;
+  const fresh = competition(s);
+  for (const p of s.players) {
+    if (!p.human || p.bankrupt) continue;
+    const inbox = inboxOf(p), pid = p.id, h = nowH(s);
+    const add = a => {
+      const old = inbox.list.find(x => x.key === a.key);
+      if (old) {
+        // Same problem, maybe new numbers. Getting worse makes it unread again.
+        if (!old.ev) {
+          const worse = old.done || (a.sev === 'bad' && old.sev !== 'bad');
+          Object.assign(old, a, { done: false });
+          if (worse) { old.read = false; old.snooze = false; old.day = s.day; old.hour = s.hour; old.at = h; }
+        }
+        return;
+      }
+      inbox.list.unshift({ ...a, id: ++inbox.seq, day: s.day, hour: s.hour, at: h, read: false, done: false });
+    };
+    const out = [];
+    shopAlerts(s, pid, out);
+    landAlerts(s, pid, out, inbox);
+    moneyAlerts(s, pid, out);
+    goalAlerts(s, pid, out);
+    for (const a of out) if (!inbox.mute[a.cat] || a.sev === 'bad') add(a);
+    const live = new Set(out.map(a => a.key));
+    for (const a of inbox.list) {
+      if (!a.ev && !a.done && !live.has(a.key)) { a.done = true; a.doneAt = h; if (a.snooze) a.gone = true; }
+    }
+    eventAlerts(s, pid, inbox, add);
+    for (const l of fresh) {
+      const b = l.business;
+      if (b.owner === pid) continue;
+      const near = s.lots.find(x => x.business?.owner === pid && x.business.type === b.type &&
+        (x.district === l.district || MAP.neighW[x.district]?.has(l.district)));
+      if (near) add({ key: `comp:${l.id}:${b.owner}`, cat: 'rivals', sev: 'warn', icon: '⚔️', lot: l.id,
+        title: `${s.players[b.owner].company} opened a rival ${bizLabel(s, b.type)}`,
+        text: `On ${l.name}, close to your ${near.name}. Watch your prices and service.`, ev: true });
+    }
+    // Tidy up: sorted and old events fade, and the list stays short.
+    inbox.list = inbox.list.filter(a => !(a.done && h - a.doneAt > KEEP_DONE_HOURS) && !(a.ev && h - a.at > KEEP_EVENT_HOURS) && !a.gone);
+    if (inbox.list.length > MAX_ALERTS) {
+      const keep = inbox.list.filter(a => !a.done);
+      inbox.list = keep.concat(inbox.list.filter(a => a.done)).slice(0, MAX_ALERTS);
+      inbox.list.sort((a, b) => b.id - a.id);
+    }
+  }
+}
+
+// ----------------------------------------------------------- actions ----
+function inboxRead(s, pid, ids) {
+  const inbox = inboxOf(s.players[pid]);
+  for (const a of inbox.list) if (ids === 'all' || ids.includes(a.id)) a.read = true;
+  return { ok: true };
+}
+function inboxDismiss(s, pid, id) {
+  const inbox = inboxOf(s.players[pid]);
+  const a = inbox.list.find(x => x.id === id);
+  if (!a) return { ok: false };
+  if (a.done || a.ev) a.gone = true;
+  else { a.read = true; a.snooze = true; }
+  inbox.list = inbox.list.filter(x => !x.gone);
+  return { ok: true };
+}
+function inboxClear(s, pid) {
+  const inbox = inboxOf(s.players[pid]);
+  inbox.list = inbox.list.filter(a => !a.done && !a.ev);
+  for (const a of inbox.list) a.read = true;
+  return { ok: true };
+}
+function inboxMute(s, pid, cat, on) {
+  if (!ALERT_CATS[cat]) return { ok: false };
+  const inbox = inboxOf(s.players[pid]);
+  if (on) inbox.mute[cat] = true; else delete inbox.mute[cat];
+  return { ok: true, msg: on ? `${ALERT_CATS[cat].name} alerts muted (urgent ones still come through).` : `${ALERT_CATS[cat].name} alerts on.` };
+}
+
+return { ALERT_CATS, inboxOf, unreadCount, advise, inboxRead, inboxDismiss, inboxClear, inboxMute };
+})();
+
 /* ===== game.js ===== */
 __mods.game = (() => {
 // Skyline Hustle - the game clock: advances the simulation, lets the rivals
@@ -3389,9 +3716,10 @@ __mods.game = (() => {
 const { stepHour } = __mods.sim;
 const { aiHour, aiDay } = __mods.ai;
 const { aiCallAuctions } = __mods.auction;
+const { advise } = __mods.advisor;
 
 const HOOKS = {
-  onHour(s) { aiHour(s); aiCallAuctions(s); },
+  onHour(s) { aiHour(s); aiCallAuctions(s); advise(s); },
   onDay: aiDay,
 };
 
@@ -3425,6 +3753,7 @@ const {
   hireStaff, fireStaff, trainStaff, raiseStaff, setRole, addFloor, startPromo, buildPark, buyout, survey,
 } = __mods.sim;
 const { auctionBid, auctionPass, callAuction } = __mods.auction;
+const { inboxRead, inboxDismiss, inboxClear, inboxMute } = __mods.advisor;
 
 // Bad arguments throw; perform() turns that into a failed action.
 const num = v => { if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error('bad number'); return v; };
@@ -3461,6 +3790,10 @@ const ACTIONS = {
   buyout:    (s, p, [l]) => buyout(s, p, lot(s, l)),
   survey:    (s, p, [d]) => survey(s, p, Math.round(num(d))),
   pass:      (s, p) => auctionPass(s, p),
+  inboxRead: (s, p, [ids]) => inboxRead(s, p, ids === 'all' ? 'all' : (Array.isArray(ids) ? ids.slice(0, 60).map(num) : [])),
+  inboxDismiss: (s, p, [id]) => inboxDismiss(s, p, num(id)),
+  inboxClear: (s, p) => inboxClear(s, p),
+  inboxMute: (s, p, [cat, on]) => inboxMute(s, p, String(cat), !!on),
 };
 
 function perform(s, pid, name, args = []) {
@@ -4808,6 +5141,7 @@ const { LENSES, LENS, lensData } = __mods.lens;
 const { auctionBid, settleRest, minBid, increment, canCall, reservePrice, auctionGap } = __mods.auction;
 const { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } = __mods.citizens;
 const { SEG_COLORS } = __mods.render3d;
+const { ALERT_CATS, unreadCount } = __mods.advisor;
 const { sfx, setSound, soundOn } = __mods.audio;
 
 const $ = id => document.getElementById(id);
@@ -4854,6 +5188,7 @@ class UI {
       const r = this.app.renderer, a = b.dataset.cam;
       if (a === 'left') r.rotate(-Math.PI / 4);
       else if (a === 'right') r.rotate(Math.PI / 4);
+      else if (a === 'inbox') { if (this.view?.kind === 'tab' && this.view.name === 'inbox') this.close(); else this.openTab('inbox'); }
       else if (a === 'tilt') r.tilt();
       else if (a === 'layers') { this.lensOpen = true; $('layers').classList.toggle('hidden'); this.layersUI(); }
       else r.fit();
@@ -4880,6 +5215,7 @@ class UI {
     this.render();
   }
   openTab(name) {
+    if (name === 'inbox') this.markInboxRead();
     this.view = { kind: 'tab', name };
     this.app.renderer.sel = -1;
     this.app.renderer.selCitizen = -1;
@@ -4908,7 +5244,7 @@ class UI {
     if (v.kind === 'lot') html = this.lotHTML(this.s.lots[v.id]);
     else if (v.kind === 'citizen') html = this.citizenHTML(v.id);
     else html = ({ empire: () => this.empireHTML(), sets: () => this.setsHTML(), goals: () => this.goalsHTML(), lens: () => this.lensHTML(),
-      bank: () => this.bankHTML(), menu: () => this.menuHTML() })[v.name]();
+      bank: () => this.bankHTML(), menu: () => this.menuHTML(), inbox: () => this.inboxHTML() })[v.name]();
     $('sheet-body').innerHTML = html;
     $('sheet').classList.remove('hidden');
     $('sheet').scrollTop = scroll;
@@ -4938,6 +5274,8 @@ class UI {
       sub = `${lot.kind === 'station' ? 'Metro station' : 'Utility'} · ${ownerTxt}`;
     }
     let h = `<div class="sh-head">${chip}<div><div class="sh-title">${esc(lot.name)}</div><div class="sh-sub">${sub}</div></div></div>`;
+    const here = this.alerts().filter(a => a.lot === lot.id && !a.done);
+    if (here.length) h += `<div class="alerts mini">${here.slice(0, 3).map(a => this.alertHTML(a, true)).join('')}</div>`;
     if (lot.kind === 'prop') h += this.setBarHTML(lot.district, lot.id);
     else if (lot.kind === 'station') h += this.stationHTML(lot);
     else h += this.utilityHTML(lot);
@@ -5563,6 +5901,49 @@ class UI {
     return h;
   }
 
+  // ---------------------------------------------------------- inbox ----
+  inbox() { return this.s?.players[ME]?.inbox || { list: [], mute: {} }; }
+  alerts() { return this.inbox().list.filter(a => !a.snooze); }
+  markInboxRead() {
+    const ids = this.alerts().filter(a => !a.read).map(a => a.id);
+    this.inboxNew = new Set(ids);
+    if (ids.length) this.app.act('inboxRead', ids);
+  }
+  alertHTML(a, compact = false) {
+    const when = `Day ${a.day} · ${hh(a.hour)}`;
+    const fresh = !a.read || this.inboxNew?.has(a.id);
+    const show = a.lot != null && !compact ? `<button class="btn small" data-act="ashow" data-id="${a.id}">Show</button>`
+      : a.tab && !a.lot && !compact ? `<button class="btn small" data-act="ashow" data-id="${a.id}">Open</button>`
+      : a.tab && compact ? `<button class="btn small" data-act="ashow" data-id="${a.id}">${{ manage: '⚙️ Manage', staff: '👥 Staff', customers: '💬 Reviews', books: '📒 Books', promote: '📣 Promote' }[a.tab] || 'Open'}</button>` : '';
+    const fix = a.fix && !a.done ? `<button class="btn small go" data-act="afix" data-id="${a.id}">${esc(a.fix.label)}</button>` : '';
+    return `<div class="alert sev-${a.sev}${a.done ? ' done' : ''}${fresh && !a.done ? ' new' : ''}">
+      <span class="a-icon">${a.icon}</span>
+      <div class="grow"><b>${esc(a.title)}</b>${a.done ? '<em class="sorted">✓ sorted</em>' : ''}<small>${esc(a.text)}</small>
+        ${compact ? '' : `<small class="when">${ALERT_CATS[a.cat]?.icon || ''} ${when}</small>`}
+        ${fix || show ? `<div class="a-btns">${fix}${show}</div>` : ''}</div>
+      ${compact ? '' : `<button class="a-x" data-act="adismiss" data-id="${a.id}" aria-label="Dismiss">✕</button>`}
+    </div>`;
+  }
+  inboxHTML() {
+    const ib = this.inbox(), f = this.inboxFilter || 'all';
+    const sevRank = { bad: 0, warn: 1, good: 2, info: 3 };
+    const all = this.alerts();
+    const list = all.filter(a => f === 'all' || a.cat === f)
+      .sort((a, b) => (a.done - b.done) || (sevRank[a.sev] - sevRank[b.sev]) || (b.at - a.at));
+    const count = c => all.filter(a => !a.done && (c === 'all' || a.cat === c)).length;
+    const open = list.filter(a => !a.done), done = list.filter(a => a.done);
+    return `<div class="sh-head"><div class="chip" style="background:#2b3a67">🔔</div><div><div class="sh-title">Advisor</div>
+        <div class="sh-sub">${count('all') ? `${count('all')} thing${count('all') === 1 ? '' : 's'} need${count('all') === 1 ? 's' : ''} a look` : 'All quiet. Your empire is running smoothly.'}</div></div></div>
+      <div class="seg wrap afilter">${[['all', 'All'], ...Object.entries(ALERT_CATS).map(([k, c]) => [k, c.icon + ' ' + c.name])]
+        .map(([k, n]) => `<button data-act="afilter" data-v="${k}" class="${f === k ? 'on' : ''}">${n}${count(k) ? ` <i>${count(k)}</i>` : ''}</button>`).join('')}</div>
+      <div class="alerts">${open.map(a => this.alertHTML(a)).join('') || '<p class="note">Nothing to worry about here.</p>'}</div>
+      ${done.length ? `<h3>Sorted <em>${done.length}</em></h3><div class="alerts">${done.map(a => this.alertHTML(a)).join('')}</div>` : ''}
+      <div class="row"><button class="btn small wide" data-act="aclear">Clear sorted and one-off alerts</button></div>
+      <h3>Notify me about</h3>
+      <div class="seg wrap amute">${Object.entries(ALERT_CATS).map(([k, c]) => `<button data-act="amute" data-v="${k}" class="${ib.mute[k] ? '' : 'on'}">${c.icon} ${c.name}</button>`).join('')}</div>
+      <p class="note">Muted topics stay quiet unless something is urgent. Alerts mark themselves sorted when the problem clears.</p>`;
+  }
+
   menuHTML() {
     const q = this.app.renderer.quality;
     return `<div class="sh-head"><div class="chip" style="background:#5b6475">☰</div><div><div class="sh-title">Menu</div>
@@ -5826,6 +6207,19 @@ class UI {
       }
       case 'pass': act$('pass').then(r => { if (!r.ok && r.msg) this.toast(r.msg, 'bad'); }); sfx.tap(); return;
       case 'goto': this.openLot(+el.dataset.id); sfx.tap(); return;
+      case 'afilter': this.inboxFilter = el.dataset.v; sfx.tap(); break;
+      case 'amute': { const k = el.dataset.v; act$('inboxMute', k, !this.inbox().mute[k]).then(res); sfx.tap(); return; }
+      case 'aclear': act$('inboxClear').then(done); sfx.tap(); return;
+      case 'adismiss': act$('inboxDismiss', +el.dataset.id).then(done); sfx.tap(); return;
+      case 'ashow': case 'afix': {
+        const a = this.inbox().list.find(x => x.id === +el.dataset.id);
+        if (!a) return;
+        sfx.tap();
+        if (act === 'afix') { act$(a.fix.act, ...a.fix.args).then(r => { if (res(r)) sfx.buy(); }); return; }
+        if (a.lot != null) { this.openLot(a.lot); if (a.tab && s.lots[a.lot].business) { this.lotTab = a.tab; this.render(); } }
+        else if (a.tab) this.openTab(a.tab);
+        return;
+      }
       case 'loan': act$('loan').then(r => res(r) && sfx.buy()); return;
       case 'repay': act$('repay').then(res); sfx.tap(); return;
       case 'repay-all': act$('repay', s.players[ME].loan).then(res); sfx.tap(); return;
@@ -5887,6 +6281,15 @@ class UI {
         if (n.kind === 'bad') sfx.bad();
         if (n.kind === 'goal') sfx.set();
       } else if (n.kind !== 'auction') this.tickerQueue.push(n);
+    }
+    const ib = s.players[ME]?.inbox;
+    if (ib) {
+      for (const a of ib.list) {
+        if (a.id <= (this.alertSeen ?? Infinity) || a.read || a.done) continue;
+        if (a.sev === 'bad' && !a.ev) { this.toast(`🔔 ${a.title}`, 'bad'); sfx.bad(); }
+        else if (a.sev === 'warn' && a.cat === 'rivals' && !ib.mute.rivals) this.toast(`🔔 ${a.title}`, '');
+      }
+      this.alertSeen = Math.max(0, ...ib.list.map(a => a.id));
     }
     const offer = s.offers.find(o => o.to === ME && !this.shownOffers.has(o.id));
     if (offer && $('modal').classList.contains('hidden') && !s.auction) this.showOffer(offer);
@@ -5986,6 +6389,7 @@ __mods.main = (() => {
 const { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, MAPS, eraName } = __mods.data;
 const { createGame, serialize, deserialize, money, netWorth, dayName, yearOf, operating, goalProgress, goalText, raceGoal, setMap, MAP } = __mods.sim;
 const { advanceGame } = __mods.game;
+const { unreadCount } = __mods.advisor;
 const { auctionTick } = __mods.auction;
 const { perform } = __mods.actions;
 const { Renderer3D } = __mods.render3d;
@@ -6071,6 +6475,8 @@ const app = {
     this.overShown = false;
     this.ui.seenNews = 0;
     this.ui.shownOffers.clear();
+    this.ui.alertSeen = undefined;
+    this.ui.inboxFilter = 'all';
     this.ui.tickerQueue = [];
     ['title', 'lobby'].forEach(id => $(id).classList.add('hidden'));
     ['hud', 'nav', 'camctl'].forEach(id => $(id).classList.remove('hidden'));
@@ -6104,6 +6510,10 @@ const app = {
     const s = this.s;
     if (!s || getMe() < 0) return;
     const me = s.players[getMe()];
+    const unread = unreadCount(me), bell = $('bell-n');
+    if (bell.textContent !== String(unread)) bell.textContent = unread;
+    bell.classList.toggle('hidden', !unread);
+    $('bell').classList.toggle('urgent', (me.inbox?.list || []).some(a => !a.read && !a.done && a.sev === 'bad'));
     $('cash').textContent = money(me.cash);
     $('cash').className = me.cash < 0 ? 'neg' : '';
     const today = operating(me.today);

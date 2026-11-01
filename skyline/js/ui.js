@@ -20,6 +20,7 @@ import { LENSES, LENS, lensData } from './lens.js';
 import { auctionBid, settleRest, minBid, increment, canCall, reservePrice, auctionGap } from './auction.js';
 import { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } from './citizens.js';
 import { SEG_COLORS } from './render3d.js';
+import { ALERT_CATS, unreadCount } from './advisor.js';
 import { sfx, setSound, soundOn } from './audio.js';
 
 const $ = id => document.getElementById(id);
@@ -66,6 +67,7 @@ export class UI {
       const r = this.app.renderer, a = b.dataset.cam;
       if (a === 'left') r.rotate(-Math.PI / 4);
       else if (a === 'right') r.rotate(Math.PI / 4);
+      else if (a === 'inbox') { if (this.view?.kind === 'tab' && this.view.name === 'inbox') this.close(); else this.openTab('inbox'); }
       else if (a === 'tilt') r.tilt();
       else if (a === 'layers') { this.lensOpen = true; $('layers').classList.toggle('hidden'); this.layersUI(); }
       else r.fit();
@@ -92,6 +94,7 @@ export class UI {
     this.render();
   }
   openTab(name) {
+    if (name === 'inbox') this.markInboxRead();
     this.view = { kind: 'tab', name };
     this.app.renderer.sel = -1;
     this.app.renderer.selCitizen = -1;
@@ -120,7 +123,7 @@ export class UI {
     if (v.kind === 'lot') html = this.lotHTML(this.s.lots[v.id]);
     else if (v.kind === 'citizen') html = this.citizenHTML(v.id);
     else html = ({ empire: () => this.empireHTML(), sets: () => this.setsHTML(), goals: () => this.goalsHTML(), lens: () => this.lensHTML(),
-      bank: () => this.bankHTML(), menu: () => this.menuHTML() })[v.name]();
+      bank: () => this.bankHTML(), menu: () => this.menuHTML(), inbox: () => this.inboxHTML() })[v.name]();
     $('sheet-body').innerHTML = html;
     $('sheet').classList.remove('hidden');
     $('sheet').scrollTop = scroll;
@@ -150,6 +153,8 @@ export class UI {
       sub = `${lot.kind === 'station' ? 'Metro station' : 'Utility'} · ${ownerTxt}`;
     }
     let h = `<div class="sh-head">${chip}<div><div class="sh-title">${esc(lot.name)}</div><div class="sh-sub">${sub}</div></div></div>`;
+    const here = this.alerts().filter(a => a.lot === lot.id && !a.done);
+    if (here.length) h += `<div class="alerts mini">${here.slice(0, 3).map(a => this.alertHTML(a, true)).join('')}</div>`;
     if (lot.kind === 'prop') h += this.setBarHTML(lot.district, lot.id);
     else if (lot.kind === 'station') h += this.stationHTML(lot);
     else h += this.utilityHTML(lot);
@@ -775,6 +780,49 @@ export class UI {
     return h;
   }
 
+  // ---------------------------------------------------------- inbox ----
+  inbox() { return this.s?.players[ME]?.inbox || { list: [], mute: {} }; }
+  alerts() { return this.inbox().list.filter(a => !a.snooze); }
+  markInboxRead() {
+    const ids = this.alerts().filter(a => !a.read).map(a => a.id);
+    this.inboxNew = new Set(ids);
+    if (ids.length) this.app.act('inboxRead', ids);
+  }
+  alertHTML(a, compact = false) {
+    const when = `Day ${a.day} · ${hh(a.hour)}`;
+    const fresh = !a.read || this.inboxNew?.has(a.id);
+    const show = a.lot != null && !compact ? `<button class="btn small" data-act="ashow" data-id="${a.id}">Show</button>`
+      : a.tab && !a.lot && !compact ? `<button class="btn small" data-act="ashow" data-id="${a.id}">Open</button>`
+      : a.tab && compact ? `<button class="btn small" data-act="ashow" data-id="${a.id}">${{ manage: '⚙️ Manage', staff: '👥 Staff', customers: '💬 Reviews', books: '📒 Books', promote: '📣 Promote' }[a.tab] || 'Open'}</button>` : '';
+    const fix = a.fix && !a.done ? `<button class="btn small go" data-act="afix" data-id="${a.id}">${esc(a.fix.label)}</button>` : '';
+    return `<div class="alert sev-${a.sev}${a.done ? ' done' : ''}${fresh && !a.done ? ' new' : ''}">
+      <span class="a-icon">${a.icon}</span>
+      <div class="grow"><b>${esc(a.title)}</b>${a.done ? '<em class="sorted">✓ sorted</em>' : ''}<small>${esc(a.text)}</small>
+        ${compact ? '' : `<small class="when">${ALERT_CATS[a.cat]?.icon || ''} ${when}</small>`}
+        ${fix || show ? `<div class="a-btns">${fix}${show}</div>` : ''}</div>
+      ${compact ? '' : `<button class="a-x" data-act="adismiss" data-id="${a.id}" aria-label="Dismiss">✕</button>`}
+    </div>`;
+  }
+  inboxHTML() {
+    const ib = this.inbox(), f = this.inboxFilter || 'all';
+    const sevRank = { bad: 0, warn: 1, good: 2, info: 3 };
+    const all = this.alerts();
+    const list = all.filter(a => f === 'all' || a.cat === f)
+      .sort((a, b) => (a.done - b.done) || (sevRank[a.sev] - sevRank[b.sev]) || (b.at - a.at));
+    const count = c => all.filter(a => !a.done && (c === 'all' || a.cat === c)).length;
+    const open = list.filter(a => !a.done), done = list.filter(a => a.done);
+    return `<div class="sh-head"><div class="chip" style="background:#2b3a67">🔔</div><div><div class="sh-title">Advisor</div>
+        <div class="sh-sub">${count('all') ? `${count('all')} thing${count('all') === 1 ? '' : 's'} need${count('all') === 1 ? 's' : ''} a look` : 'All quiet. Your empire is running smoothly.'}</div></div></div>
+      <div class="seg wrap afilter">${[['all', 'All'], ...Object.entries(ALERT_CATS).map(([k, c]) => [k, c.icon + ' ' + c.name])]
+        .map(([k, n]) => `<button data-act="afilter" data-v="${k}" class="${f === k ? 'on' : ''}">${n}${count(k) ? ` <i>${count(k)}</i>` : ''}</button>`).join('')}</div>
+      <div class="alerts">${open.map(a => this.alertHTML(a)).join('') || '<p class="note">Nothing to worry about here.</p>'}</div>
+      ${done.length ? `<h3>Sorted <em>${done.length}</em></h3><div class="alerts">${done.map(a => this.alertHTML(a)).join('')}</div>` : ''}
+      <div class="row"><button class="btn small wide" data-act="aclear">Clear sorted and one-off alerts</button></div>
+      <h3>Notify me about</h3>
+      <div class="seg wrap amute">${Object.entries(ALERT_CATS).map(([k, c]) => `<button data-act="amute" data-v="${k}" class="${ib.mute[k] ? '' : 'on'}">${c.icon} ${c.name}</button>`).join('')}</div>
+      <p class="note">Muted topics stay quiet unless something is urgent. Alerts mark themselves sorted when the problem clears.</p>`;
+  }
+
   menuHTML() {
     const q = this.app.renderer.quality;
     return `<div class="sh-head"><div class="chip" style="background:#5b6475">☰</div><div><div class="sh-title">Menu</div>
@@ -1038,6 +1086,19 @@ export class UI {
       }
       case 'pass': act$('pass').then(r => { if (!r.ok && r.msg) this.toast(r.msg, 'bad'); }); sfx.tap(); return;
       case 'goto': this.openLot(+el.dataset.id); sfx.tap(); return;
+      case 'afilter': this.inboxFilter = el.dataset.v; sfx.tap(); break;
+      case 'amute': { const k = el.dataset.v; act$('inboxMute', k, !this.inbox().mute[k]).then(res); sfx.tap(); return; }
+      case 'aclear': act$('inboxClear').then(done); sfx.tap(); return;
+      case 'adismiss': act$('inboxDismiss', +el.dataset.id).then(done); sfx.tap(); return;
+      case 'ashow': case 'afix': {
+        const a = this.inbox().list.find(x => x.id === +el.dataset.id);
+        if (!a) return;
+        sfx.tap();
+        if (act === 'afix') { act$(a.fix.act, ...a.fix.args).then(r => { if (res(r)) sfx.buy(); }); return; }
+        if (a.lot != null) { this.openLot(a.lot); if (a.tab && s.lots[a.lot].business) { this.lotTab = a.tab; this.render(); } }
+        else if (a.tab) this.openTab(a.tab);
+        return;
+      }
       case 'loan': act$('loan').then(r => res(r) && sfx.buy()); return;
       case 'repay': act$('repay').then(res); sfx.tap(); return;
       case 'repay-all': act$('repay', s.players[ME].loan).then(res); sfx.tap(); return;
@@ -1099,6 +1160,15 @@ export class UI {
         if (n.kind === 'bad') sfx.bad();
         if (n.kind === 'goal') sfx.set();
       } else if (n.kind !== 'auction') this.tickerQueue.push(n);
+    }
+    const ib = s.players[ME]?.inbox;
+    if (ib) {
+      for (const a of ib.list) {
+        if (a.id <= (this.alertSeen ?? Infinity) || a.read || a.done) continue;
+        if (a.sev === 'bad' && !a.ev) { this.toast(`🔔 ${a.title}`, 'bad'); sfx.bad(); }
+        else if (a.sev === 'warn' && a.cat === 'rivals' && !ib.mute.rivals) this.toast(`🔔 ${a.title}`, '');
+      }
+      this.alertSeen = Math.max(0, ...ib.list.map(a => a.id));
     }
     const offer = s.offers.find(o => o.to === ME && !this.shownOffers.has(o.id));
     if (offer && $('modal').classList.contains('hidden') && !s.auction) this.showOffer(offer);

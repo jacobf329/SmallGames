@@ -406,3 +406,30 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .metric-pick::-webkit-scrollbar { display: none; }
 .metric-pick button { flex: none; border: 1px solid var(--line); background: rgba(255,255,255,0.05); color: var(--dim); border-radius: 999px; padding: 6px 11px; font-size: 12px; font-weight: 600; }
 .metric-pick button.on { background: var(--you); color: #032530; border-color: transparent; }
+
+/* ---------------------------------------------------------- advisor -- */
+#bell { position: relative; }
+#bell-n { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+  background: var(--gold); color: #1a1405; font: 800 11px/18px system-ui, sans-serif; font-style: normal; text-align: center; }
+#bell.urgent { border-color: #ff6b6b; animation: bellpulse 1.4s ease-in-out infinite; }
+#bell.urgent #bell-n { background: #ff5a5a; color: #fff; }
+@keyframes bellpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 90, 90, 0.55); } 50% { box-shadow: 0 0 0 6px rgba(255, 90, 90, 0); } }
+.alerts { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px; }
+.alerts.mini { margin: 6px 0 10px; }
+.alert { display: flex; gap: 10px; align-items: flex-start; padding: 10px 10px 10px 12px; border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-left: 4px solid #7d8bb3; position: relative; }
+.alert.sev-bad { border-left-color: #ff5a5a; background: rgba(255, 90, 90, 0.09); }
+.alert.sev-warn { border-left-color: var(--gold); }
+.alert.sev-good { border-left-color: #4cd68a; }
+.alert.new::after { content: ''; position: absolute; top: 10px; right: 34px; width: 8px; height: 8px; border-radius: 50%; background: var(--you); }
+.alert.done { opacity: 0.55; }
+.alert .a-icon { font-size: 22px; line-height: 1.1; }
+.alert b { display: block; font-size: 14px; padding-right: 18px; }
+.alert small { display: block; opacity: 0.85; margin-top: 2px; line-height: 1.35; }
+.alert small.when { opacity: 0.55; font-size: 11px; margin-top: 4px; }
+.alert .sorted { font-style: normal; color: #4cd68a; font-size: 11px; font-weight: 800; }
+.alert .a-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.alert .a-x { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border: 0; border-radius: 8px;
+  background: transparent; color: inherit; opacity: 0.5; font-size: 13px; }
+.alerts.mini .alert { padding: 8px 10px; }
+.afilter button i, .afilter button i { font-style: normal; font-weight: 800; color: var(--gold); }

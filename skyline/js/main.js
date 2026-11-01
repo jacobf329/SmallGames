@@ -7,6 +7,7 @@
 import { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, MAPS, eraName } from './data.js';
 import { createGame, serialize, deserialize, money, netWorth, dayName, yearOf, operating, goalProgress, goalText, raceGoal, setMap, MAP } from './sim.js';
 import { advanceGame } from './game.js';
+import { unreadCount } from './advisor.js';
 import { auctionTick } from './auction.js';
 import { perform } from './actions.js';
 import { Renderer3D } from './render3d.js';
@@ -92,6 +93,8 @@ const app = {
     this.overShown = false;
     this.ui.seenNews = 0;
     this.ui.shownOffers.clear();
+    this.ui.alertSeen = undefined;
+    this.ui.inboxFilter = 'all';
     this.ui.tickerQueue = [];
     ['title', 'lobby'].forEach(id => $(id).classList.add('hidden'));
     ['hud', 'nav', 'camctl'].forEach(id => $(id).classList.remove('hidden'));
@@ -125,6 +128,10 @@ const app = {
     const s = this.s;
     if (!s || getMe() < 0) return;
     const me = s.players[getMe()];
+    const unread = unreadCount(me), bell = $('bell-n');
+    if (bell.textContent !== String(unread)) bell.textContent = unread;
+    bell.classList.toggle('hidden', !unread);
+    $('bell').classList.toggle('urgent', (me.inbox?.list || []).some(a => !a.read && !a.done && a.sev === 'bad'));
     $('cash').textContent = money(me.cash);
     $('cash').className = me.cash < 0 ? 'neg' : '';
     const today = operating(me.today);

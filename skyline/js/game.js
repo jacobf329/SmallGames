@@ -5,9 +5,10 @@
 import { stepHour } from './sim.js';
 import { aiHour, aiDay } from './ai.js';
 import { aiCallAuctions } from './auction.js';
+import { advise } from './advisor.js';
 
 export const HOOKS = {
-  onHour(s) { aiHour(s); aiCallAuctions(s); },
+  onHour(s) { aiHour(s); aiCallAuctions(s); advise(s); },
   onDay: aiDay,
 };
 
