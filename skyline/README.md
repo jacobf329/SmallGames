@@ -181,8 +181,9 @@ will pay at auction, and their starting cash.
 | Select | tap a building or a person | click |
 | Speed | ❚❚ ▶ ▶▶ ▶▶▶ | `0`–`3`, space |
 
-The ⟲ ⟳ ⛰ ⌂ buttons rotate, tilt and reset the view. *Menu → Graphics:
-battery* turns off shadows and lowers the resolution for older phones.
+The ⟲ ⟳ ⛰ ⌂ buttons rotate, tilt and reset the view. *Menu → Graphics*
+cycles high / medium / battery. Phones start on medium. If a phone ever drops
+the 3D context, the game rebuilds the view by itself at a lower setting.
 
 ## Code
 

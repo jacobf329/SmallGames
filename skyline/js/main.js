@@ -171,6 +171,8 @@ const app = {
 };
 app.renderer = new Renderer3D($('city'));
 app.ui = new UI(app);
+app.renderer.onLost = () => app.ui.toast('Graphics hiccup: restarting the 3D view…', 'bad');
+app.renderer.onRestored = () => app.ui.toast('3D view restored (graphics turned down a notch; change it in Menu).', 'good');
 app.renderer.onTap = (x, y) => {
   if (!app.s) return;
   const hit = app.renderer.pick(x, y);
@@ -362,8 +364,8 @@ window.addEventListener('keydown', e => {
   if (!app.s || e.target.tagName === 'INPUT') return;
   if (e.key === ' ') { e.preventDefault(); app.requestSpeed(app.speed ? 0 : 1); }
   else if (e.key >= '0' && e.key <= '3') app.requestSpeed(+e.key);
-  else if (e.key === 'q') app.renderer.rotate(Math.PI / 4);
-  else if (e.key === 'e') app.renderer.rotate(-Math.PI / 4);
+  else if (e.key === 'q') app.renderer.rotate(-Math.PI / 4);
+  else if (e.key === 'e') app.renderer.rotate(Math.PI / 4);
   else if (e.key === 'Escape' && app.ui.view) app.ui.close();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) app.save(); });

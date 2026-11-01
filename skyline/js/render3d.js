@@ -76,6 +76,7 @@ function emojiTexture(emoji, ring = '#ffffff') {
     g.fillText(emoji, 48, 52);
   });
   emojiCache.set(key, t);
+  SHARED.add(t);
   return t;
 }
 function textTexture(text, bg, fg, w = 128, h = 48) {
@@ -96,6 +97,23 @@ function glowTexture() {
   });
 }
 
+// Free a removed object's GPU memory (geometries, materials, textures we
+// created for it). Shared cached textures are left alone.
+const SHARED = new WeakSet();
+function disposeTree(root) {
+  root.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of mats) {
+      for (const k of ['map', 'emissiveMap']) if (m[k] && !SHARED.has(m[k])) m[k].dispose();
+      m.dispose();
+    }
+  });
+}
+function clearGroup(g) {
+  for (const c of [...g.children]) { g.remove(c); disposeTree(c); }
+}
+
 // ----------------------------------------------------------- renderer ----
 export class Renderer3D {
   constructor(canvas) {
@@ -114,7 +132,19 @@ export class Renderer3D {
     this.clock = 0;
     this.insets = { top: 120, bottom: 62, right: 0 };
     this.onTap = null;
-    this.quality = localStorage.getItem('skyline-quality') || 'high';
+    const phone = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || Math.min(window.innerWidth, window.innerHeight) < 600;
+    this.quality = localStorage.getItem('skyline-quality') || (phone ? 'medium' : 'high');
+    // If the phone drops the graphics context, recover instead of going blank.
+    canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); this.lost = true; this.onLost?.(); }, false);
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.lost = false;
+      for (const o of this.lotObjs.values()) this.scene.remove(o.group);
+      this.lotObjs.clear();
+      this.litMats.length = 0;
+      this.parkSig = null; this.setSig = ''; this.lineD = undefined; this.overlayAt = 0;
+      this.setQuality(this.quality === 'high' ? 'medium' : this.quality === 'medium' ? 'low' : 'low');
+      this.onRestored?.();
+    }, false);
 
     this.buildStatic();
     this.buildPeople();
@@ -126,12 +156,19 @@ export class Renderer3D {
     this.bindInput();
   }
 
+  // high: shadows, full resolution; medium: smaller shadows, 1.5x; low: none, 1x.
   setQuality(q) {
     this.quality = q;
     localStorage.setItem('skyline-quality', q);
-    this.gl.shadowMap.enabled = q === 'high';
-    this.sun.castShadow = q === 'high';
-    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, q === 'high' ? 2 : 1.25));
+    this.gl.shadowMap.enabled = q !== 'low';
+    this.sun.castShadow = q !== 'low';
+    const size = q === 'high' ? 2048 : 1024;
+    if (this.sun.shadow.mapSize.x !== size) {
+      this.sun.shadow.mapSize.set(size, size);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, q === 'high' ? 2 : q === 'medium' ? 1.5 : 1));
     this.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
     this.resize();
   }
@@ -288,8 +325,16 @@ export class Renderer3D {
 
   // --------------------------------------------------------- lots ----
   litMaterial(texSet, color, repeatX, repeatY) {
-    const map = texSet.map.clone(); map.repeat.set(repeatX, repeatY); map.needsUpdate = true;
-    const lit = texSet.lit.clone(); lit.repeat.set(repeatX, repeatY); lit.needsUpdate = true;
+    // One texture pair per window pattern and repeat, shared by every building.
+    texSet.cache ||= {};
+    const key = repeatX + 'x' + repeatY;
+    if (!texSet.cache[key]) {
+      const map = texSet.map.clone(); map.repeat.set(repeatX, repeatY); map.needsUpdate = true;
+      const lit = texSet.lit.clone(); lit.repeat.set(repeatX, repeatY); lit.needsUpdate = true;
+      SHARED.add(map); SHARED.add(lit);
+      texSet.cache[key] = { map, lit };
+    }
+    const { map, lit } = texSet.cache[key];
     const mat = new THREE.MeshStandardMaterial({ map, emissiveMap: lit, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0, color, roughness: 0.75 });
     this.litMats.push(mat);
     return mat;
@@ -313,6 +358,7 @@ export class Renderer3D {
           if (i >= 0) this.litMats.splice(i, 1);
         }
       });
+      disposeTree(cur.group);
     }
     const g = new THREE.Group();
     g.position.set(wx(lot.tx), 0, wz(lot.ty));
@@ -396,7 +442,8 @@ export class Renderer3D {
       // City land awaiting auction.
       add(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 6), std('#5b4636'), -0.12, GROUND + 0.15, 0);
       add(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 6), std('#5b4636'), 0.12, GROUND + 0.15, 0);
-      const sign = add(new THREE.BoxGeometry(0.36, 0.16, 0.02), new THREE.MeshStandardMaterial({ map: textTexture('AUCTION', '#fffaf0', '#c0392b') }), 0, GROUND + 0.3, 0);
+      if (!this.auctionTex) { this.auctionTex = textTexture('AUCTION', '#fffaf0', '#c0392b'); SHARED.add(this.auctionTex); }
+      const sign = add(new THREE.BoxGeometry(0.36, 0.16, 0.02), new THREE.MeshStandardMaterial({ map: this.auctionTex }), 0, GROUND + 0.3, 0);
       sign.rotation.y = Math.PI / 4;
       height = 0.45;
     }
@@ -449,7 +496,7 @@ export class Renderer3D {
     const sig = parks.map(p => `${p.x},${p.y},${p.type}`).join('|');
     if (sig === this.parkSig) return;
     this.parkSig = sig;
-    this.parkGroup.clear();
+    clearGroup(this.parkGroup);
     const used = new Set(parks.map(p => p.x + ',' + p.y));
     // Clear the default trees off landscaped tiles.
     const m = new THREE.Matrix4(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -522,10 +569,10 @@ export class Renderer3D {
     });
   }
   updateOverlay(s) {
-    if (this.overlay === 'off') { if (this.overlayGroup.children.length) this.overlayGroup.clear(); return; }
+    if (this.overlay === 'off') { if (this.overlayGroup.children.length) clearGroup(this.overlayGroup); return; }
     if (this.clock < this.overlayAt) return;
     this.overlayAt = this.clock + 1.2;
-    this.overlayGroup.clear();
+    clearGroup(this.overlayGroup);
     const data = this.overlayData(s);
     const max = Math.max(1e-6, ...data.map(x => x.v));
     data.forEach((x, d) => {
@@ -768,6 +815,11 @@ export class Renderer3D {
   }
 
   // ------------------------------------------------------- camera ----
+  // Jump the smoothed camera straight to its target (used while dragging).
+  snapCam() {
+    Object.assign(this.cam, this.want);
+    this.updateCamera(0);
+  }
   updateCamera(dt) {
     const k = 1 - Math.exp(-dt * 10);
     const c = this.cam, w = this.want;
@@ -808,15 +860,22 @@ export class Renderer3D {
     const el = this.canvas;
     const pts = new Map();
     let g = null;
-    const panBy = (dx, dy) => {
-      const { right, fwd } = this.axes();
-      const scale = this.cam.dist / this.h * 1.1;
-      this.want.x -= (right[0] * dx - fwd[0] * dy) * scale;
-      this.want.z -= (right[1] * dx - fwd[1] * dy) * scale;
+    // Grab-and-drag: the ground under the finger stays under the finger.
+    const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
+    const ground = (x, y) => {
+      ray.setFromCamera(new THREE.Vector2(x / this.w * 2 - 1, -(y / this.h) * 2 + 1), this.camera);
+      return ray.ray.intersectPlane(plane, hit) ? hit.clone() : null;
+    };
+    const panBy = (x0, y0, x1, y1) => {
+      this.snapCam();
+      const a = ground(x0, y0), b = ground(x1, y1);
+      if (!a || !b) return;
+      this.want.x += a.x - b.x; this.want.z += a.z - b.z;
+      this.cam.x = this.want.x; this.cam.z = this.want.z;
     };
     el.addEventListener('contextmenu', e => e.preventDefault());
     el.addEventListener('pointerdown', e => {
-      el.setPointerCapture(e.pointerId);
+      try { el.setPointerCapture(e.pointerId); } catch { /* synthetic or already released */ }
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) g = { sx: e.clientX, sy: e.clientY, moved: false, button: e.button, shift: e.shiftKey };
       else g = { two: true, moved: true };
@@ -829,7 +888,7 @@ export class Renderer3D {
         if (!g.moved && Math.hypot(e.clientX - g.sx, e.clientY - g.sy) > 8) g.moved = true;
         if (g.moved) {
           if (g.button === 2 || g.shift) { this.want.yaw -= dx * 0.006; this.want.pitch += dy * 0.005; }
-          else panBy(dx, dy);
+          else panBy(p.x, p.y, e.clientX, e.clientY);
         }
       } else if (pts.size === 2) {
         const [a, b] = [...pts.values()];
@@ -841,10 +900,10 @@ export class Renderer3D {
         let da = ang1 - ang0;
         if (da > Math.PI) da -= Math.PI * 2;
         if (da < -Math.PI) da += Math.PI * 2;
-        this.want.yaw -= da;
+        this.want.yaw += da;           // the city turns with your fingers
         // Both fingers dragging vertically together tilts; sideways pans.
         this.want.pitch += (my1 - my0) * 0.006;
-        panBy(mx1 - mx0, 0);
+        panBy(mx0, my0, mx1, my0);
         return;
       }
       p.x = e.clientX; p.y = e.clientY;
@@ -921,20 +980,24 @@ export class Renderer3D {
     const setSig = s.players.map(p => DISTRICTS.map((_, d) => ownsSet(s, p.id, d) ? 1 : 0).join('')).join('|');
     if (setSig !== this.setSig) {
       this.setSig = setSig;
-      this.setBorders.clear();
+      clearGroup(this.setBorders);
       DISTRICTS.forEach((_, d) => {
         const owner = s.players.find(p => ownsSet(s, p.id, d));
         if (owner) this.setBorders.add(this.blockBorder(MAP.distBlock[d], owner.color, 0.09, 0.115));
       });
     }
-    this.districtLine.clear();
+    const selD = this.sel >= 0 && s.lots[this.sel].kind === 'prop' ? s.lots[this.sel].district : -1;
+    if (selD !== this.lineD) {
+      this.lineD = selD;
+      clearGroup(this.districtLine);
+      if (selD >= 0) this.districtLine.add(this.blockBorder(MAP.distBlock[selD], DISTRICTS[selD].color, 0.04, 0.13));
+    }
     if (this.sel >= 0) {
       const lot = s.lots[this.sel];
       const h = this.lotObjs.get(this.sel)?.height ?? 0.2;
       this.selRing.visible = true;
       this.selRing.position.set(wx(lot.tx), 0.14, wz(lot.ty));
       this.selRing.material.opacity = 0.55 + 0.45 * Math.sin(this.clock * 5);
-      if (lot.kind === 'prop') this.districtLine.add(this.blockBorder(MAP.distBlock[lot.district], DISTRICTS[lot.district].color, 0.04, 0.13));
     } else this.selRing.visible = false;
 
     this.syncParks(s);

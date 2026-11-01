@@ -63,8 +63,8 @@ export class UI {
     document.querySelectorAll('#camctl button').forEach(b => b.addEventListener('click', () => {
       sfx.tap();
       const r = this.app.renderer, a = b.dataset.cam;
-      if (a === 'left') r.rotate(Math.PI / 4);
-      else if (a === 'right') r.rotate(-Math.PI / 4);
+      if (a === 'left') r.rotate(-Math.PI / 4);
+      else if (a === 'right') r.rotate(Math.PI / 4);
       else if (a === 'tilt') r.tilt();
       else if (a === 'layers') { $('layers').classList.toggle('hidden'); this.layersUI(); }
       else r.fit();
@@ -669,7 +669,7 @@ export class UI {
     const q = this.app.renderer.quality;
     return `<div class="sh-head"><div class="chip" style="background:#5b6475">☰</div><div><div class="sh-title">Menu</div>
       <div class="sh-sub">Saved automatically every midnight</div></div></div>
-      <div class="row"><button class="btn" data-act="sound">${soundOn() ? '🔊 Sound on' : '🔇 Sound off'}</button><button class="btn" data-act="quality">${q === 'high' ? '✨ Graphics: high' : '🔋 Graphics: battery'}</button></div>
+      <div class="row"><button class="btn" data-act="sound">${soundOn() ? '🔊 Sound on' : '🔇 Sound off'}</button><button class="btn" data-act="quality">${q === 'high' ? '✨ Graphics: high' : q === 'medium' ? '⚖️ Graphics: medium' : '🔋 Graphics: battery'}</button></div>
       <div class="row"><button class="btn" data-act="save">💾 Save now</button><button class="btn" data-act="help">❓ How to play</button></div>
       ${this.app.mp ? `<div class="card"><b>📶 LAN game</b><div class="note">${this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
         Speed changes need everyone's agreement. You can propose once every 60 seconds.</div>
@@ -874,7 +874,7 @@ export class UI {
       case 'repay': act$('repay').then(res); sfx.tap(); return;
       case 'repay-all': act$('repay', s.players[ME].loan).then(res); sfx.tap(); return;
       case 'sound': setSound(!soundOn()); localStorage.setItem('skyline-sound', soundOn() ? '1' : '0'); break;
-      case 'quality': this.app.renderer.setQuality(this.app.renderer.quality === 'high' ? 'low' : 'high'); break;
+      case 'quality': { const q = this.app.renderer.quality; this.app.renderer.setQuality(q === 'high' ? 'medium' : q === 'medium' ? 'low' : 'high'); break; }
       case 'save': this.app.save(); this.toast(this.app.mp ? 'The server saves the LAN game every midnight.' : 'Game saved.', 'good'); break;
       case 'help': this.help(); return;
       case 'quit': this.app.save(); this.app.toTitle(); return;
