@@ -232,7 +232,7 @@ export function citizensHour(s, h) {
       if (!cand.length) {
         const shutShop = allShops[bi].find(sh => sh.def.id === want && tileDist(c.hx, c.hy, sh.l.tx, sh.l.ty) <= WALK_RANGE);
         const shut = !!shutShop;
-        if (shutShop) say(shutShop.b, 'closed');
+        if (shutShop && rand(s) < 0.3) say(shutShop.b, 'closed');
         grumble(s, c.d, shut ? 'closed' : 'none', want, c);
         if (shut && bv < 3) continue;           // wait for opening time
       } else if (best && best.b.price > 1.15) { grumble(s, c.d, 'pricey', best.def.id, c); say(best.b, 'pricey'); }
@@ -268,7 +268,7 @@ export function citizensHour(s, h) {
         else if (sh.skill < 0.8 && r < 0.35) say(sh.b, 'slow');
         else if (sh.b.price > 1.25 && c.seg < 2 && r < 0.35) say(sh.b, 'pricey');
         else if (sh.mood > 0.7 && (sh.b.fit >= 2 || sh.mgr) && r < 0.35) say(sh.b, 'great');
-        else if (r < 0.2) say(sh.b, 'happy');
+        else if (r < 0.55) say(sh.b, 'happy');
         if (rand(s) < 0.25) c.fav = sh.l.id;
         if (c.fav === sh.l.id && rand(s) < 0.3) c.thought = thoughtText(s, 'happy', sh.def.id);
       } else {

@@ -16,6 +16,7 @@ import {
   canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame,
 } from './sim.js';
 import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } from './staff.js';
+import { LENSES, LENS, lensData } from './lens.js';
 import { auctionBid, settleRest, minBid, increment, canCall, reservePrice } from './auction.js';
 import { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } from './citizens.js';
 import { SEG_COLORS } from './render3d.js';
@@ -66,7 +67,7 @@ export class UI {
       if (a === 'left') r.rotate(-Math.PI / 4);
       else if (a === 'right') r.rotate(Math.PI / 4);
       else if (a === 'tilt') r.tilt();
-      else if (a === 'layers') { $('layers').classList.toggle('hidden'); this.layersUI(); }
+      else if (a === 'layers') { this.lensOpen = true; $('layers').classList.toggle('hidden'); this.layersUI(); }
       else r.fit();
     }));
   }
@@ -118,7 +119,7 @@ export class UI {
     let html = '';
     if (v.kind === 'lot') html = this.lotHTML(this.s.lots[v.id]);
     else if (v.kind === 'citizen') html = this.citizenHTML(v.id);
-    else html = ({ empire: () => this.empireHTML(), sets: () => this.setsHTML(), goals: () => this.goalsHTML(),
+    else html = ({ empire: () => this.empireHTML(), sets: () => this.setsHTML(), goals: () => this.goalsHTML(), lens: () => this.lensHTML(),
       bank: () => this.bankHTML(), menu: () => this.menuHTML() })[v.name]();
     $('sheet-body').innerHTML = html;
     $('sheet').classList.remove('hidden');
@@ -764,14 +765,65 @@ export class UI {
 
 
   // ------------------------------------------------------- layers ----
+  // ------------------------------------------------------- lenses ----
+  // City-wide views: paint every block by one statistic and rank them.
+  lensCtx() {
+    const tech = this.s ? techOf(this.s) : null;
+    if (!this.lensType || (tech && !tech.biz.has(this.lensType))) this.lensType = tech ? [...tech.biz][0] : 'cafe';
+    return { me: ME, mine: !!this.lensMine, type: this.lensType };
+  }
+  setLens(id) {
+    this.app.renderer.setOverlay(id, this.lensCtx());
+    this.layersUI();
+    if (this.view?.kind === 'tab' && this.view.name === 'lens') this.render();
+  }
   layersUI() {
-    const cur = this.app.renderer.overlay;
-    const modes = [['off', '🏙️', 'City'], ['demand', '🔥', 'Unmet demand'], ['traffic', '👣', 'Customers'], ['wealth', '💎', 'Appeal & wealth'], ['land', '💰', 'Land value']];
-    const tips = { off: '', demand: 'Hotter blocks have more people who couldn\'t get what they wanted. The icon is what they want most.',
-      traffic: 'Customers served per block yesterday.', wealth: 'Block stars and the share of wealthy residents.', land: 'Average land value per lot.' };
-    $('layers').innerHTML = `<div class="seg">${modes.map(([k, i, n]) => `<button data-act="layer" data-v="${k}" class="${cur === k ? 'on' : ''}">${i}<small>${n}</small></button>`).join('')}</div>
-      ${tips[cur] ? `<div class="note" style="margin:6px 2px 0">${tips[cur]}</div>` : ''}`;
+    const r = this.app.renderer;
+    const cur = r.overlay;
+    const lens = LENS[cur];
+    r.lensCtx = this.lensCtx();
+    // Picking a lens folds the grid away so the map stays visible.
+    const open = this.lensOpen || !(lens && lens.of);
+    let h = open ? `<div class="lens-grid">${LENSES.map(l => `<button data-act="layer" data-v="${l.id}" class="${cur === l.id ? 'on' : ''}">${l.icon}<small>${l.name}</small></button>`).join('')}</div>`
+      : `<div class="lens-now"><b>${lens.icon} ${esc(lens.name)}</b><button class="btn small" data-act="lens-open">Change</button><button class="btn small" data-act="layer" data-v="off">✕</button></div>`;
+    if (lens && lens.of) {
+      if (open) h += `<div class="note" style="margin:6px 2px 4px">${esc(lens.desc)}</div>`;
+      if (lens.needsType && this.s) {
+        const tech = techOf(this.s);
+        h += `<div class="type-row">${BUSINESSES.filter(d => tech.biz.has(d.id)).map(d => `<button data-act="lens-type" data-v="${d.id}" class="${this.lensType === d.id ? 'on' : ''}" title="${esc(bizLabel(this.s, d.id))}">${d.icon}</button>`).join('')}</div>`;
+      }
+      if (this.s) {
+        const data = lensData(this.s, cur, r.lensCtx);
+        const fmt = v => (['revenue', 'profit', 'land', 'rent', 'opportunity'].includes(cur) ? money(v) : cur === 'satisfaction' ? Math.round(v * 100) + '%' : cur === 'quality' || cur === 'appeal' ? v.toFixed(1) + '★' : Math.round(v).toLocaleString());
+        const legend = lens.kind === 'owner' ? '<span>Coloured by the company holding most of the block</span>'
+          : lens.kind === 'diverge' ? `<span class="neg">losing</span><i class="bar div"></i><span class="pos">up to ${fmt(data.max)}</span>`
+          : `<span>low</span><i class="bar heat"></i><span>${fmt(data.max)}</span>`;
+        h += `<div class="legend">${legend}</div>`;
+      }
+      h += `<div class="row" style="margin:4px 0 0">
+        ${lens.mine ? `<button class="btn small" data-act="lens-mine">${this.lensMine ? '👤 My shops only' : '🏙️ All shops'}</button>` : ''}
+        <button class="btn small" data-act="lens-rank">📋 Rank blocks</button></div>`;
+    }
+    $('layers').innerHTML = h;
     $('camctl').querySelector('[data-cam=layers]').classList.toggle('on', cur !== 'off');
+  }
+  lensHTML() {
+    const s = this.s, r = this.app.renderer;
+    const id = r.overlay !== 'off' ? r.overlay : 'revenue';
+    const data = lensData(s, id, this.lensCtx());
+    const rows = [...data.rows].sort((a, b) => (b.v ?? -Infinity) - (a.v ?? -Infinity));
+    let h = `<div class="sh-head"><div class="chip" style="background:#2b3a5c">${data.lens.icon}</div><div><div class="sh-title">${esc(data.lens.name)} by block</div>
+      <div class="sh-sub">${esc(data.lens.desc)}${data.lens.mine && this.lensMine ? ' (your shops only)' : ''}${data.lens.needsType ? ` · ${esc(bizLabel(s, this.lensType))}` : ''}</div></div></div>`;
+    h += rows.map((row, i) => {
+      const D = DISTRICTS[row.d];
+      const w = row.v == null ? 0 : Math.max(2, Math.abs(row.v) / data.max * 100);
+      const col = data.lens.kind === 'owner' ? (row.owner >= 0 ? s.players[row.owner].color : '#8a8f99') : data.lens.kind === 'diverge' ? (row.v >= 0 ? 'var(--good)' : 'var(--bad)') : 'var(--you)';
+      return `<button class="list-item" data-act="goto" data-id="${MAP.districtLots[row.d][0]}"><span class="rank">${i + 1}</span>
+        <span class="chip" style="background:${D.color};width:22px;height:22px"></span>
+        <span class="grow"><b>${esc(D.name)}</b><small>${esc(row.note || '')}</small><div class="meter"><i style="width:${w}%;background:${col}"></i></div></span>
+        <span class="amt">${esc(row.label)}</span></button>`;
+    }).join('');
+    return h + '<p class="note">Tap a block to open it. Pick other lenses with the 🗺️ button.</p>';
   }
 
   // ----------------------------------------------------- speed vote ----
@@ -838,7 +890,11 @@ export class UI {
       case 'park': act$('park', s.lots[lotId].district, el.dataset.id).then(r => res(r) && sfx.build()); return;
       case 'survey': act$('survey', s.lots[lotId].district).then(r => res(r) && sfx.buy()); return;
       case 'buyout': this.confirm('Buy out this shop?', `It stands on your land, so the owner must sell. You take over the shop, its staff and its stock for ${money(buyoutPrice(s, s.lots[lotId]))}.`, () => act$('buyout', lotId).then(r => res(r) && sfx.set())); return;
-      case 'layer': this.app.renderer.setOverlay(el.dataset.v); this.layersUI(); sfx.tap(); return;
+      case 'layer': this.lensOpen = el.dataset.v === 'off'; this.setLens(el.dataset.v); if (el.dataset.v === 'off') $('layers').classList.add('hidden'); sfx.tap(); return;
+      case 'lens-open': this.lensOpen = true; this.layersUI(); sfx.tap(); return;
+      case 'lens-type': this.lensType = el.dataset.v; this.setLens(this.app.renderer.overlay); sfx.tap(); return;
+      case 'lens-mine': this.lensMine = !this.lensMine; this.setLens(this.app.renderer.overlay); sfx.tap(); return;
+      case 'lens-rank': $('layers').classList.add('hidden'); this.openTab('lens'); sfx.tap(); return;
       case 'price': act$('price', lotId, Math.round((b.price + PRICE_STEP * +el.dataset.v) * 100) / 100).then(res); sfx.tap(); return;
       case 'staff': act$('staff', lotId, b.staff + +el.dataset.v).then(res); sfx.tap(); return;
       case 'open': act$('hours', lotId, b.from + +el.dataset.v, b.len).then(res); sfx.tap(); return;

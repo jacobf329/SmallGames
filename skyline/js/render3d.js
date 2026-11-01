@@ -11,6 +11,7 @@ import { MAP_W, MAP_H, DISTRICTS, BIZ, MAX_APT, SEGMENTS, PARKS, BUSINESSES } fr
 import { MAP, BLOCK_TILES } from './map.js';
 import { roadPath } from './map.js';
 import { tripPhase } from './citizens.js';
+import { lensData, lensColor } from './lens.js';
 import { ownsSet, bizOpen, blockStars, landValue, money } from './sim.js';
 
 const OX = MAP_W / 2, OZ = MAP_H / 2;
@@ -539,63 +540,43 @@ export class Renderer3D {
 
   // ------------------------------------------------------ overlays ----
   // Colour each block by a city statistic, with a label floating over it.
-  setOverlay(mode) { this.overlay = mode; this.overlayAt = 0; }
-  overlayData(s) {
-    const mode = this.overlay;
-    return DISTRICTS.map((D, d) => {
-      const ids = MAP.districtLots[d];
-      if (mode === 'demand') {
-        // What locals can't get: the most-missed kind of business.
-        const tally = {};
-        for (const [k, v] of Object.entries(s.chatter[d] || {})) {
-          const [why, type] = k.split('|');
-          if (why === 'none' || why === 'closed' || why === 'queue' || why === 'stockout') tally[type] = (tally[type] || 0) + v;
-        }
-        const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
-        const total = Object.values(tally).reduce((a, b) => a + b, 0);
-        return { v: total, label: top ? `${BIZ[top[0]].icon} ${Math.round(total)}` : '😊' };
-      }
-      if (mode === 'traffic') {
-        let c = 0;
-        for (const l of s.lots) if (l.business && l.district === d) c += l.business.yesterday ? l.business.yesterday.cust : l.business.today.cust;
-        return { v: c, label: `👣 ${Math.round(c)}` };
-      }
-      if (mode === 'wealth') {
-        const st = blockStars(s, d);
-        return { v: st, label: `${'★'.repeat(Math.floor(st))}${st % 1 >= 0.5 ? '½' : ''} ${Math.round(D.mix[2] * 100)}%💎` };
-      }
-      const v = ids.reduce((a, id) => a + landValue(s, s.lots[id]), 0) / ids.length;
-      return { v, label: money(v) };
-    });
-  }
+  setOverlay(mode, ctx) { this.overlay = mode; if (ctx) this.lensCtx = ctx; this.overlayAt = 0; }
   updateOverlay(s) {
     if (this.overlay === 'off') { if (this.overlayGroup.children.length) clearGroup(this.overlayGroup); return; }
     if (this.clock < this.overlayAt) return;
-    this.overlayAt = this.clock + 1.2;
+    const data = lensData(s, this.overlay, this.lensCtx || { me: 0 });
+    if (!data) return;
+    this.overlayAt = this.clock + (data.lens.slow ? 3 : 1.2);
+    this.lastLens = data;
     clearGroup(this.overlayGroup);
-    const data = this.overlayData(s);
-    const max = Math.max(1e-6, ...data.map(x => x.v));
-    data.forEach((x, d) => {
-      const b = MAP.distBlock[d];
-      const k = x.v / max;
-      // Cool blue (low) through yellow to hot red (high).
-      const col = new THREE.Color().setHSL(0.62 - 0.62 * k, 0.85, 0.5);
-      const plane = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.02 + k * 0.5, 2.05), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.45, depthWrite: false }));
-      plane.position.set(wx(b.bx) + 0.5, 0.15 + (0.02 + k * 0.5) / 2, wz(b.by) + 0.5);
+    for (const row of data.rows) {
+      const b = MAP.distBlock[row.d];
+      let col, k;
+      if (data.lens.kind === 'owner') {
+        col = new THREE.Color(row.owner >= 0 ? s.players[row.owner].color : '#8a8f99');
+        k = row.v;
+      } else {
+        const c = lensColor(data, row);
+        col = new THREE.Color().setHSL(...c.hsl);
+        k = c.k;
+      }
+      const h = 0.02 + k * 0.5;
+      const plane = new THREE.Mesh(new THREE.BoxGeometry(2.05, h, 2.05), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5, depthWrite: false }));
+      plane.position.set(wx(b.bx) + 0.5, 0.15 + h / 2, wz(b.by) + 0.5);
       this.overlayGroup.add(plane);
       const tex = canvasTex(256, 72, (g) => {
         g.fillStyle = 'rgba(10,14,30,0.85)';
         g.beginPath(); g.roundRect(4, 4, 248, 64, 18); g.fill();
-        g.fillStyle = '#fff'; g.font = 'bold 34px system-ui,"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+        g.fillStyle = '#fff'; g.font = 'bold 32px system-ui,"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
         g.textAlign = 'center'; g.textBaseline = 'middle';
-        g.fillText(x.label, 128, 38);
+        g.fillText(row.label, 128, 38, 236);
       });
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, sizeAttenuation: false }));
       sp.scale.set(0.12, 0.034, 1);
       sp.position.set(wx(b.bx) + 0.5, 0.9 + k * 0.5, wz(b.by) + 0.5);
       sp.renderOrder = 20;
       this.overlayGroup.add(sp);
-    });
+    }
   }
 
   // ---------------------------------------------------------- rain ----

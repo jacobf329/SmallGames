@@ -110,12 +110,33 @@ On **your own land** you can **buy out** a rival's shop, team and stock
 included. Owning the whole colour set makes buyouts much cheaper. Rivals do
 this to you as well.
 
-### Research and map layers
+### Research and city lenses
 Commission a **market survey** of any block ($1,500, valid 5 days). It ranks
 every kind of business there by expected customers and profit, shows nearby
-competition, and how many people are asking for it. Tap **🗺️** for map layers:
-**unmet demand** (hot blocks, with an icon of the most-wanted business),
-customers served, appeal and wealth, and land value.
+competition, and how many people are asking for it.
+
+Tap **🗺️** for **city lenses**. Each lens paints every colour block by one
+number, with a label over the block, a legend, and a **Rank blocks** list
+that jumps to a block when tapped:
+
+| Lens | Shows |
+| --- | --- |
+| 🔥 Unmet | People who couldn't get what they wanted, and the most-wanted business |
+| 🙋 Interest | Everyone who went shopping from the block, served or not |
+| 👣 Customers | Customers served by the block's shops yesterday |
+| 💵 Revenue | The block's shop sales yesterday |
+| 📈 Profit | Shop profit after every cost (green earns, red loses) |
+| ⭐ Quality | Average shop quality (reputation + fit-out) in stars |
+| 😊 Happiness | Share of customer comments that were positive |
+| 🎯 Opportunity | Pick a business type: expected profit on the best free lot of each block |
+| 💎 Appeal | Block stars and share of wealthy residents |
+| 👪 People | Residents plus visitors |
+| 🧾 Rent | Average daily ground rent |
+| 💰 Land | Average land value |
+| 🏳️ Owners | Who holds most of each block (✓ for a full set) |
+
+The business lenses can switch between **all shops** and **my shops only**.
+Picking a lens folds the chooser into a slim strip so the map stays clear.
 
 ### Utilities
 Every business pays a nightly power and water bill. Heavy users such as
@@ -211,6 +232,7 @@ skyline/
   js/game.js       the clock: advances the sim, wakes the AI, opens auctions
   js/actions.js    every player action by name, validated (single-player and server)
   js/net.js        LAN WebSocket client with auto-reconnect
+  js/lens.js       city lenses: one number per block for heat maps and rankings
   js/render3d.js   three.js city, people, cars, day/night, free camera, picking
   js/ui.js         bottom sheet, auction panel, tabs, toasts, modals
   js/main.js       game loop and title screen
