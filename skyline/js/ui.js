@@ -13,7 +13,7 @@ import {
   aptRentFor, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, loanLimit, netWorth, playerAssets,
   capacity, districtPopulation, LEDGER_LABELS, operating, dayName, yearOf, techOf, bizOpen, bizLabel,
   petition, nextAuctionSlot, goalProgress, goalText, setsOwned, buildCost, floorCost, promoCost, buyoutPrice,
-  canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame, BIZ_LEDGER,
+  canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame, BIZ_LEDGER, utilityIncome, utilityPools,
 } from './sim.js';
 import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } from './staff.js';
 import { LENSES, LENS, lensData } from './lens.js';
@@ -594,11 +594,13 @@ export class UI {
       Visitors arriving here shop on the nearby blocks.${lot.owner >= 0 ? ` Owner holds <b>${k}</b> of 4.` : ''}</p>
       <div class="stats" style="grid-template-columns:repeat(4,1fr)">${rows}</div><p class="note">Fare per station per day.</p>`;
   }
-  utilityHTML() {
+  utilityHTML(lot) {
     const s = this.s;
-    const pool = s.lots.reduce((a, l) => a + (l.business ? OVERHEAD_BASE + BIZ[l.business.type].cost * OVERHEAD_RATE : 0), 0);
+    const pools = utilityPools(s);
+    const pool = lot.name.startsWith('Volt') ? pools.power : pools.water;
     return `<p class="note">Every business pays a nightly bill. Each utility you own takes
-      <b>${Math.round(UTILITY_CUT[1] * 100)}%</b> of it, or <b>${Math.round(UTILITY_CUT[2] * 100)}%</b> each if you own both.
+      ${lot.name.startsWith('Volt') ? `<b>${Math.round(UTILITY_CUT.power * 100)}%</b> of every power bill` : `<b>${Math.round(UTILITY_CUT.water * 100)}%</b> of every water bill`}, and
+      ${Math.round((UTILITY_CUT.both - 1) * 100)}% more if the same company owns both kinds. Tonight's take: <b>${money(utilityIncome(s, lot, utilityPools(s), lot.owner >= 0 ? lot.owner : ME))}</b>.
       The city's bills are now <b>${money(pool)}</b> a night.</p>`;
   }
 

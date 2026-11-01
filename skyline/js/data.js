@@ -35,7 +35,7 @@ export const DISTRICTS = [
 
 export const SEGMENTS = ['Budget', 'Middle', 'Wealthy', 'Tourists'];
 // How hard each segment reacts to price (higher = flees expensive shops).
-export const SEG_ELASTICITY = [2.8, 1.9, 0.9, 1.4];
+export const SEG_ELASTICITY = [3.4, 2.8, 1.8, 2.2];
 
 // ------------------------------------------------------------ special ----
 export const STATION_PRICE = 22000;
@@ -45,7 +45,9 @@ export const UTILITY_NAMES = ['Volt Works', 'Clearwater Works'];
 // Daily fare per station, by how many stations the same owner holds.
 export const STATION_FARE = [0, 300, 520, 800, 1150];
 // Utilities collect a cut of every business's daily overhead bill.
-export const UTILITY_CUT = [0, 0.55, 0.8];   // share of its own kind of bill, owning 1 / 2 utilities
+// Each utility takes this share of the city's bills of its kind (shared if a
+// map has several of the same kind), x1.3 for an owner holding both kinds.
+export const UTILITY_CUT = { power: 0.15, water: 0.4, both: 1.3 };
 // Each business's nightly bill: how heavy a user it is, and the split
 // between power (Volt Works) and water (Clearwater Works).
 export const BIZ_UTIL = {
@@ -68,31 +70,31 @@ export const PARK_TOURISTS = 300;
 // year      first year it can be built   names  [[fromYear, name], ...]
 // perish    leftover stock spoils overnight (share lost)
 export const BUSINESSES = [
-  { id: 'cafe',     icon: '☕', cost: 9000,  ticket: 6,   stock: 0.30, wage: 19, cap: 20, open: [6, 20],  peaks: [8, 13, 16], app: [9, 13, 15, 16],  wall: '#8b5e3c', group: 'food',    need: 'food',     year: 1930, perish: 0.5,
+  { id: 'cafe',     icon: '☕', cost: 9000,  ticket: 6,   stock: 0.30, wage: 19, cap: 20, open: [6, 20],  peaks: [8, 13, 16], app: [8.4, 12.1, 13.9, 14.8],  wall: '#8b5e3c', group: 'food',    need: 'food',     year: 1930, perish: 0.5,
     names: [[1930, 'Tea Room'], [1958, 'Coffee Bar'], [1990, 'Coffee House']] },
-  { id: 'burger',   icon: '🍔', cost: 12000, ticket: 11,  stock: 0.36, wage: 19, cap: 16, open: [10, 24], peaks: [12, 19],    app: [15, 10, 4, 12],  wall: '#e0533d', group: 'food',    need: 'food',     year: 1946, perish: 0.5,
+  { id: 'burger',   icon: '🍔', cost: 12000, ticket: 11,  stock: 0.36, wage: 19, cap: 16, open: [10, 24], peaks: [12, 19],    app: [15.6, 10.4, 4.2, 12.5],  wall: '#e0533d', group: 'food',    need: 'food',     year: 1946, perish: 0.5,
     names: [[1946, 'Diner'], [1975, 'Burger Bar']] },
-  { id: 'smoothie', icon: '🥤', cost: 11000, ticket: 7,   stock: 0.34, wage: 18, cap: 22, open: [7, 19],  peaks: [9, 13, 17], app: [4, 8, 11, 7],    wall: '#4cc38a', group: 'food',    need: 'food',     year: 2001, perish: 0.6,
+  { id: 'smoothie', icon: '🥤', cost: 11000, ticket: 7,   stock: 0.34, wage: 18, cap: 22, open: [7, 19],  peaks: [9, 13, 17], app: [7.7, 15.4, 21.1, 13.4],    wall: '#4cc38a', group: 'food',    need: 'food',     year: 2001, perish: 0.6,
     names: [[2001, 'Smoothie Bar']] },
-  { id: 'bistro',   icon: '🍷', cost: 32000, ticket: 46,  stock: 0.40, wage: 27, cap: 8,  open: [17, 24], peaks: [20],        app: [1, 4.5, 10, 8],  wall: '#5a2e4f', group: 'food',    need: 'food',     year: 1930, perish: 0.4,
+  { id: 'bistro',   icon: '🍷', cost: 32000, ticket: 46,  stock: 0.40, wage: 27, cap: 8,  open: [17, 24], peaks: [20],        app: [2.3, 10.2, 22.8, 18.2],  wall: '#5a2e4f', group: 'food',    need: 'food',     year: 1930, perish: 0.4,
     names: [[1930, 'Supper Club'], [1965, 'Bistro']] },
-  { id: 'grocer',   icon: '🛒', cost: 14000, ticket: 19,  stock: 0.60, wage: 18, cap: 18, open: [7, 22],  peaks: [9, 18],     app: [11, 10, 6, 3],   wall: '#3f9a4a', group: 'retail',  need: 'groceries', year: 1930, perish: 0.15,
+  { id: 'grocer',   icon: '🛒', cost: 14000, ticket: 19,  stock: 0.60, wage: 18, cap: 18, open: [7, 22],  peaks: [9, 18],     app: [13.2, 12, 7.2, 3.6],   wall: '#3f9a4a', group: 'retail',  need: 'groceries', year: 1930, perish: 0.15,
     names: [[1930, 'Corner Grocer'], [1970, 'Mini Mart']] },
-  { id: 'pharmacy', icon: '💊', cost: 16000, ticket: 24,  stock: 0.52, wage: 24, cap: 12, open: [8, 21],  peaks: [11, 17],    app: [4.5, 4.5, 4.5, 2], wall: '#2f9bd6', group: 'retail', need: 'health',  year: 1930, perish: 0,
+  { id: 'pharmacy', icon: '💊', cost: 16000, ticket: 24,  stock: 0.52, wage: 24, cap: 12, open: [8, 21],  peaks: [11, 17],    app: [7.3, 7.3, 7.3, 3.2], wall: '#2f9bd6', group: 'retail', need: 'health',  year: 1930, perish: 0,
     names: [[1930, 'Apothecary'], [1955, 'Pharmacy']] },
-  { id: 'boutique', icon: '👗', cost: 22000, ticket: 58,  stock: 0.48, wage: 24, cap: 6,  open: [10, 20], peaks: [14, 17],    app: [1, 3, 6.5, 5],   wall: '#c2418f', group: 'retail',  need: 'shopping', year: 1930, perish: 0,
+  { id: 'boutique', icon: '👗', cost: 22000, ticket: 58,  stock: 0.48, wage: 24, cap: 6,  open: [10, 20], peaks: [14, 17],    app: [0.8, 2.5, 5.4, 4.1],   wall: '#c2418f', group: 'retail',  need: 'shopping', year: 1930, perish: 0,
     names: [[1930, 'Tailor'], [1960, 'Fashion Boutique']] },
-  { id: 'gadget',   icon: '📻', cost: 30000, ticket: 115, stock: 0.66, wage: 27, cap: 4,  open: [10, 20], peaks: [15, 18],    app: [0.8, 1.7, 2.6, 1.6], wall: '#334a7d', group: 'retail', need: 'shopping', year: 1930, perish: 0,
+  { id: 'gadget',   icon: '📻', cost: 30000, ticket: 115, stock: 0.66, wage: 27, cap: 4,  open: [10, 20], peaks: [15, 18],    app: [2.2, 4.6, 7.1, 4.3], wall: '#334a7d', group: 'retail', need: 'shopping', year: 1930, perish: 0,
     names: [[1930, 'Radio Shop'], [1955, 'TV & Hi-Fi'], [1985, 'Electronics'], [2005, 'Gadget Store']] },
-  { id: 'gym',      icon: '🏋️', cost: 24000, ticket: 14,  stock: 0.08, wage: 22, cap: 24, open: [6, 23],  peaks: [7, 18],     app: [3, 6.5, 8, 1.5], wall: '#5b6475', group: 'leisure', need: 'fitness',  year: 1966, perish: 0,
+  { id: 'gym',      icon: '🏋️', cost: 24000, ticket: 14,  stock: 0.08, wage: 22, cap: 24, open: [6, 23],  peaks: [7, 18],     app: [4.4, 9.5, 11.7, 2.2], wall: '#5b6475', group: 'leisure', need: 'fitness',  year: 1966, perish: 0,
     names: [[1966, 'Health Club'], [1990, 'Fitness Club']] },
-  { id: 'cinema',   icon: '🎬', cost: 38000, ticket: 14,  stock: 0.22, wage: 19, cap: 32, open: [12, 24], peaks: [19, 21],    app: [5, 6.5, 5, 6.5], wall: '#7a2b2b', group: 'leisure', need: 'fun',      year: 1930, perish: 0.2,
+  { id: 'cinema',   icon: '🎬', cost: 38000, ticket: 14,  stock: 0.22, wage: 19, cap: 32, open: [12, 24], peaks: [19, 21],    app: [11.7, 15.2, 11.7, 15.2], wall: '#7a2b2b', group: 'leisure', need: 'fun',      year: 1930, perish: 0.2,
     names: [[1930, 'Picture House'], [1960, 'Cinema'], [1995, 'Multiplex']] },
-  { id: 'arcade',   icon: '🕹️', cost: 20000, ticket: 6,   stock: 0.12, wage: 18, cap: 30, open: [12, 23], peaks: [16, 20],    app: [7, 6, 2, 4],     wall: '#2b3fbf', group: 'leisure', need: 'fun',      year: 1979, perish: 0,
+  { id: 'arcade',   icon: '🕹️', cost: 20000, ticket: 6,   stock: 0.12, wage: 18, cap: 30, open: [12, 23], peaks: [16, 20],    app: [17.6, 15.1, 5, 10],     wall: '#2b3fbf', group: 'leisure', need: 'fun',      year: 1979, perish: 0,
     names: [[1979, 'Video Arcade'], [2005, 'Game Lounge']] },
-  { id: 'club',     icon: '🪩', cost: 36000, ticket: 28,  stock: 0.30, wage: 24, cap: 28, open: [21, 4],  peaks: [0],         app: [5, 6, 4, 11],    wall: '#2a1d4f', group: 'leisure', need: 'fun',      year: 1956, perish: 0.2,
+  { id: 'club',     icon: '🪩', cost: 36000, ticket: 28,  stock: 0.30, wage: 24, cap: 28, open: [21, 4],  peaks: [0],         app: [6.5, 7.8, 5.2, 14.3],    wall: '#2a1d4f', group: 'leisure', need: 'fun',      year: 1956, perish: 0.2,
     names: [[1956, 'Dance Hall'], [1972, 'Disco'], [1988, 'Night Club']] },
-  { id: 'hotel',    icon: '🏨', cost: 58000, ticket: 150, stock: 0.22, wage: 24, cap: 3,  open: [0, 24],  peaks: [15, 21],    app: [0, 0.1, 0.4, 3.2], wall: '#a88a52', group: 'leisure', need: 'lodging', year: 1930, perish: 0,
+  { id: 'hotel',    icon: '🏨', cost: 58000, ticket: 150, stock: 0.22, wage: 24, cap: 3,  open: [0, 24],  peaks: [15, 21],    app: [0, 0.2, 0.6, 5.1], wall: '#a88a52', group: 'leisure', need: 'lodging', year: 1930, perish: 0,
     names: [[1930, 'Grand Hotel'], [1990, 'Boutique Hotel']] },
 ];
 export const BIZ = Object.fromEntries(BUSINESSES.map(b => [b.id, b]));
@@ -250,8 +252,8 @@ export const FIRST_NAMES = ['Ada', 'Bo', 'Cy', 'Dot', 'Eli', 'Flo', 'Gus', 'Hal'
 export const LAST_NAMES = ['Abbot', 'Bishop', 'Cole', 'Dunn', 'Ellis', 'Ford', 'Grant', 'Hale', 'Ives', 'Joyce', 'Kerr', 'Lowe', 'Marsh', 'Nash', 'Orr', 'Pike', 'Quill', 'Reyes', 'Stone', 'Toms', 'Underwood', 'Vale', 'Webb', 'Yates', 'Zhou', 'Okafor', 'Novak', 'Moreau', 'Lindqvist', 'Kowalski', 'Jensen', 'Ibarra'];
 
 // ----------------------------------------------------------- economy ----
-export const DEMAND_SCALE = 0.62;
-export const OUTSIDE_WEIGHT = 0.30;     // customers who just go home instead
+export const DEMAND_SCALE = 0.78;
+export const OUTSIDE_WEIGHT = 0.6;      // the pull of just staying home (higher = shoppers walk away from bad deals)
 export const NEIGHBOUR_W = 0.32;        // pull of a shop on a neighbouring block
 export const DIAGONAL_W = 0.14;
 export const ELASTICITY_BASE = 1.0;

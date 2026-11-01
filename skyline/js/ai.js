@@ -16,13 +16,14 @@ import {
   setHours, sellBusiness, upgradeFit, fitCost, aptCheck, buildApt, aptRentFor, askingPrice, transfer, sellLand,
   loanLimit, takeLoan, repayLoan, money, news, newBizConfig, yearOf, aptRentFor as aptRent, canLandscape, parkSlots,
   buildPark, buyoutPrice, buyout, startPromo, promoCost, hireStaff, setRole, raiseStaff, trainStaff, trainCost,
+  utilityIncome, utilityPools,
 } from './sim.js';
 import { maxStaff, clerks, manager, avgMorale } from './staff.js';
 
 const STYLE = {
-  baron:   { build: 0.85, land: 1.35, apt: 1.5, set: 1.6, price: [0.9, 1.25],  start: 1.0,  fit: 0.5, prefer: [] },
-  cutter:  { build: 1.15, land: 0.85, apt: 0.9, set: 1.0, price: [0.65, 1.0],  start: 0.85, fit: 0.3, prefer: ['food'] },
-  premium: { build: 1.0,  land: 0.85, apt: 1.0, set: 1.0, price: [1.0, 1.45],  start: 1.15, fit: 1.3, prefer: ['retail', 'leisure'] },
+  baron:   { build: 1.05, land: 1.2,  apt: 1.3, set: 1.5, price: [0.8, 1.35],  start: 1.0,  fit: 0.5, prefer: [] },
+  cutter:  { build: 1.15, land: 1.0,  apt: 1.0, set: 1.1, price: [0.75, 1.2],  start: 0.9,  fit: 0.5, prefer: ['food'] },
+  premium: { build: 1.0,  land: 0.8,  apt: 1.0, set: 1.0, price: [0.9, 1.45],  start: 1.1,  fit: 1.2, prefer: ['retail', 'leisure'] },
 };
 
 export function aiHour(s) {
@@ -243,7 +244,8 @@ export function aiAuctionMax(s, p, lot) {
     const tech = techOf(s);
     if (!lot.business) for (const def of BUSINESSES) {
       if (!tech.biz.has(def.id)) continue;
-      best = Math.max(best, estimate(s, lot.id, def.id, p.id, { price: st.start }).profit);
+      // Value land at fair prices so pricing style doesn't inflate bids.
+      best = Math.max(best, estimate(s, lot.id, def.id, p.id, { price: 1 }).profit);
     } else if (lot.business.owner !== p.id) best = rentFor(s, lot);
     f += Math.max(0, Math.min(0.8, best * 10 / v));
     f *= st.land;
@@ -251,11 +253,17 @@ export function aiAuctionMax(s, p, lot) {
     const k = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
     f = 0.7 + (STATION_FARE[k + 1] * (k + 1) - STATION_FARE[k] * k) * 25 / v;
   } else {
-    const k = s.lots.filter(l => l.kind === 'utility' && l.owner === p.id).length;
-    const pool = s.lots.reduce((a, l) => a + (l.business ? OVERHEAD_BASE + BIZ[l.business.type].cost * OVERHEAD_RATE : 0), 0);
-    f = 0.7 + pool * (UTILITY_CUT[k + 1] * (k + 1) - UTILITY_CUT[k] * k) * 25 / v;
+    // What it would earn as ours (plus the pairing bonus on one we already own).
+    const was = lot.owner; lot.owner = p.id;
+    const inc = utilityIncome(s, lot, utilityPools(s), p.id);
+    lot.owner = was;
+    f = 0.7 + inc * 25 / v;
   }
   f *= (0.9 + rand(s) * 0.25) * (2 - diff.margin);
-  const budget = p.cash - reserveFor(s, p) + (diff.borrow ? (loanLimit(s, p.id) - p.loan) * 0.3 : 0);
+  // Keep a building fund until the first few shops are open: land with no
+  // shop on it earns little.
+  const shops = s.lots.filter(l => l.business && l.business.owner === p.id).length;
+  const fund = shops < 3 ? 18000 - shops * 5000 : 0;
+  const budget = p.cash - reserveFor(s, p) - fund + (diff.borrow ? (loanLimit(s, p.id) - p.loan) * 0.3 : 0);
   return Math.max(0, Math.round(Math.min(v * f, budget) / 500) * 500);
 }

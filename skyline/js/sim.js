@@ -281,6 +281,25 @@ export function estimate(s, lotId, type, ownerId, cfg = {}) {
   return { cust, lost, rev, goods, wages, rent, overhead, hours, profit: rev - goods - wages - rent - overhead };
 }
 
+// Tonight's power and water bills across the city.
+export function utilityPools(s) {
+  const pools = { power: 0, water: 0 };
+  for (const l of s.lots) if (l.business) {
+    const o = billFor(BIZ[l.business.type], l.business.floors);
+    const w = BIZ_UTIL[l.business.type]?.[1] ?? 0.3;
+    pools.water += o * w; pools.power += o * (1 - w);
+  }
+  return pools;
+}
+// What one utility lot earns its owner (pid) in a night.
+export function utilityIncome(s, lot, pools, pid) {
+  const power = lot.name.startsWith('Volt');
+  const sameKind = s.lots.filter(l => l.kind === 'utility' && l.name.startsWith('Volt') === power).length || 1;
+  const kinds = new Set(s.lots.filter(l => l.kind === 'utility' && l.owner === pid).map(l => l.name.startsWith('Volt')));
+  const cut = (power ? UTILITY_CUT.power : UTILITY_CUT.water) * (kinds.size > 1 ? UTILITY_CUT.both : 1);
+  return (power ? pools.power : pools.water) * cut / sameKind;
+}
+
 // The nightly utilities bill for a business: power + water.
 export function billFor(def, floors = 1) {
   return (OVERHEAD_BASE + def.cost * OVERHEAD_RATE) * (BIZ_UTIL[def.id]?.[0] ?? 1) * (1 + 0.4 * ((floors || 1) - 1));
@@ -410,7 +429,7 @@ function endOfDay(s, hooks) {
     if (p.bankrupt) continue;
     // Volt Works takes a cut of every power bill, Clearwater of every water bill.
     const utils = s.lots.filter(l => l.kind === 'utility' && l.owner === p.id);
-    for (const u of utils) ledger(p, 'utility', (u.name.startsWith('Volt') ? pools.power : pools.water) * UTILITY_CUT[utils.length]);
+    for (const u of utils) ledger(p, 'utility', utilityIncome(s, u, pools, p.id));
     const stations = s.lots.filter(l => l.kind === 'station' && l.owner === p.id).length;
     if (stations) ledger(p, 'fares', STATION_FARE[stations] * stations * (0.7 + 0.3 * s.touristMult) * (1 + 0.004 * (s.day - 1)));
   }
