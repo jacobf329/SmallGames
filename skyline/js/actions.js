@@ -9,6 +9,7 @@ import {
   hireStaff, fireStaff, trainStaff, raiseStaff, setRole, addFloor, startPromo, buildPark, buyout, survey,
 } from './sim.js';
 import { auctionBid, auctionPass, callAuction } from './auction.js';
+import { buildSupplier, upgradeSupplier, priceSupplier, closeSupplier, setBuyRival } from './supply.js';
 import { chainSync, startLandmark, rushLandmark, bidProject } from './civic.js';
 import { inboxRead, inboxDismiss, inboxClear, inboxMute } from './advisor.js';
 
@@ -47,6 +48,11 @@ const ACTIONS = {
   buyout:    (s, p, [l]) => buyout(s, p, lot(s, l)),
   survey:    (s, p, [d]) => survey(s, p, Math.round(num(d))),
   pass:      (s, p) => auctionPass(s, p),
+  supplier:  (s, p, [l, line]) => buildSupplier(s, p, lot(s, l), String(line)),
+  supUp:     (s, p, [l]) => upgradeSupplier(s, p, lot(s, l)),
+  supPrice:  (s, p, [l, v]) => priceSupplier(s, p, lot(s, l), num(v)),
+  supClose:  (s, p, [l]) => closeSupplier(s, p, lot(s, l)),
+  buyRival:  (s, p, [on]) => setBuyRival(s, p, !!on),
   chainSync: (s, p, [l]) => chainSync(s, p, lot(s, l)),
   landmark:  (s, p, [l, id]) => startLandmark(s, p, lot(s, l), String(id)),
   lmRush:    (s, p) => rushLandmark(s, p),

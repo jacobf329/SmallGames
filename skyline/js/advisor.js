@@ -10,7 +10,8 @@ import { MAP, bizLabel, money, setCount, goalProgress, goalText, netWorth, bizOp
 import { avgMorale } from './staff.js';
 import { SHOP_COMMENTS } from './citizens.js';
 import { LM, landmarkSet, landmarkState, reqProgress, rushCost, activeProjects, chainOf } from './civic.js';
-import { PROJECTS, CHAIN_MIN } from './data.js';
+import { PROJECTS, CHAIN_MIN, SUPPLY_LINES, LINE_OF } from './data.js';
+import { suppliers, capOf, supplierName } from './supply.js';
 
 export const ALERT_CATS = {
   shops:  { name: 'Shops',  icon: '🏪' },
@@ -234,6 +235,30 @@ function civicAlerts(s, pid, out) {
   }
 }
 
+// Wholesale prices and suppliers.
+function supplyAlerts(s, pid, out) {
+  const count = {};
+  for (const l of s.lots) if (l.business?.owner === pid) count[LINE_OF[l.business.type]] = (count[LINE_OF[l.business.type]] || 0) + 1;
+  for (const [line, L] of Object.entries(SUPPLY_LINES)) {
+    const idx = s.market?.[line] ?? 1, n = count[line] || 0;
+    const own = suppliers(s, line).filter(l => l.supplier.owner === pid);
+    if (idx >= 1.18 && n >= 2 && !own.length) {
+      out.push({ key: `mkt:${line}`, cat: 'money', sev: 'warn', icon: '📈', title: `${L.label} stock costs ${Math.round(idx * 100)}% of normal`,
+        text: `Your ${n} shops in this trade pay the higher price. A ${L.name} of your own locks in stock at cost.`, tab: 'civic' });
+    } else if (n >= 3 && !own.length) {
+      out.push({ key: `supidea:${line}`, cat: 'tips', sev: 'info', icon: L.icon, title: `Make your own stock: a ${L.name}`,
+        text: `You run ${n} shops it could supply at ${Math.round(0.62 * 100)}% of market prices, and you can sell to rivals too. Build it on an empty lot of yours.` });
+    }
+    for (const l of own) {
+      const sup = l.supplier, cap = capOf(sup);
+      if ((sup.usedY || 0) >= cap * 0.98) out.push({ key: `supfull:${l.id}`, cat: 'shops', sev: 'info', icon: L.icon, lot: l.id, title: `${supplierName(s, l)} sold out yesterday`,
+        text: 'It shipped everything it could make. Expand it, or raise your price to rivals.' });
+      if (sup.price >= idx && sup.y && sup.y.rivals === 0) out.push({ key: `suphigh:${l.id}`, cat: 'money', sev: 'info', icon: L.icon, lot: l.id, title: `${supplierName(s, l)} is priced above the market`,
+        text: `You charge ${Math.round(sup.price * 100)}%, the market is at ${Math.round(idx * 100)}%: no rival will buy. Lower the price to earn wholesale income.` });
+    }
+  }
+}
+
 // ------------------------------------------------------------ events ----
 // One-off things: new shop types, a rival muscling in, staff walking out.
 function eventAlerts(s, pid, inbox, add) {
@@ -291,6 +316,7 @@ export function advise(s) {
     moneyAlerts(s, pid, out);
     goalAlerts(s, pid, out);
     civicAlerts(s, pid, out);
+    supplyAlerts(s, pid, out);
     for (const a of out) if (!inbox.mute[a.cat] || a.sev === 'bad') add(a);
     const live = new Set(out.map(a => a.key));
     for (const a of inbox.list) {

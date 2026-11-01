@@ -16,7 +16,8 @@ import {
   canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame, BIZ_LEDGER, utilityIncome, utilityPools, raceGoal,
   canTech, chainBulk,
 } from './sim.js';
-import { PROJECTS, CHAIN_MIN, LANDMARKS } from './data.js';
+import { PROJECTS, CHAIN_MIN, LANDMARKS, SUPPLY_LINES, LINE_OF, SUPPLIER_LEVELS, PRODUCTION_COST } from './data.js';
+import { suppliers, capOf, supplierName, supplierCost, lineDemand } from './supply.js';
 import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } from './staff.js';
 import { LENSES, LENS, lensData } from './lens.js';
 import { auctionBid, settleRest, minBid, increment, canCall, reservePrice, auctionGap } from './auction.js';
@@ -237,6 +238,7 @@ export class UI {
     const b = lot.business;
     const year = yearOf(s);
     const tech = techOf(s);
+    if (lot.supplier) return this.supplierCardHTML(lot);
     if (lot.landmark) return this.landmarkCardHTML(lot);
     if (lot.lmBuild) return this.constructionHTML(lot);
     if (!b) {
@@ -259,7 +261,7 @@ export class UI {
             <span class="est ${cls(e.profit)}">${sign(e.profit)}<small>per day</small></span>
           </button>`).join('')}
           ${locked.map(def => `<div class="biz-opt locked"><i>${def.icon}</i><span><b>${esc(bizName(def, def.year))}</b><small>Invented in ${def.year}</small></span><span class="est dim">🔒</span></div>`).join('')}
-        </div>${lot.owner === ME && !lot.apt ? this.landmarkPickHTML(lot) : ''}`;
+        </div>${lot.owner === ME && !lot.apt ? this.supplierPickHTML(lot) + this.landmarkPickHTML(lot) : ''}`;
     }
     const def = BIZ[b.type];
     const owner = s.players[b.owner];
@@ -292,6 +294,7 @@ export class UI {
     if (tab === 'promote') return h + this.promoTabHTML(lot, b);
     if (tab === 'books') return h + this.booksTabHTML(lot, b);
     h += this.chainCardHTML(lot, b);
+    h += this.stockSourceHTML(b);
     const cap = capacity(b);
     const e = estimate(s, lot.id, b.type, ME, {});
     const fc = fitCost(b);
@@ -788,6 +791,70 @@ export class UI {
     return h;
   }
 
+  // --------------------------------------------------- supply chain ----
+  supplierPickHTML(lot) {
+    const s = this.s, me = s.players[ME], cost = supplierCost(s, 0);
+    return `<h3>Or build a supplier <em>stock at cost for your shops</em></h3><div class="biz-list">${Object.entries(SUPPLY_LINES).map(([k, L]) => {
+      const mine = s.lots.filter(l => l.business?.owner === ME && LINE_OF[l.business.type] === k).length;
+      const have = suppliers(s, k).some(l => l.supplier.owner === ME);
+      const rivals = suppliers(s, k).filter(l => l.supplier.owner !== ME).length;
+      return `<button class="biz-opt" data-act="supplier" data-v="${k}" ${me.cash < cost ? 'disabled' : ''}>
+        <i>${L.icon}</i><span><b>${esc(L.name)}</b><small>Supplies ${L.types.map(t => BIZ[t].icon).join('')} · you run ${mine}${have ? ' · <span class="warn">you already have one</span>' : ''}${rivals ? ` · ${rivals} rival supplier${rivals === 1 ? '' : 's'}` : ''}</small>
+        <small class="dim">City demand ~${money(lineDemand(s, k))}/day · market price ${Math.round((s.market?.[k] ?? 1) * 100)}%</small></span>
+        <span class="est">${money(cost)}</span></button>`;
+    }).join('')}</div>`;
+  }
+  supplierCardHTML(lot) {
+    const s = this.s, sup = lot.supplier, L = SUPPLY_LINES[sup.line], o = s.players[sup.owner], lvl = SUPPLIER_LEVELS[sup.level];
+    const cap = capOf(sup), used = sup.used || 0, y = sup.y, idx = s.market?.[sup.line] ?? 1;
+    const mine = sup.owner === ME, next = SUPPLIER_LEVELS[sup.level + 1];
+    let h = `<h3>${L.icon} ${esc(supplierName(s, lot))} <em>${lvl.name}</em></h3><div class="card">
+      <div class="note" style="margin:0">Run by <b style="color:${o.color}">${esc(o.company)}</b> · supplies ${L.types.map(t => `${BIZ[t].icon} ${esc(bizLabel(s, t))}`).join(', ')}</div>
+      <div class="stats" style="margin-top:8px">
+        <div class="stat"><small>Price to others</small><b>${Math.round(sup.price * 100)}%</b></div>
+        <div class="stat"><small>Market today</small><b class="${idx > 1.05 ? 'neg' : idx < 0.95 ? 'pos' : ''}">${Math.round(idx * 100)}%</b></div>
+        <div class="stat"><small>Shipped today</small><b>${Math.round(used / cap * 100)}%</b></div>
+      </div>
+      <div class="meter"><i class="${used >= cap ? 'hot' : ''}" style="width:${Math.min(100, used / cap * 100)}%"></i></div>
+      <p class="note">Ships up to ${money(cap)} of goods a day (at market value). Costs ${money(Math.round(PRODUCTION_COST * 100))} per $100 to make, plus ${money(lvl.upkeep)}/day upkeep.</p>`;
+    if (y) h += `<p class="note">Yesterday: shipped ${money(y.shipped)} · ${y.rivals} rival compan${y.rivals === 1 ? 'y' : 'ies'} bought ${money(y.rev)} (margin <b class="${cls(y.margin)}">${sign(y.margin)}</b>)${y.own ? ` · your shops saved <b class="pos">${money(y.saved)}</b>` : ''}</p>`;
+    if (sup.hist?.length) h += this.barsHTML(sup.hist, 'Daily value (margin + savings − upkeep)');
+    if (mine) h += `<div class="ctl"><span>Price to other companies <small class="dim">they buy if it beats the market</small></span>
+        <div class="stepper"><button data-act="sup-price" data-v="-0.05">−</button><b>${Math.round(sup.price * 100)}%</b><button data-act="sup-price" data-v="0.05">+</button></div></div>
+      <p class="note">Your own shops always get it at cost (${Math.round(PRODUCTION_COST * 100)}%). ${sup.price >= idx ? '<span class="warn">Above today\'s market price: rivals won\'t buy.</span>' : ''}</p>
+      <div class="row">${next ? `<button class="btn go" data-act="sup-up">Expand to ${next.name} · ${money(supplierCost(s, sup.level + 1))}</button>` : ''}<button class="btn small" data-act="sup-close">Close</button></div>`;
+    return h + '</div>';
+  }
+  stockSourceHTML(b) {
+    const s = this.s, src = b.today.src && Object.keys(b.today.src).length ? b.today.src : b.yesterday?.src;
+    const line = LINE_OF[b.type], idx = s.market?.[line] ?? 1;
+    if (!src) return `<p class="note">📦 Stock from the market at ${Math.round(idx * 100)}% of normal prices.</p>`;
+    const tot = Object.values(src).reduce((a, v) => a + v, 0) || 1;
+    const parts = Object.entries(src).sort((a, c) => c[1] - a[1]).map(([k, v]) => {
+      if (k === 'market') return `${Math.round(v / tot * 100)}% market (${Math.round(idx * 100)}%)`;
+      const l = s.lots[+k];
+      if (!l?.supplier) return `${Math.round(v / tot * 100)}% a closed supplier`;
+      const own = l.supplier.owner === b.owner;
+      return `${Math.round(v / tot * 100)}% ${esc(supplierName(s, l))} (${own ? 'at cost' : Math.round(l.supplier.price * 100) + '%'})`;
+    });
+    return `<p class="note">📦 Stock: ${parts.join(' · ')}</p>`;
+  }
+  marketHTML() {
+    const s = this.s, me = s.players[ME];
+    const rows = Object.entries(SUPPLY_LINES).map(([k, L]) => {
+      const idx = s.market?.[k] ?? 1, hist = s.marketHist?.[k] || [];
+      const prev = hist.at(-2) ?? 1, d = idx - prev;
+      const shock = (s.shocks || []).find(x => x.line === k);
+      const sups = suppliers(s, k).map(l => `<span style="color:${s.players[l.supplier.owner].color}">${esc(s.players[l.supplier.owner].company.split(/[ &]/)[0])} ${Math.round(l.supplier.price * 100)}%</span>`).join(' · ');
+      return `<div class="list-item"><span>${L.icon}</span><span class="grow"><b>${esc(L.label)}</b>
+        <small>${sups || 'No suppliers yet'}${shock ? ` · <span class="warn">${shock.mult > 1 ? 'shortage' : 'glut'}, ${shock.left}d</span>` : ''}</small></span>
+        <span class="${idx > 1.05 ? 'neg' : idx < 0.95 ? 'pos' : ''}" style="font-weight:800">${Math.round(idx * 100)}% ${d > 0.01 ? '▲' : d < -0.01 ? '▼' : '·'}</span></div>`;
+    }).join('');
+    return `<h3>Wholesale market <em>today's stock prices</em></h3>${rows}
+      <div class="row"><button class="btn small wide" data-act="buy-rival">${me.buyRival === false ? '🚫 Not buying from rival suppliers' : '✅ Buying from rival suppliers when cheaper'}</button></div>
+      <p class="note">Shops restock from the cheapest source: your own supplier at cost, then any rival supplier that beats the market, then the market. Build a supplier on an empty lot of yours.</p>`;
+  }
+
   // ----------------------------------------------------- landmarks ----
   landmarkCardHTML(lot) {
     const s = this.s, id = lot.landmark, def = LM[id], L = s.landmarks[id], o = L && L.owner >= 0 ? s.players[L.owner] : null;
@@ -865,6 +932,7 @@ export class UI {
       return `<div class="list-item" data-act="goto" data-id="${ls[0].id}"><span>${BIZ[type].icon}</span><span class="grow"><b>${esc(tier ? brandName(s, b) : bizLabel(s, type))}</b><small>${ls.length} shops · ${tier ? `${tier[2]} · stock −${Math.round(tier[1] * 100)}%` : `${CHAIN_MIN - ls.length} more for a chain`}</small></span></div>`;
     }).join('');
     return `<div class="sh-head"><div class="chip" style="background:#6b4f2a">🏛️</div><div><div class="sh-title">City Hall</div><div class="sh-sub">Landmarks, city contracts and your brands</div></div></div>
+      ${this.marketHTML()}
       <h3>City jobs <em>tenders, sponsorships, grants</em></h3>${projs}${recent ? `<div class="dim-list">${recent}</div>` : ''}
       <h3>Landmarks <em>one of each · first to finish wins</em></h3>
       ${mine ? `<p class="note">🏗️ You're building the <b>${esc(LM[mine.id].name)}</b>: ${mine.left} day${mine.left === 1 ? '' : 's'} to go. <a data-act="goto" data-id="${mine.lot}">Show</a></p>` : ''}
@@ -1224,6 +1292,16 @@ export class UI {
           () => act$('landmark', at, id).then(r => { if (res(r)) { sfx.build(); this.openLot(at); } }));
         return;
       }
+      case 'supplier': {
+        const L = SUPPLY_LINES[el.dataset.v];
+        this.confirm(`Build a ${L.name}?`, `${money(supplierCost(s, 0))}. Your ${L.types.map(t => bizLabel(s, t)).join(', ')} shops will restock here at cost, and you can sell to rival shops.`,
+          () => act$('supplier', lotId, el.dataset.v).then(r => res(r) && sfx.build()));
+        return;
+      }
+      case 'sup-price': act$('supPrice', lotId, Math.round((s.lots[lotId].supplier.price + +el.dataset.v) * 100) / 100).then(res); sfx.tap(); return;
+      case 'sup-up': act$('supUp', lotId).then(r => res(r) && sfx.build()); return;
+      case 'sup-close': this.confirm('Close this supplier?', 'You get half of what you invested back.', () => act$('supClose', lotId).then(res)); return;
+      case 'buy-rival': act$('buyRival', s.players[ME].buyRival === false).then(res); sfx.tap(); return;
       case 'lm-rush': act$('lmRush').then(r => res(r) && sfx.buy()); return;
       case 'chain-sync': act$('chainSync', lotId).then(res); sfx.tap(); return;
       case 'proj-adj': {

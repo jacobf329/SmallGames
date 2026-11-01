@@ -434,3 +434,33 @@ export const PROJECTS = {
   parks:    { name: 'Green spaces',      icon: '🌳', kind: 'grant',   budget: 0.5,   days: 10, cap: 3,
     text: 'The city pays half the cost of any park built in {route} in the next {days} days (up to {cap} parks).' },
 };
+
+// --------------------------------------------------------- supply chain ----
+// Shops buy stock from the market at the day's price, or from a supplier.
+// Owning a supplier gives your own shops stock at production cost and lets
+// you sell to everyone else's shops at a price you set.
+export const SUPPLY_LINES = {
+  food:    { name: 'Food Works',        label: 'Food',                 icon: '🥖', types: ['cafe', 'burger', 'smoothie', 'bistro'], wall: '#c98b4a' },
+  grocery: { name: 'Wholesale Market',  label: 'Groceries & medicine', icon: '📦', types: ['grocer', 'pharmacy'],                 wall: '#6f9a5b' },
+  goods:   { name: 'Goods Factory',     label: 'Shop goods',           icon: '🏭', types: ['boutique', 'gadget'],                 wall: '#7d7f9c' },
+  leisure: { name: 'Leisure Supply Co.', label: 'Leisure supplies',    icon: '🎞️', types: ['cinema', 'arcade', 'club', 'gym', 'hotel'], wall: '#9b6aa8' },
+};
+export const LINE_OF = Object.fromEntries(Object.entries(SUPPLY_LINES).flatMap(([k, l]) => l.types.map(t => [t, k])));
+export const SUPPLIER_LEVELS = [                     // capacity is market value of goods a day
+  { name: 'Depot',    cost: 30000, cap: 6000,  upkeep: 250 },
+  { name: 'Works',    cost: 35000, cap: 14000, upkeep: 500 },
+  { name: 'Complex',  cost: 55000, cap: 26000, upkeep: 900 },
+];
+export const PRODUCTION_COST = 0.62;                 // share of the base market price
+export const SUPPLY_PRICE_MIN = 0.65;
+export const SUPPLY_PRICE_MAX = 1.2;
+export const MARKET_SHOCKS = [
+  { line: 'food',    up: true,  text: 'Dairy strike! Food wholesale prices jump.' },
+  { line: 'food',    up: false, text: 'Bumper harvest: food wholesale prices fall.' },
+  { line: 'grocery', up: true,  text: 'Port delays: grocery and pharmacy stock costs more.' },
+  { line: 'grocery', up: false, text: 'A new rail freight link cuts grocery wholesale prices.' },
+  { line: 'goods',   up: true,  text: 'Factory fire upstate: shop goods are scarce and pricey.' },
+  { line: 'goods',   up: false, text: 'Import glut: shop goods are cheap this week.' },
+  { line: 'leisure', up: true,  text: 'Distributors raise their rates: leisure supplies cost more.' },
+  { line: 'leisure', up: false, text: 'Price war among distributors: leisure supplies are cheap.' },
+];

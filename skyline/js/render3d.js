@@ -376,7 +376,8 @@ export class Renderer3D {
   lotSig(s, lot) {
     const b = lot.business;
     const auction = s.auction && s.auction.lotId === lot.id ? 'A' : '';
-    const lm = lot.landmark ? 'L' + lot.landmark : lot.lmBuild ? 'B' + lot.lmBuild + ((s.lmBuilds || []).find(x => x.lot === lot.id)?.left ?? '') : '';
+    const sp = lot.supplier ? `S${lot.supplier.line}${lot.supplier.level}${lot.supplier.owner}` : '';
+    const lm = sp || lot.landmark ? sp + 'L' + (lot.landmark || '') : lot.lmBuild ? 'B' + lot.lmBuild + ((s.lmBuilds || []).find(x => x.lot === lot.id)?.left ?? '') : '';
     return `${lot.owner}|${lot.apt}|${b ? b.type + b.owner + b.fit + 'f' + (b.floors || 1) + (b.promo ? 'P' : '') : ''}|${auction}|${lm}`;
   }
 
@@ -434,6 +435,8 @@ export class Renderer3D {
         add(new THREE.CylinderGeometry(0.26, 0.26, 0.36, 20), std('#4ea8de', { roughness: 0.4 }), 0, GROUND + 0.52, 0);
         height = 0.75;
       }
+    } else if (lot.supplier) {
+      height = buildSupplier(add, std, lot.supplier, s.players[lot.supplier.owner].color, g);
     } else if (lot.landmark) {
       height = buildLandmark(add, std, lot.landmark, lot.owner >= 0 ? s.players[lot.owner].color : '#cfd3da', g);
     } else if (lot.lmBuild) {
@@ -491,6 +494,7 @@ export class Renderer3D {
     // Floating icon.
     let icon = null, ring = '#ffffff';
     if (b) { icon = BIZ[b.type].icon; ring = s.players[b.owner].color; }
+    else if (lot.supplier) { icon = SUPPLY_ICON[lot.supplier.line]; ring = s.players[lot.supplier.owner].color; }
     else if (lot.landmark) { icon = LM_ICON[lot.landmark]; ring = lot.owner >= 0 ? s.players[lot.owner].color : '#ffd23f'; }
     else if (lot.lmBuild) { icon = '🏗️'; ring = lot.owner >= 0 ? s.players[lot.owner].color : '#ffd23f'; }
     else if (lot.kind === 'station') icon = '🚇';
@@ -763,6 +767,14 @@ export class Renderer3D {
     const c = new THREE.Color();
     for (let i = 0; i < this.maxCars; i++) this.carBody.setColorAt(i, c.set(palette[i % palette.length]));
     this.scene.add(this.carBody, this.carTop);
+    // Delivery trucks: supplier -> shop runs at restock time.
+    this.maxTrucks = 40;
+    this.truckBody = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.1, 0.12), new THREE.MeshStandardMaterial({ roughness: 0.5 }), this.maxTrucks);
+    this.truckBox = new THREE.InstancedMesh(new THREE.BoxGeometry(0.17, 0.16, 0.24), new THREE.MeshStandardMaterial({ color: '#f1efe8', roughness: 0.7 }), this.maxTrucks);
+    this.truckBody.castShadow = this.truckBox.castShadow = true;
+    this.truckBody.count = this.truckBox.count = 0;
+    this.truckPaths = new Map();
+    this.scene.add(this.truckBody, this.truckBox);
     const roads = [];
     for (let y = 0; y < MAP.h; y++) for (let x = 0; x < MAP.w; x++) if (MAP.tiles[y][x].kind === 'road') roads.push([x, y]);
     this.roadTiles = roads;
@@ -804,6 +816,57 @@ export class Renderer3D {
     }
     this.carBody.count = this.carTop.count = n;
     this.carBody.instanceMatrix.needsUpdate = this.carTop.instanceMatrix.needsUpdate = true;
+  }
+
+  updateTrucks(s, hourF) {
+    const runs = s.supplyRuns || [];
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), c = new THREE.Color();
+    const fwd = new THREE.Vector3();
+    let n = 0;
+    for (let i = 0; i < runs.length && n < this.maxTrucks; i++) {
+      const r = runs[i];
+      const p = (hourF - r.h - (i % 6) * 0.05) / 1.4;
+      if (p <= 0 || p >= 1) continue;
+      const A = s.lots[r.a], B = s.lots[r.b];
+      if (!A || !B) continue;
+      const key = r.a + '>' + r.b;
+      let path = this.truckPaths.get(key);
+      if (!path) {
+        const tiles = roadPath(A.tx, A.ty, B.tx, B.ty);
+        const pts = tiles.map(([x, y], j) => {
+          const [nx, ny] = tiles[Math.min(j + 1, tiles.length - 1)], [px, py] = tiles[Math.max(j - 1, 0)];
+          const dx = nx - px, dy = ny - py, d = Math.hypot(dx, dy) || 1;
+          return [wx(x) - (dy / d) * 0.14, wz(y) + (dx / d) * 0.14];
+        });
+        const cum = [0];
+        for (let j = 1; j < pts.length; j++) cum.push(cum[j - 1] + Math.hypot(pts[j][0] - pts[j - 1][0], pts[j][1] - pts[j - 1][1]));
+        path = { pts, cum, len: cum.at(-1) || 0 };
+        if (this.truckPaths.size > 500) this.truckPaths.clear();
+        this.truckPaths.set(key, path);
+      }
+      if (path.pts.length < 2) continue;
+      // Out and back: there in the first half, home in the second.
+      const d = (p < 0.5 ? p * 2 : 2 - p * 2) * path.len;
+      let j = 1;
+      while (j < path.cum.length - 1 && path.cum[j] < d) j++;
+      const [ax, az] = path.pts[j - 1], [bx, bz] = path.pts[j];
+      const seg = path.cum[j] - path.cum[j - 1] || 1, f = Math.max(0, Math.min(1, (d - path.cum[j - 1]) / seg));
+      pos.set(ax + (bx - ax) * f, 0.1, az + (bz - az) * f);
+      const dir = p < 0.5 ? 1 : -1;
+      q.setFromAxisAngle(up, Math.atan2((bx - ax) * dir, (bz - az) * dir));
+      fwd.set(0, 0, 0.13).applyQuaternion(q);
+      m.compose(pos.clone().add(fwd), q, one);
+      this.truckBody.setMatrixAt(n, m);
+      const sup = A.supplier;
+      this.truckBody.setColorAt(n, c.set(sup ? s.players[sup.owner].color : '#999999'));
+      pos.y = 0.13; pos.sub(fwd.multiplyScalar(0.6));
+      m.compose(pos, q, one);
+      this.truckBox.setMatrixAt(n, m);
+      n++;
+    }
+    this.truckBody.count = this.truckBox.count = n;
+    this.truckBody.instanceMatrix.needsUpdate = this.truckBox.instanceMatrix.needsUpdate = true;
+    if (this.truckBody.instanceColor) this.truckBody.instanceColor.needsUpdate = true;
   }
 
   // ----------------------------------------------------- overlays ----
@@ -1037,6 +1100,7 @@ export class Renderer3D {
     this.updatePeople(s, T);
     const carsActive = Math.round(6 + (1 - dark * 0.6) * 14);
     this.updateCars(simSpeed > 0 ? dt * Math.min(simSpeed, 3) : 0, carsActive);
+    this.updateTrucks(s, hourF);
     this.updateFloaters(dt);
     this.gl.render(this.scene, this.camera);
   }
@@ -1167,4 +1231,38 @@ function buildLandmark(add, std, id, color, g) {
     }
   }
   return GROUND + 0.5;
+}
+
+// ----------------------------------------------------------- suppliers ----
+const SUPPLY_ICON = { food: '🥖', grocery: '📦', goods: '🏭', leisure: '🎞️' };
+const SUPPLY_WALL = { food: '#c98b4a', grocery: '#6f9a5b', goods: '#7d7f9c', leisure: '#9b6aa8' };
+function buildSupplier(add, std, sup, color, g) {
+  const wall = std(SUPPLY_WALL[sup.line]), roof = std('#d7d9de'), trim = std(color), dark = std('#4a4f59');
+  const big = 1 + sup.level * 0.25;
+  add(new THREE.BoxGeometry(0.92, 0.05, 0.92), std('#8f9298'), 0, GROUND + 0.025, 0);
+  const h = 0.32 * big;
+  add(new THREE.BoxGeometry(0.8, h, 0.6), wall, 0, GROUND + h / 2, -0.08);
+  // Sawtooth roof.
+  for (let i = 0; i < 3; i++) {
+    const r = add(new THREE.BoxGeometry(0.27, 0.04, 0.62), roof, -0.27 + i * 0.27, GROUND + h + 0.06, -0.08);
+    r.rotation.z = 0.45;
+  }
+  add(new THREE.BoxGeometry(0.82, 0.04, 0.62), trim, 0, GROUND + h + 0.01, -0.08);
+  // Loading bays.
+  for (const x of [-0.22, 0.05]) add(new THREE.BoxGeometry(0.18, 0.16, 0.02), dark, x, GROUND + 0.08, 0.225, false);
+  let top = GROUND + h + 0.12;
+  if (sup.line === 'food') {
+    add(new THREE.CylinderGeometry(0.11, 0.11, 0.55 * big, 14), std('#e9e4d4'), 0.32, GROUND + 0.28 * big, 0.3);
+    add(new THREE.ConeGeometry(0.12, 0.1, 14), roof, 0.32, GROUND + 0.55 * big + 0.05, 0.3);
+    top = Math.max(top, GROUND + 0.62 * big);
+  } else if (sup.line === 'goods') {
+    add(new THREE.CylinderGeometry(0.05, 0.07, 0.7 * big, 10), std('#a35a4a'), 0.3, GROUND + 0.35 * big, -0.25);
+    g.userData.smoke = true;
+    top = Math.max(top, GROUND + 0.72 * big);
+  } else if (sup.line === 'grocery') {
+    for (const z of [0.3, 0.38]) add(new THREE.BoxGeometry(0.12, 0.1, 0.06), std('#c8a26b'), 0.32, GROUND + 0.05, z);
+  } else {
+    add(new THREE.BoxGeometry(0.5, 0.1, 0.03), std('#ffd23f'), 0, GROUND + h * 0.8, 0.225, false);
+  }
+  return top;
 }

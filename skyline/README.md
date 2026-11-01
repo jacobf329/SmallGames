@@ -144,6 +144,35 @@ Three or more shops of the same kind make a **chain** under your brand
 - **One tap** copies a branch's price, hours and stock policy to the whole
   chain.
 
+### Supply chain
+
+Shops restock at 06:00 (and 13:00 with a stock clerk) from the cheapest
+source that still has goods today:
+
+1. **Your own supplier** for that trade, at production cost (62% of the
+   normal price)
+2. **A rival's supplier**, at the price they set, if it beats the market
+3. **The open market**, at today's wholesale price
+
+Wholesale prices move every day and get hit by shocks (a dairy strike,
+port delays, a bumper harvest, an import glut) that last a few days. The
+City Hall tab shows today's prices and who supplies what.
+
+| Supplier | Supplies |
+| --- | --- |
+| 🥖 Food Works | Cafés, diners, smoothie bars, bistros |
+| 📦 Wholesale Market | Grocers, pharmacies |
+| 🏭 Goods Factory | Boutiques, gadget shops |
+| 🎞️ Leisure Supply Co. | Cinemas, arcades, clubs, gyms, hotels |
+
+Build one on an empty lot of yours ($30K). It ships a set amount of goods
+each day (Depot $6K, Works $14K, Complex $26K at market value) and has daily
+upkeep. Set the price you charge other companies: below the market and their
+shops buy from you, which earns you the margin. Rivals build suppliers once
+they run three shops in a trade, cut prices when they sit idle and expand
+when they sell out. Delivery trucks in the owner's colour drive the morning
+runs. You can stop your shops buying from rival suppliers (City Hall tab).
+
 ### Landmarks
 
 One of each per city, built in a race. Meet the requirement, pick an
@@ -199,7 +228,7 @@ game hour it looks over your company and files what needs attention:
   land standing empty
 - **Rivals:** a rival one lot from a set (when you can block it), a rival
   opening the same kind of shop near yours
-- **Money:** overdrawn, days of cash left at the current losses, spare cash to
+- **Money:** wholesale price spikes in a trade you're in, overdrawn, days of cash left at the current losses, spare cash to
   clear the loan, purchase offers
 - **Goals:** a milestone due within three days, a rival closing in on the race
   target
@@ -367,6 +396,7 @@ skyline/
   js/citizens.js   the citizens: needs, choices, queues, grudges, comments, trips
   js/staff.js      shop staff: roles, skill, wages, morale, training, quitting
   js/sim.js        economy: shops, stock, rent, sets, apartments, goals, trades, bank
+  js/supply.js     suppliers, wholesale market prices and shocks, restock routing, AI suppliers
   js/civic.js      chains, landmarks (race, perks), City Hall projects; hourly perk refresh
   js/advisor.js    the advisor inbox: alert rules, sorted/one-off tracking, mute
   js/auction.js    live land auctions

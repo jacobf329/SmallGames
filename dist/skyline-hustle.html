@@ -468,6 +468,7 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .chain-card { margin: 8px 0; }
 .dim-list { opacity: 0.7; }
 #nav button span { white-space: nowrap; }
+.biz-opt span small { display: block; }
 
 </style>
 </head>
@@ -1063,7 +1064,37 @@ const PROJECTS = {
     text: 'The city pays half the cost of any park built in {route} in the next {days} days (up to {cap} parks).' },
 };
 
-return { MAP_W, MAP_H, MAPS, DISTRICT_PREFIX, DISTRICT_SUFFIX, BLOCK_COLS, BLOCK_ROWS, BLOCK_LAYOUT, DISTRICTS, SEGMENTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE, STATION_NAMES, UTILITY_NAMES, STATION_FARE, stationFare, UTILITY_CUT, BIZ_UTIL, TRANSIT_TOURISTS, PARK_TOURISTS, BUSINESSES, BIZ, bizName, eraDemand, NEEDS, PRICE_MIN, PRICE_MAX, PRICE_STEP, priceLabel, FIT_LEVELS, MAX_STAFF, STAFF_ROLES, TRAIN_DAYS, QUIT_MORALE, MAX_FLOORS, FLOOR_COST, PARKS, MAX_STARS, PROMOS, SURVEY_COST, SURVEY_DAYS, BUYOUT_MULT, BUYOUT_SET_MULT, DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, APT_NAMES, APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, YEAR_DAYS, TECH, techAt, ERAS, eraName, AUCTION_GAP, CALL_COOLDOWN, AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, PEOPLE_PER_CITIZEN, WALK_RANGE, DISTANCE_FALLOFF, FIRST_NAMES, LAST_NAMES, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV, SECONDS_PER_HOUR, SPEEDS, DAY_NAMES, START_CASH, RIVALS, HUMAN_COLOR, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, GOAL_TEXT, DIFFICULTY, EVENTS, CHAIN_MIN, CHAIN_TIERS, CHAIN_LOYALTY, CHAIN_REP_SHARE, FAMOUS_BOOST, LANDMARKS, LANDMARK_SETS, LANDMARK_NEAR, LANDMARK_REFUND, LANDMARK_RUSH, PROJECT_GAP, TENDER_DAYS, PROJECTS };
+// --------------------------------------------------------- supply chain ----
+// Shops buy stock from the market at the day's price, or from a supplier.
+// Owning a supplier gives your own shops stock at production cost and lets
+// you sell to everyone else's shops at a price you set.
+const SUPPLY_LINES = {
+  food:    { name: 'Food Works',        label: 'Food',                 icon: '🥖', types: ['cafe', 'burger', 'smoothie', 'bistro'], wall: '#c98b4a' },
+  grocery: { name: 'Wholesale Market',  label: 'Groceries & medicine', icon: '📦', types: ['grocer', 'pharmacy'],                 wall: '#6f9a5b' },
+  goods:   { name: 'Goods Factory',     label: 'Shop goods',           icon: '🏭', types: ['boutique', 'gadget'],                 wall: '#7d7f9c' },
+  leisure: { name: 'Leisure Supply Co.', label: 'Leisure supplies',    icon: '🎞️', types: ['cinema', 'arcade', 'club', 'gym', 'hotel'], wall: '#9b6aa8' },
+};
+const LINE_OF = Object.fromEntries(Object.entries(SUPPLY_LINES).flatMap(([k, l]) => l.types.map(t => [t, k])));
+const SUPPLIER_LEVELS = [                     // capacity is market value of goods a day
+  { name: 'Depot',    cost: 30000, cap: 6000,  upkeep: 250 },
+  { name: 'Works',    cost: 35000, cap: 14000, upkeep: 500 },
+  { name: 'Complex',  cost: 55000, cap: 26000, upkeep: 900 },
+];
+const PRODUCTION_COST = 0.62;                 // share of the base market price
+const SUPPLY_PRICE_MIN = 0.65;
+const SUPPLY_PRICE_MAX = 1.2;
+const MARKET_SHOCKS = [
+  { line: 'food',    up: true,  text: 'Dairy strike! Food wholesale prices jump.' },
+  { line: 'food',    up: false, text: 'Bumper harvest: food wholesale prices fall.' },
+  { line: 'grocery', up: true,  text: 'Port delays: grocery and pharmacy stock costs more.' },
+  { line: 'grocery', up: false, text: 'A new rail freight link cuts grocery wholesale prices.' },
+  { line: 'goods',   up: true,  text: 'Factory fire upstate: shop goods are scarce and pricey.' },
+  { line: 'goods',   up: false, text: 'Import glut: shop goods are cheap this week.' },
+  { line: 'leisure', up: true,  text: 'Distributors raise their rates: leisure supplies cost more.' },
+  { line: 'leisure', up: false, text: 'Price war among distributors: leisure supplies are cheap.' },
+];
+
+return { MAP_W, MAP_H, MAPS, DISTRICT_PREFIX, DISTRICT_SUFFIX, BLOCK_COLS, BLOCK_ROWS, BLOCK_LAYOUT, DISTRICTS, SEGMENTS, SEG_ELASTICITY, STATION_PRICE, UTILITY_PRICE, STATION_NAMES, UTILITY_NAMES, STATION_FARE, stationFare, UTILITY_CUT, BIZ_UTIL, TRANSIT_TOURISTS, PARK_TOURISTS, BUSINESSES, BIZ, bizName, eraDemand, NEEDS, PRICE_MIN, PRICE_MAX, PRICE_STEP, priceLabel, FIT_LEVELS, MAX_STAFF, STAFF_ROLES, TRAIN_DAYS, QUIT_MORALE, MAX_FLOORS, FLOOR_COST, PARKS, MAX_STARS, PROMOS, SURVEY_COST, SURVEY_DAYS, BUYOUT_MULT, BUYOUT_SET_MULT, DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, APT_NAMES, APT_RESIDENTS, APT_RENT, APT_RENT_RATE, APT_COST_RATE, APT_SET_MULT, MAX_APT, YEAR_DAYS, TECH, techAt, ERAS, eraName, AUCTION_GAP, CALL_COOLDOWN, AUCTION_SECONDS, AUCTION_EXTEND, AUCTION_RESERVE, PEOPLE_PER_CITIZEN, WALK_RANGE, DISTANCE_FALLOFF, FIRST_NAMES, LAST_NAMES, DEMAND_SCALE, OUTSIDE_WEIGHT, NEIGHBOUR_W, DIAGONAL_W, ELASTICITY_BASE, RENT_RATE, SET_RENT_MULT, APT_SHOP_RENT, OVERHEAD_BASE, OVERHEAD_RATE, LAND_GROWTH_DAY, LAND_GROWTH_BIZ, LAND_GROWTH_APT, SELL_LAND_RATE, SELL_BIZ_RATE, LOAN_RATE, LOAN_STEP, LOAN_LTV, SECONDS_PER_HOUR, SPEEDS, DAY_NAMES, START_CASH, RIVALS, HUMAN_COLOR, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, GOAL_TEXT, DIFFICULTY, EVENTS, CHAIN_MIN, CHAIN_TIERS, CHAIN_LOYALTY, CHAIN_REP_SHARE, FAMOUS_BOOST, LANDMARKS, LANDMARK_SETS, LANDMARK_NEAR, LANDMARK_REFUND, LANDMARK_RUSH, PROJECT_GAP, TENDER_DAYS, PROJECTS, SUPPLY_LINES, LINE_OF, SUPPLIER_LEVELS, PRODUCTION_COST, SUPPLY_PRICE_MIN, SUPPLY_PRICE_MAX, MARKET_SHOCKS };
 })();
 
 /* ===== map.js ===== */
@@ -1880,7 +1911,7 @@ const {
   LOAN_LTV, START_CASH, RIVALS, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, DIFFICULTY, EVENTS, PRICE_MIN, PRICE_MAX,
   DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, TECH, YEAR_DAYS, GOAL_TEXT, bizName, eraName,
   BIZ_UTIL, STAFF_ROLES, MAX_FLOORS, FLOOR_COST, PARKS, PROMOS, SURVEY_COST, SURVEY_DAYS, BUYOUT_MULT, BUYOUT_SET_MULT,
-  CHAIN_TIERS, PROJECTS,
+  CHAIN_TIERS, PROJECTS, LINE_OF,
 } = __mods.data;
 const { MAP, rand, setMap } = __mods.map;
 const { NAT, bizOpen, defaultHours, yearOf, techOf, modFor, capacity, appeal, unitCost, blockStars, starFactor } = __mods.demand;
@@ -1957,7 +1988,7 @@ const LEDGER_LABELS = {
   sales: 'Sales', goods: 'Stock deliveries', storage: 'Storage', wages: 'Wages', rentPaid: 'Ground rent paid',
   rentIn: 'Ground rent received', overhead: 'Overheads & bills', fares: 'Station fares',
   utility: 'Utility income', aptRent: 'Apartment rents', interest: 'Loan interest',
-  landmarks: 'Landmarks', projects: 'City contracts & grants',
+  landmarks: 'Landmarks', projects: 'City contracts & grants', wholesale: 'Wholesale sales', production: 'Supplier running costs',
   trade: 'Land trades', capex: 'Building & land',
 };
 
@@ -1967,12 +1998,16 @@ function chainBulk(n) {
   for (const [min, off] of CHAIN_TIERS) if (n >= min) d = off;
   return d;
 }
-const goodsUnit = b => unitCost(BIZ[b.type]) * (1 - (b.bulk || 0));
+// Today's wholesale price index for a business type's goods (1 = normal).
+const marketIdx = (s, type) => s.market?.[LINE_OF[type]] ?? 1;
+const goodsUnit = (b, s) => unitCost(BIZ[b.type]) * (1 - (b.bulk || 0)) * (s ? marketIdx(s, b.type) : 1);
+// The supply chain (supply.js) plugs in here: buyGoods(s, lot, marketValue) -> what the shop pays.
+const hooks = { buyGoods: null, quote: null };
 // A shop type this company may build: invented already, or close enough for
 // a Tech Campus owner.
 const canTech = (s, pid, type) => techOf(s).biz.has(type) || (!!s.players[pid]?.perks?.techAhead && BIZ[type].year <= yearOf(s) + s.players[pid].perks.techAhead);
 // Locked lots: a landmark stands (or is going up) here.
-const lockedLot = lot => !!(lot.landmark || lot.lmBuild);
+const lockedLot = lot => !!(lot.landmark || lot.lmBuild || lot.supplier);
 const operating = led => Object.entries(led).filter(([k]) => k !== 'capex' && k !== 'trade').reduce((a, [, v]) => a + v, 0);
 
 // ------------------------------------------------------ valuations ----
@@ -2031,7 +2066,7 @@ function bizValue(b) { return Math.round(b.invested * 0.6 + b.stock * unitCost(B
 function playerAssets(s, pid) {
   let land = 0, biz = 0, apt = 0;
   for (const l of s.lots) {
-    if (l.owner === pid) { land += landValue(s, l) + (l.lmValue || 0); apt += Math.round(l.aptInvested * 0.75); }
+    if (l.owner === pid) { land += landValue(s, l) + (l.lmValue || 0) + (l.supplier ? Math.round(l.supplier.invested * 0.5) : 0); apt += Math.round(l.aptInvested * 0.75); }
     if (l.business && l.business.owner === pid) biz += bizValue(l.business);
   }
   return { land, biz, apt, total: land + biz + apt };
@@ -2177,7 +2212,7 @@ function estimate(s, lotId, type, ownerId, cfg = {}) {
   const rev = cust * def.ticket * b.price;
   // Goods sold, plus a little waste on perishables.
   const mates = s.lots.filter(l => l.id !== lotId && l.business && l.business.owner === ownerId && l.business.type === type).length;
-  const goods = cust * unitCost(def) * (1 - chainBulk(mates + 1)) * (1 + def.perish * 0.15);
+  const goods = cust * unitCost(def) * (1 - chainBulk(mates + 1)) * (1 + def.perish * 0.15) * (hooks.quote ? hooks.quote(s, ownerId, type) : marketIdx(s, type));
   const wages = teamWage(b) * hours;
   const rent = lot.owner === ownerId ? 0 : rentFor(s, lot);
   const overhead = billFor(def, b.floors);
@@ -2240,7 +2275,8 @@ function deliver(s, lot) {
   const target = b.autoStock ? autoTarget(b) : b.stockTarget;
   const order = Math.max(0, Math.round(target - b.stock));
   if (!order) return 0;
-  const cost = order * goodsUnit(b) * (b.autoStock ? 1 + AUTO_STOCK_PREMIUM : 1);
+  const value = order * unitCost(def) * (1 - (b.bulk || 0)) * (b.autoStock ? 1 + AUTO_STOCK_PREMIUM : 1);
+  const cost = hooks.buyGoods ? hooks.buyGoods(s, lot, value) : value * marketIdx(s, b.type);
   ledger(s.players[b.owner], 'goods', -cost);
   bizBook(b, 'goods', -cost);
   b.stock += order;
@@ -2438,7 +2474,7 @@ function bankrupt(s, p) {
 }
 
 function returnToCity(s, lot) {
-  lot.owner = -1; lot.apt = 0; lot.aptInvested = 0;
+  lot.owner = -1; lot.apt = 0; lot.aptInvested = 0; lot.supplier = null;
   if (!s.auctionQueue.includes(lot.id)) s.auctionQueue.push(lot.id);
 }
 
@@ -2578,7 +2614,7 @@ function nextAuctionSlot(s) {
 function sellLand(s, pid, lotId) {
   const p = s.players[pid], lot = s.lots[lotId];
   if (lot.owner !== pid) return fail('You do not own this.');
-  if (lockedLot(lot)) return fail('A landmark stands here: it cannot be sold.');
+  if (lockedLot(lot)) return fail(lot.supplier ? 'Close the supplier first.' : 'A landmark stands here: it cannot be sold.');
   const value = Math.round(landValue(s, lot) * SELL_LAND_RATE + lot.aptInvested * 0.5);
   ledger(p, 'capex', value);
   returnToCity(s, lot);
@@ -2873,7 +2909,7 @@ function rushDelivery(s, pid, lotId) {
   const target = b.autoStock ? autoTarget(b) : b.stockTarget;
   const order = Math.max(0, Math.round(target - b.stock));
   if (!order) return fail('Shelves are already full.');
-  const cost = order * goodsUnit(b) * 1.25;
+  const cost = order * goodsUnit(b, s) * 1.25;
   if (s.players[pid].cash < cost) return fail(`Need ${money(cost)}.`);
   ledger(s.players[pid], 'goods', -cost);
   bizBook(b, 'goods', -cost);
@@ -3046,7 +3082,7 @@ function claimGrant(s, pid, type, d, cost) {
   return amt;
 }
 
-return { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars, setMap, createGame, news, bizLabel, ledger, LEDGER_LABELS, chainBulk, goodsUnit, canTech, lockedLot, operating, dayName, districtStats, parkStars, landValue, setCount, ownsSet, setsOwned, rentFor, aptCost, aptRentFor, bizValue, playerAssets, netWorth, loanLimit, districtPopulation, allocate, newBizConfig, estimate, utilityPools, utilityIncome, billFor, stepHour, bizBook, BIZ_LEDGER, HISTORY_DAYS, deliver, autoTarget, runHour, bankrupt, goalProgress, goalText, humans, continueGame, raceGoal, grantLand, petition, nextAuctionSlot, sellLand, canBuild, build, buildCost, sellBusiness, setPrice, setStaff, hireStaff, fireStaff, trainStaff, trainCost, raiseStaff, setRole, floorCost, addFloor, promoCost, startPromo, parkSlots, canLandscape, buildPark, buyoutPrice, buyout, survey, setHours, setStock, rushDelivery, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize, claimGrant };
+return { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars, setMap, createGame, news, bizLabel, ledger, LEDGER_LABELS, chainBulk, marketIdx, goodsUnit, hooks, canTech, lockedLot, operating, dayName, districtStats, parkStars, landValue, setCount, ownsSet, setsOwned, rentFor, aptCost, aptRentFor, bizValue, playerAssets, netWorth, loanLimit, districtPopulation, allocate, newBizConfig, estimate, utilityPools, utilityIncome, billFor, stepHour, bizBook, BIZ_LEDGER, HISTORY_DAYS, deliver, autoTarget, runHour, bankrupt, goalProgress, goalText, humans, continueGame, raceGoal, grantLand, petition, nextAuctionSlot, sellLand, canBuild, build, buildCost, sellBusiness, setPrice, setStaff, hireStaff, fireStaff, trainStaff, trainCost, raiseStaff, setRole, floorCost, addFloor, promoCost, startPromo, parkSlots, canLandscape, buildPark, buyoutPrice, buyout, survey, setHours, setStock, rushDelivery, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize, claimGrant };
 })();
 
 /* ===== ai.js ===== */
@@ -3535,6 +3571,243 @@ function closeAuction(s) {
 return { increment, reservePrice, minBid, auctionGap, canCall, callAuction, aiCallAuctions, openAuction, auctionBid, auctionTick, auctionPass, maybeSettle, settleRest, closeAuction };
 })();
 
+/* ===== supply.js ===== */
+__mods.supply = (() => {
+// Skyline Hustle - the supply chain.
+//
+// Every shop restocks at 06:00 (and 13:00 with a stock clerk). It buys from
+// the cheapest source with goods left today:
+//   - its owner's own supplier for that line, at production cost
+//   - another company's supplier, at the price that company sets
+//   - the open market, at today's wholesale price (which moves every day,
+//     with strikes, gluts and harvests)
+// A supplier has a daily capacity (market value of goods it can ship). Its
+// owner earns the wholesale margin on everything sold to other companies.
+// DOM-free: runs on the server in LAN games.
+
+const {
+  BIZ, SUPPLY_LINES, LINE_OF, SUPPLIER_LEVELS, PRODUCTION_COST, SUPPLY_PRICE_MIN, SUPPLY_PRICE_MAX, MARKET_SHOCKS,
+} = __mods.data;
+const { rand, ledger, news, money, hooks, lockedLot, sellBusiness } = __mods.sim;
+
+const fail = msg => ({ ok: false, msg });
+const inflation = s => 1 + 0.006 * (s.day - 1);
+const MAX_RUNS = 60;
+
+function supply(s) {
+  if (!s.market) s.market = Object.fromEntries(Object.keys(SUPPLY_LINES).map(k => [k, 1]));
+  s.marketHist ||= Object.fromEntries(Object.keys(SUPPLY_LINES).map(k => [k, []]));
+  s.shocks ||= [];
+  s.supplyRuns ||= [];
+  return s;
+}
+
+const suppliers = (s, line = null) => s.lots.filter(l => l.supplier && (!line || l.supplier.line === line));
+const capOf = sup => Math.round(SUPPLIER_LEVELS[sup.level].cap * (sup.capMult || 1));
+const spare = sup => Math.max(0, capOf(sup) - (sup.used || 0));
+const supplierName = (s, lot) => `${s.players[lot.supplier.owner]?.company.split(/[ &]/)[0] || 'City'} ${SUPPLY_LINES[lot.supplier.line].name}`;
+
+// --------------------------------------------------------- purchasing ----
+// The shop on `lot` wants goods worth `value` at base market prices. Returns
+// what it pays; settles every supplier involved.
+function buyGoods(s, lot, value) {
+  supply(s);
+  const b = lot.business, line = LINE_OF[b.type], buyer = s.players[b.owner];
+  const idx = s.market[line] ?? 1;
+  const offers = suppliers(s, line).filter(l => spare(l.supplier) > 0 && !s.players[l.supplier.owner].bankrupt)
+    .map(l => ({ l, price: l.supplier.owner === b.owner ? PRODUCTION_COST : l.supplier.price }))
+    .filter(o => o.l.supplier.owner === b.owner || (buyer.buyRival !== false && o.price < idx))
+    .sort((a, c) => a.price - c.price);
+  let left = value, paid = 0;
+  const src = (b.today.src ||= {});
+  for (const { l, price } of offers) {
+    if (left <= 0.5 || price >= idx) break;
+    const sup = l.supplier, take = Math.min(left, spare(sup));
+    const cost = take * PRODUCTION_COST, pay = take * price;
+    sup.used = (sup.used || 0) + take;
+    if (sup.owner !== b.owner) {
+      const seller = s.players[sup.owner];
+      ledger(seller, 'wholesale', pay);
+      ledger(seller, 'production', -cost);
+      sup.rev = (sup.rev || 0) + pay;
+      sup.cost = (sup.cost || 0) + cost;
+    } else sup.own = (sup.own || 0) + take;
+    (sup.clients ||= {})[b.owner] = (sup.clients[b.owner] || 0) + pay;
+    sup.shipped = (sup.shipped || 0) + take;
+    paid += pay; left -= take;
+    src[l.id] = (src[l.id] || 0) + take;
+    if (s.supplyRuns.length < MAX_RUNS) s.supplyRuns.push({ a: l.id, b: lot.id, h: s.hour + 1 });
+  }
+  if (left > 0.5) { paid += left * idx; src.market = (src.market || 0) + left; }
+  return paid;
+}
+
+// The best price a company would get for a line right now (for forecasts).
+function quote(s, pid, type) {
+  supply(s);
+  const line = LINE_OF[type], idx = s.market[line] ?? 1;
+  let best = idx;
+  for (const l of suppliers(s, line)) {
+    const sup = l.supplier;
+    if (spare(sup) < capOf(sup) * 0.15 && (sup.usedY || 0) > capOf(sup) * 0.85) continue;   // usually sold out
+    if (sup.owner === pid) best = Math.min(best, PRODUCTION_COST);
+    else if (s.players[pid]?.buyRival !== false) best = Math.min(best, sup.price);
+  }
+  return best;
+}
+hooks.buyGoods = buyGoods;
+hooks.quote = quote;
+
+// What the city's shops in a line spent on goods yesterday (base value).
+function lineDemand(s, line) {
+  let v = 0;
+  for (const l of s.lots) {
+    const b = l.business;
+    if (!b || LINE_OF[b.type] !== line) continue;
+    const y = b.yesterday || b.today;
+    v += (y.delivered || 0) * BIZ[b.type].ticket * BIZ[b.type].stock;
+  }
+  return Math.round(v);
+}
+
+// ------------------------------------------------------------ actions ----
+const supplierCost = (s, level) => Math.round(SUPPLIER_LEVELS[level].cost * inflation(s) / 500) * 500;
+
+function buildSupplier(s, pid, lotId, line) {
+  supply(s);
+  const lot = s.lots[lotId], p = s.players[pid];
+  if (!SUPPLY_LINES[line]) return fail('No such supplier.');
+  if (!lot || lot.kind !== 'prop' || lot.owner !== pid) return fail('Build it on a lot of your own.');
+  if (lot.business || lot.apt || lockedLot(lot)) return fail('The lot must be empty: no shop, no apartments.');
+  const cost = supplierCost(s, 0);
+  if (p.cash < cost) return fail(`Need ${money(cost)}.`);
+  ledger(p, 'capex', -cost);
+  const def = SUPPLY_LINES[line];
+  const price = p.human ? 0.85 : ({ cutter: 0.8, baron: 0.88, premium: 0.95 }[p.style] ?? 0.88);
+  lot.supplier = { line, owner: pid, level: 0, price, invested: cost, built: s.day, used: 0, hist: [] };
+  news(s, `${def.icon} ${p.company} opened a ${def.name} on ${lot.name}.`, 'build', pid);
+  return { ok: true, msg: `${def.icon} ${def.name} open: your ${def.types.map(t => BIZ[t].icon).join('')} shops now restock at cost.` };
+}
+
+function upgradeSupplier(s, pid, lotId) {
+  const lot = s.lots[lotId], sup = lot?.supplier, p = s.players[pid];
+  if (!sup || sup.owner !== pid) return fail('Not your supplier.');
+  if (sup.level >= SUPPLIER_LEVELS.length - 1) return fail('Already the biggest it gets.');
+  const cost = supplierCost(s, sup.level + 1);
+  if (p.cash < cost) return fail(`Need ${money(cost)}.`);
+  ledger(p, 'capex', -cost);
+  sup.level++; sup.invested += cost;
+  return { ok: true, msg: `Expanded to a ${SUPPLIER_LEVELS[sup.level].name}: ${money(capOf(sup))} of goods a day.` };
+}
+
+function priceSupplier(s, pid, lotId, price) {
+  const sup = s.lots[lotId]?.supplier;
+  if (!sup || sup.owner !== pid) return fail('Not your supplier.');
+  sup.price = Math.round(Math.max(SUPPLY_PRICE_MIN, Math.min(SUPPLY_PRICE_MAX, price)) * 100) / 100;
+  return { ok: true };
+}
+
+function closeSupplier(s, pid, lotId) {
+  const lot = s.lots[lotId], sup = lot?.supplier;
+  if (!sup || sup.owner !== pid) return fail('Not your supplier.');
+  const back = Math.round(sup.invested * 0.5);
+  ledger(s.players[pid], 'capex', back);
+  lot.supplier = null;
+  news(s, `${s.players[pid].company} closed its ${SUPPLY_LINES[sup.line].name} on ${lot.name}.`, 'deal', pid);
+  return { ok: true, msg: `Closed. Equipment sold for ${money(back)}.` };
+}
+
+function setBuyRival(s, pid, on) {
+  s.players[pid].buyRival = !!on;
+  return { ok: true, msg: on ? 'Your shops buy from whoever is cheapest, rivals included.' : 'Your shops will only use your own suppliers and the market.' };
+}
+
+// -------------------------------------------------------------- market ----
+function marketDay(s) {
+  for (const sh of s.shocks) sh.left--;
+  s.shocks = s.shocks.filter(sh => sh.left > 0);
+  if (rand(s) < 0.12) {
+    const pool = MARKET_SHOCKS.filter(m => !s.shocks.some(sh => sh.line === m.line));
+    if (pool.length) {
+      const m = pool[Math.floor(rand(s) * pool.length)];
+      const mult = m.up ? 1.25 + rand(s) * 0.2 : 0.75 + rand(s) * 0.1;
+      s.shocks.push({ line: m.line, mult, left: 3 + Math.floor(rand(s) * 4) });
+      news(s, `📈 ${m.text} (${m.up ? '+' : ''}${Math.round((mult - 1) * 100)}%)`, 'event');
+    }
+  }
+  for (const line of Object.keys(SUPPLY_LINES)) {
+    const target = s.shocks.filter(sh => sh.line === line).reduce((a, sh) => a * sh.mult, 1);
+    const v = s.market[line] + (target - s.market[line]) * 0.4 + (rand(s) - 0.5) * 0.05;
+    s.market[line] = Math.round(Math.max(0.7, Math.min(1.6, v)) * 1000) / 1000;
+    const h = s.marketHist[line];
+    h.push(s.market[line]);
+    if (h.length > 30) h.shift();
+  }
+}
+
+function supplierDay(s) {
+  for (const l of suppliers(s)) {
+    const sup = l.supplier, p = s.players[sup.owner];
+    if (l.owner !== sup.owner || p.bankrupt) { l.supplier = null; continue; }
+    const upkeep = SUPPLIER_LEVELS[sup.level].upkeep * inflation(s);
+    ledger(p, 'production', -upkeep);
+    // Profit: margin on sales to rivals, plus what its own shops saved
+    // against today's market price, minus upkeep.
+    const margin = (sup.rev || 0) - (sup.cost || 0);
+    const saved = (sup.own || 0) * ((s.market[sup.line] ?? 1) - PRODUCTION_COST);
+    sup.y = { shipped: Math.round(sup.shipped || 0), rev: Math.round(sup.rev || 0), margin: Math.round(margin), saved: Math.round(saved), upkeep: Math.round(upkeep),
+      rivals: Object.keys(sup.clients || {}).filter(k => +k !== sup.owner).length, own: !!sup.own };
+    sup.hist.push(Math.round(margin + saved - upkeep));
+    if (sup.hist.length > 14) sup.hist.shift();
+    sup.usedY = sup.used || 0;
+    sup.used = 0; sup.rev = 0; sup.cost = 0; sup.own = 0; sup.shipped = 0; sup.clients = {};
+  }
+}
+
+// ----------------------------------------------------------------- AI ----
+function aiSupply(s) {
+  for (const p of s.players) {
+    if (p.human || p.bankrupt) continue;
+    // Tune prices on what they already run.
+    for (const l of suppliers(s).filter(l => l.supplier.owner === p.id)) {
+      const sup = l.supplier, use = (sup.usedY || 0) / capOf(sup);
+      if (use > 0.95) {
+        if (sup.level < SUPPLIER_LEVELS.length - 1 && p.cash > supplierCost(s, sup.level + 1) * 2) upgradeSupplier(s, p.id, l.id);
+        else sup.price = Math.min(0.97, Math.round((sup.price + 0.03) * 100) / 100);
+      } else if (use < 0.4) sup.price = Math.max(0.72, Math.round((sup.price - 0.03) * 100) / 100);
+    }
+    if (rand(s) > 0.25) continue;
+    const count = {};
+    for (const l of s.lots) if (l.business?.owner === p.id) count[LINE_OF[l.business.type]] = (count[LINE_OF[l.business.type]] || 0) + 1;
+    const line = Object.entries(count).filter(([ln, n]) => n >= 3 && !suppliers(s, ln).some(l => l.supplier.owner === p.id)).sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (!line || p.cash < supplierCost(s, 0) * 1.6 + 20000) continue;
+    let lot = s.lots.find(l => l.kind === 'prop' && l.owner === p.id && !l.business && !l.apt && !lockedLot(l));
+    if (!lot) {
+      // No empty land: close a shop that has been losing money.
+      const weakest = s.lots.filter(l => l.business?.owner === p.id && l.owner === p.id && !l.apt && !lockedLot(l))
+        .map(l => [l, (l.business.hist || []).reduce((a, v) => a + v, 0)]).sort((a, b) => a[1] - b[1])[0];
+      if (!weakest || weakest[1] > 0) continue;
+      sellBusiness(s, p.id, weakest[0].id);
+      lot = weakest[0];
+    }
+    buildSupplier(s, p.id, lot.id, line);
+  }
+}
+
+// ---------------------------------------------------------------- clock ----
+function supplyHour(s) {
+  supply(s);
+  if (s.hour === 0) {
+    marketDay(s);
+    supplierDay(s);
+    aiSupply(s);
+    s.supplyRuns = [];
+  }
+}
+
+return { suppliers, capOf, spare, supplierName, buyGoods, quote, lineDemand, supplierCost, buildSupplier, upgradeSupplier, priceSupplier, closeSupplier, setBuyRival, supplyHour };
+})();
+
 /* ===== civic.js ===== */
 __mods.civic = (() => {
 // Skyline Hustle - brands, landmarks and City Hall.
@@ -3979,7 +4252,8 @@ const { MAP, bizLabel, money, setCount, goalProgress, goalText, netWorth, bizOpe
 const { avgMorale } = __mods.staff;
 const { SHOP_COMMENTS } = __mods.citizens;
 const { LM, landmarkSet, landmarkState, reqProgress, rushCost, activeProjects, chainOf } = __mods.civic;
-const { PROJECTS, CHAIN_MIN } = __mods.data;
+const { PROJECTS, CHAIN_MIN, SUPPLY_LINES, LINE_OF } = __mods.data;
+const { suppliers, capOf, supplierName } = __mods.supply;
 
 const ALERT_CATS = {
   shops:  { name: 'Shops',  icon: '🏪' },
@@ -4203,6 +4477,30 @@ function civicAlerts(s, pid, out) {
   }
 }
 
+// Wholesale prices and suppliers.
+function supplyAlerts(s, pid, out) {
+  const count = {};
+  for (const l of s.lots) if (l.business?.owner === pid) count[LINE_OF[l.business.type]] = (count[LINE_OF[l.business.type]] || 0) + 1;
+  for (const [line, L] of Object.entries(SUPPLY_LINES)) {
+    const idx = s.market?.[line] ?? 1, n = count[line] || 0;
+    const own = suppliers(s, line).filter(l => l.supplier.owner === pid);
+    if (idx >= 1.18 && n >= 2 && !own.length) {
+      out.push({ key: `mkt:${line}`, cat: 'money', sev: 'warn', icon: '📈', title: `${L.label} stock costs ${Math.round(idx * 100)}% of normal`,
+        text: `Your ${n} shops in this trade pay the higher price. A ${L.name} of your own locks in stock at cost.`, tab: 'civic' });
+    } else if (n >= 3 && !own.length) {
+      out.push({ key: `supidea:${line}`, cat: 'tips', sev: 'info', icon: L.icon, title: `Make your own stock: a ${L.name}`,
+        text: `You run ${n} shops it could supply at ${Math.round(0.62 * 100)}% of market prices, and you can sell to rivals too. Build it on an empty lot of yours.` });
+    }
+    for (const l of own) {
+      const sup = l.supplier, cap = capOf(sup);
+      if ((sup.usedY || 0) >= cap * 0.98) out.push({ key: `supfull:${l.id}`, cat: 'shops', sev: 'info', icon: L.icon, lot: l.id, title: `${supplierName(s, l)} sold out yesterday`,
+        text: 'It shipped everything it could make. Expand it, or raise your price to rivals.' });
+      if (sup.price >= idx && sup.y && sup.y.rivals === 0) out.push({ key: `suphigh:${l.id}`, cat: 'money', sev: 'info', icon: L.icon, lot: l.id, title: `${supplierName(s, l)} is priced above the market`,
+        text: `You charge ${Math.round(sup.price * 100)}%, the market is at ${Math.round(idx * 100)}%: no rival will buy. Lower the price to earn wholesale income.` });
+    }
+  }
+}
+
 // ------------------------------------------------------------ events ----
 // One-off things: new shop types, a rival muscling in, staff walking out.
 function eventAlerts(s, pid, inbox, add) {
@@ -4260,6 +4558,7 @@ function advise(s) {
     moneyAlerts(s, pid, out);
     goalAlerts(s, pid, out);
     civicAlerts(s, pid, out);
+    supplyAlerts(s, pid, out);
     for (const a of out) if (!inbox.mute[a.cat] || a.sev === 'bad') add(a);
     const live = new Set(out.map(a => a.key));
     for (const a of inbox.list) {
@@ -4327,9 +4626,10 @@ const { aiHour, aiDay } = __mods.ai;
 const { aiCallAuctions } = __mods.auction;
 const { advise } = __mods.advisor;
 const { civicHour } = __mods.civic;
+const { supplyHour } = __mods.supply;
 
 const HOOKS = {
-  onHour(s) { civicHour(s); aiHour(s); aiCallAuctions(s); advise(s); },
+  onHour(s) { supplyHour(s); civicHour(s); aiHour(s); aiCallAuctions(s); advise(s); },
   onDay: aiDay,
 };
 
@@ -4363,6 +4663,7 @@ const {
   hireStaff, fireStaff, trainStaff, raiseStaff, setRole, addFloor, startPromo, buildPark, buyout, survey,
 } = __mods.sim;
 const { auctionBid, auctionPass, callAuction } = __mods.auction;
+const { buildSupplier, upgradeSupplier, priceSupplier, closeSupplier, setBuyRival } = __mods.supply;
 const { chainSync, startLandmark, rushLandmark, bidProject } = __mods.civic;
 const { inboxRead, inboxDismiss, inboxClear, inboxMute } = __mods.advisor;
 
@@ -4401,6 +4702,11 @@ const ACTIONS = {
   buyout:    (s, p, [l]) => buyout(s, p, lot(s, l)),
   survey:    (s, p, [d]) => survey(s, p, Math.round(num(d))),
   pass:      (s, p) => auctionPass(s, p),
+  supplier:  (s, p, [l, line]) => buildSupplier(s, p, lot(s, l), String(line)),
+  supUp:     (s, p, [l]) => upgradeSupplier(s, p, lot(s, l)),
+  supPrice:  (s, p, [l, v]) => priceSupplier(s, p, lot(s, l), num(v)),
+  supClose:  (s, p, [l]) => closeSupplier(s, p, lot(s, l)),
+  buyRival:  (s, p, [on]) => setBuyRival(s, p, !!on),
   chainSync: (s, p, [l]) => chainSync(s, p, lot(s, l)),
   landmark:  (s, p, [l, id]) => startLandmark(s, p, lot(s, l), String(id)),
   lmRush:    (s, p) => rushLandmark(s, p),
@@ -5483,7 +5789,8 @@ class Renderer3D {
   lotSig(s, lot) {
     const b = lot.business;
     const auction = s.auction && s.auction.lotId === lot.id ? 'A' : '';
-    const lm = lot.landmark ? 'L' + lot.landmark : lot.lmBuild ? 'B' + lot.lmBuild + ((s.lmBuilds || []).find(x => x.lot === lot.id)?.left ?? '') : '';
+    const sp = lot.supplier ? `S${lot.supplier.line}${lot.supplier.level}${lot.supplier.owner}` : '';
+    const lm = sp || lot.landmark ? sp + 'L' + (lot.landmark || '') : lot.lmBuild ? 'B' + lot.lmBuild + ((s.lmBuilds || []).find(x => x.lot === lot.id)?.left ?? '') : '';
     return `${lot.owner}|${lot.apt}|${b ? b.type + b.owner + b.fit + 'f' + (b.floors || 1) + (b.promo ? 'P' : '') : ''}|${auction}|${lm}`;
   }
 
@@ -5541,6 +5848,8 @@ class Renderer3D {
         add(new THREE.CylinderGeometry(0.26, 0.26, 0.36, 20), std('#4ea8de', { roughness: 0.4 }), 0, GROUND + 0.52, 0);
         height = 0.75;
       }
+    } else if (lot.supplier) {
+      height = buildSupplier(add, std, lot.supplier, s.players[lot.supplier.owner].color, g);
     } else if (lot.landmark) {
       height = buildLandmark(add, std, lot.landmark, lot.owner >= 0 ? s.players[lot.owner].color : '#cfd3da', g);
     } else if (lot.lmBuild) {
@@ -5598,6 +5907,7 @@ class Renderer3D {
     // Floating icon.
     let icon = null, ring = '#ffffff';
     if (b) { icon = BIZ[b.type].icon; ring = s.players[b.owner].color; }
+    else if (lot.supplier) { icon = SUPPLY_ICON[lot.supplier.line]; ring = s.players[lot.supplier.owner].color; }
     else if (lot.landmark) { icon = LM_ICON[lot.landmark]; ring = lot.owner >= 0 ? s.players[lot.owner].color : '#ffd23f'; }
     else if (lot.lmBuild) { icon = '🏗️'; ring = lot.owner >= 0 ? s.players[lot.owner].color : '#ffd23f'; }
     else if (lot.kind === 'station') icon = '🚇';
@@ -5870,6 +6180,14 @@ class Renderer3D {
     const c = new THREE.Color();
     for (let i = 0; i < this.maxCars; i++) this.carBody.setColorAt(i, c.set(palette[i % palette.length]));
     this.scene.add(this.carBody, this.carTop);
+    // Delivery trucks: supplier -> shop runs at restock time.
+    this.maxTrucks = 40;
+    this.truckBody = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.1, 0.12), new THREE.MeshStandardMaterial({ roughness: 0.5 }), this.maxTrucks);
+    this.truckBox = new THREE.InstancedMesh(new THREE.BoxGeometry(0.17, 0.16, 0.24), new THREE.MeshStandardMaterial({ color: '#f1efe8', roughness: 0.7 }), this.maxTrucks);
+    this.truckBody.castShadow = this.truckBox.castShadow = true;
+    this.truckBody.count = this.truckBox.count = 0;
+    this.truckPaths = new Map();
+    this.scene.add(this.truckBody, this.truckBox);
     const roads = [];
     for (let y = 0; y < MAP.h; y++) for (let x = 0; x < MAP.w; x++) if (MAP.tiles[y][x].kind === 'road') roads.push([x, y]);
     this.roadTiles = roads;
@@ -5911,6 +6229,57 @@ class Renderer3D {
     }
     this.carBody.count = this.carTop.count = n;
     this.carBody.instanceMatrix.needsUpdate = this.carTop.instanceMatrix.needsUpdate = true;
+  }
+
+  updateTrucks(s, hourF) {
+    const runs = s.supplyRuns || [];
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), c = new THREE.Color();
+    const fwd = new THREE.Vector3();
+    let n = 0;
+    for (let i = 0; i < runs.length && n < this.maxTrucks; i++) {
+      const r = runs[i];
+      const p = (hourF - r.h - (i % 6) * 0.05) / 1.4;
+      if (p <= 0 || p >= 1) continue;
+      const A = s.lots[r.a], B = s.lots[r.b];
+      if (!A || !B) continue;
+      const key = r.a + '>' + r.b;
+      let path = this.truckPaths.get(key);
+      if (!path) {
+        const tiles = roadPath(A.tx, A.ty, B.tx, B.ty);
+        const pts = tiles.map(([x, y], j) => {
+          const [nx, ny] = tiles[Math.min(j + 1, tiles.length - 1)], [px, py] = tiles[Math.max(j - 1, 0)];
+          const dx = nx - px, dy = ny - py, d = Math.hypot(dx, dy) || 1;
+          return [wx(x) - (dy / d) * 0.14, wz(y) + (dx / d) * 0.14];
+        });
+        const cum = [0];
+        for (let j = 1; j < pts.length; j++) cum.push(cum[j - 1] + Math.hypot(pts[j][0] - pts[j - 1][0], pts[j][1] - pts[j - 1][1]));
+        path = { pts, cum, len: cum.at(-1) || 0 };
+        if (this.truckPaths.size > 500) this.truckPaths.clear();
+        this.truckPaths.set(key, path);
+      }
+      if (path.pts.length < 2) continue;
+      // Out and back: there in the first half, home in the second.
+      const d = (p < 0.5 ? p * 2 : 2 - p * 2) * path.len;
+      let j = 1;
+      while (j < path.cum.length - 1 && path.cum[j] < d) j++;
+      const [ax, az] = path.pts[j - 1], [bx, bz] = path.pts[j];
+      const seg = path.cum[j] - path.cum[j - 1] || 1, f = Math.max(0, Math.min(1, (d - path.cum[j - 1]) / seg));
+      pos.set(ax + (bx - ax) * f, 0.1, az + (bz - az) * f);
+      const dir = p < 0.5 ? 1 : -1;
+      q.setFromAxisAngle(up, Math.atan2((bx - ax) * dir, (bz - az) * dir));
+      fwd.set(0, 0, 0.13).applyQuaternion(q);
+      m.compose(pos.clone().add(fwd), q, one);
+      this.truckBody.setMatrixAt(n, m);
+      const sup = A.supplier;
+      this.truckBody.setColorAt(n, c.set(sup ? s.players[sup.owner].color : '#999999'));
+      pos.y = 0.13; pos.sub(fwd.multiplyScalar(0.6));
+      m.compose(pos, q, one);
+      this.truckBox.setMatrixAt(n, m);
+      n++;
+    }
+    this.truckBody.count = this.truckBox.count = n;
+    this.truckBody.instanceMatrix.needsUpdate = this.truckBox.instanceMatrix.needsUpdate = true;
+    if (this.truckBody.instanceColor) this.truckBody.instanceColor.needsUpdate = true;
   }
 
   // ----------------------------------------------------- overlays ----
@@ -6144,6 +6513,7 @@ class Renderer3D {
     this.updatePeople(s, T);
     const carsActive = Math.round(6 + (1 - dark * 0.6) * 14);
     this.updateCars(simSpeed > 0 ? dt * Math.min(simSpeed, 3) : 0, carsActive);
+    this.updateTrucks(s, hourF);
     this.updateFloaters(dt);
     this.gl.render(this.scene, this.camera);
   }
@@ -6276,6 +6646,40 @@ function buildLandmark(add, std, id, color, g) {
   return GROUND + 0.5;
 }
 
+// ----------------------------------------------------------- suppliers ----
+const SUPPLY_ICON = { food: '🥖', grocery: '📦', goods: '🏭', leisure: '🎞️' };
+const SUPPLY_WALL = { food: '#c98b4a', grocery: '#6f9a5b', goods: '#7d7f9c', leisure: '#9b6aa8' };
+function buildSupplier(add, std, sup, color, g) {
+  const wall = std(SUPPLY_WALL[sup.line]), roof = std('#d7d9de'), trim = std(color), dark = std('#4a4f59');
+  const big = 1 + sup.level * 0.25;
+  add(new THREE.BoxGeometry(0.92, 0.05, 0.92), std('#8f9298'), 0, GROUND + 0.025, 0);
+  const h = 0.32 * big;
+  add(new THREE.BoxGeometry(0.8, h, 0.6), wall, 0, GROUND + h / 2, -0.08);
+  // Sawtooth roof.
+  for (let i = 0; i < 3; i++) {
+    const r = add(new THREE.BoxGeometry(0.27, 0.04, 0.62), roof, -0.27 + i * 0.27, GROUND + h + 0.06, -0.08);
+    r.rotation.z = 0.45;
+  }
+  add(new THREE.BoxGeometry(0.82, 0.04, 0.62), trim, 0, GROUND + h + 0.01, -0.08);
+  // Loading bays.
+  for (const x of [-0.22, 0.05]) add(new THREE.BoxGeometry(0.18, 0.16, 0.02), dark, x, GROUND + 0.08, 0.225, false);
+  let top = GROUND + h + 0.12;
+  if (sup.line === 'food') {
+    add(new THREE.CylinderGeometry(0.11, 0.11, 0.55 * big, 14), std('#e9e4d4'), 0.32, GROUND + 0.28 * big, 0.3);
+    add(new THREE.ConeGeometry(0.12, 0.1, 14), roof, 0.32, GROUND + 0.55 * big + 0.05, 0.3);
+    top = Math.max(top, GROUND + 0.62 * big);
+  } else if (sup.line === 'goods') {
+    add(new THREE.CylinderGeometry(0.05, 0.07, 0.7 * big, 10), std('#a35a4a'), 0.3, GROUND + 0.35 * big, -0.25);
+    g.userData.smoke = true;
+    top = Math.max(top, GROUND + 0.72 * big);
+  } else if (sup.line === 'grocery') {
+    for (const z of [0.3, 0.38]) add(new THREE.BoxGeometry(0.12, 0.1, 0.06), std('#c8a26b'), 0.32, GROUND + 0.05, z);
+  } else {
+    add(new THREE.BoxGeometry(0.5, 0.1, 0.03), std('#ffd23f'), 0, GROUND + h * 0.8, 0.225, false);
+  }
+  return top;
+}
+
 return { SEG_COLORS, SEGMENTS, wx, wz, darkness, Renderer3D };
 })();
 
@@ -6299,7 +6703,8 @@ const {
   canLandscape, parkSlots, blockStars, parkStars, trainCost, continueGame, BIZ_LEDGER, utilityIncome, utilityPools, raceGoal,
   canTech, chainBulk,
 } = __mods.sim;
-const { PROJECTS, CHAIN_MIN, LANDMARKS } = __mods.data;
+const { PROJECTS, CHAIN_MIN, LANDMARKS, SUPPLY_LINES, LINE_OF, SUPPLIER_LEVELS, PRODUCTION_COST } = __mods.data;
+const { suppliers, capOf, supplierName, supplierCost, lineDemand } = __mods.supply;
 const { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } = __mods.staff;
 const { LENSES, LENS, lensData } = __mods.lens;
 const { auctionBid, settleRest, minBid, increment, canCall, reservePrice, auctionGap } = __mods.auction;
@@ -6520,6 +6925,7 @@ class UI {
     const b = lot.business;
     const year = yearOf(s);
     const tech = techOf(s);
+    if (lot.supplier) return this.supplierCardHTML(lot);
     if (lot.landmark) return this.landmarkCardHTML(lot);
     if (lot.lmBuild) return this.constructionHTML(lot);
     if (!b) {
@@ -6542,7 +6948,7 @@ class UI {
             <span class="est ${cls(e.profit)}">${sign(e.profit)}<small>per day</small></span>
           </button>`).join('')}
           ${locked.map(def => `<div class="biz-opt locked"><i>${def.icon}</i><span><b>${esc(bizName(def, def.year))}</b><small>Invented in ${def.year}</small></span><span class="est dim">🔒</span></div>`).join('')}
-        </div>${lot.owner === ME && !lot.apt ? this.landmarkPickHTML(lot) : ''}`;
+        </div>${lot.owner === ME && !lot.apt ? this.supplierPickHTML(lot) + this.landmarkPickHTML(lot) : ''}`;
     }
     const def = BIZ[b.type];
     const owner = s.players[b.owner];
@@ -6575,6 +6981,7 @@ class UI {
     if (tab === 'promote') return h + this.promoTabHTML(lot, b);
     if (tab === 'books') return h + this.booksTabHTML(lot, b);
     h += this.chainCardHTML(lot, b);
+    h += this.stockSourceHTML(b);
     const cap = capacity(b);
     const e = estimate(s, lot.id, b.type, ME, {});
     const fc = fitCost(b);
@@ -7071,6 +7478,70 @@ class UI {
     return h;
   }
 
+  // --------------------------------------------------- supply chain ----
+  supplierPickHTML(lot) {
+    const s = this.s, me = s.players[ME], cost = supplierCost(s, 0);
+    return `<h3>Or build a supplier <em>stock at cost for your shops</em></h3><div class="biz-list">${Object.entries(SUPPLY_LINES).map(([k, L]) => {
+      const mine = s.lots.filter(l => l.business?.owner === ME && LINE_OF[l.business.type] === k).length;
+      const have = suppliers(s, k).some(l => l.supplier.owner === ME);
+      const rivals = suppliers(s, k).filter(l => l.supplier.owner !== ME).length;
+      return `<button class="biz-opt" data-act="supplier" data-v="${k}" ${me.cash < cost ? 'disabled' : ''}>
+        <i>${L.icon}</i><span><b>${esc(L.name)}</b><small>Supplies ${L.types.map(t => BIZ[t].icon).join('')} · you run ${mine}${have ? ' · <span class="warn">you already have one</span>' : ''}${rivals ? ` · ${rivals} rival supplier${rivals === 1 ? '' : 's'}` : ''}</small>
+        <small class="dim">City demand ~${money(lineDemand(s, k))}/day · market price ${Math.round((s.market?.[k] ?? 1) * 100)}%</small></span>
+        <span class="est">${money(cost)}</span></button>`;
+    }).join('')}</div>`;
+  }
+  supplierCardHTML(lot) {
+    const s = this.s, sup = lot.supplier, L = SUPPLY_LINES[sup.line], o = s.players[sup.owner], lvl = SUPPLIER_LEVELS[sup.level];
+    const cap = capOf(sup), used = sup.used || 0, y = sup.y, idx = s.market?.[sup.line] ?? 1;
+    const mine = sup.owner === ME, next = SUPPLIER_LEVELS[sup.level + 1];
+    let h = `<h3>${L.icon} ${esc(supplierName(s, lot))} <em>${lvl.name}</em></h3><div class="card">
+      <div class="note" style="margin:0">Run by <b style="color:${o.color}">${esc(o.company)}</b> · supplies ${L.types.map(t => `${BIZ[t].icon} ${esc(bizLabel(s, t))}`).join(', ')}</div>
+      <div class="stats" style="margin-top:8px">
+        <div class="stat"><small>Price to others</small><b>${Math.round(sup.price * 100)}%</b></div>
+        <div class="stat"><small>Market today</small><b class="${idx > 1.05 ? 'neg' : idx < 0.95 ? 'pos' : ''}">${Math.round(idx * 100)}%</b></div>
+        <div class="stat"><small>Shipped today</small><b>${Math.round(used / cap * 100)}%</b></div>
+      </div>
+      <div class="meter"><i class="${used >= cap ? 'hot' : ''}" style="width:${Math.min(100, used / cap * 100)}%"></i></div>
+      <p class="note">Ships up to ${money(cap)} of goods a day (at market value). Costs ${money(Math.round(PRODUCTION_COST * 100))} per $100 to make, plus ${money(lvl.upkeep)}/day upkeep.</p>`;
+    if (y) h += `<p class="note">Yesterday: shipped ${money(y.shipped)} · ${y.rivals} rival compan${y.rivals === 1 ? 'y' : 'ies'} bought ${money(y.rev)} (margin <b class="${cls(y.margin)}">${sign(y.margin)}</b>)${y.own ? ` · your shops saved <b class="pos">${money(y.saved)}</b>` : ''}</p>`;
+    if (sup.hist?.length) h += this.barsHTML(sup.hist, 'Daily value (margin + savings − upkeep)');
+    if (mine) h += `<div class="ctl"><span>Price to other companies <small class="dim">they buy if it beats the market</small></span>
+        <div class="stepper"><button data-act="sup-price" data-v="-0.05">−</button><b>${Math.round(sup.price * 100)}%</b><button data-act="sup-price" data-v="0.05">+</button></div></div>
+      <p class="note">Your own shops always get it at cost (${Math.round(PRODUCTION_COST * 100)}%). ${sup.price >= idx ? '<span class="warn">Above today\'s market price: rivals won\'t buy.</span>' : ''}</p>
+      <div class="row">${next ? `<button class="btn go" data-act="sup-up">Expand to ${next.name} · ${money(supplierCost(s, sup.level + 1))}</button>` : ''}<button class="btn small" data-act="sup-close">Close</button></div>`;
+    return h + '</div>';
+  }
+  stockSourceHTML(b) {
+    const s = this.s, src = b.today.src && Object.keys(b.today.src).length ? b.today.src : b.yesterday?.src;
+    const line = LINE_OF[b.type], idx = s.market?.[line] ?? 1;
+    if (!src) return `<p class="note">📦 Stock from the market at ${Math.round(idx * 100)}% of normal prices.</p>`;
+    const tot = Object.values(src).reduce((a, v) => a + v, 0) || 1;
+    const parts = Object.entries(src).sort((a, c) => c[1] - a[1]).map(([k, v]) => {
+      if (k === 'market') return `${Math.round(v / tot * 100)}% market (${Math.round(idx * 100)}%)`;
+      const l = s.lots[+k];
+      if (!l?.supplier) return `${Math.round(v / tot * 100)}% a closed supplier`;
+      const own = l.supplier.owner === b.owner;
+      return `${Math.round(v / tot * 100)}% ${esc(supplierName(s, l))} (${own ? 'at cost' : Math.round(l.supplier.price * 100) + '%'})`;
+    });
+    return `<p class="note">📦 Stock: ${parts.join(' · ')}</p>`;
+  }
+  marketHTML() {
+    const s = this.s, me = s.players[ME];
+    const rows = Object.entries(SUPPLY_LINES).map(([k, L]) => {
+      const idx = s.market?.[k] ?? 1, hist = s.marketHist?.[k] || [];
+      const prev = hist.at(-2) ?? 1, d = idx - prev;
+      const shock = (s.shocks || []).find(x => x.line === k);
+      const sups = suppliers(s, k).map(l => `<span style="color:${s.players[l.supplier.owner].color}">${esc(s.players[l.supplier.owner].company.split(/[ &]/)[0])} ${Math.round(l.supplier.price * 100)}%</span>`).join(' · ');
+      return `<div class="list-item"><span>${L.icon}</span><span class="grow"><b>${esc(L.label)}</b>
+        <small>${sups || 'No suppliers yet'}${shock ? ` · <span class="warn">${shock.mult > 1 ? 'shortage' : 'glut'}, ${shock.left}d</span>` : ''}</small></span>
+        <span class="${idx > 1.05 ? 'neg' : idx < 0.95 ? 'pos' : ''}" style="font-weight:800">${Math.round(idx * 100)}% ${d > 0.01 ? '▲' : d < -0.01 ? '▼' : '·'}</span></div>`;
+    }).join('');
+    return `<h3>Wholesale market <em>today's stock prices</em></h3>${rows}
+      <div class="row"><button class="btn small wide" data-act="buy-rival">${me.buyRival === false ? '🚫 Not buying from rival suppliers' : '✅ Buying from rival suppliers when cheaper'}</button></div>
+      <p class="note">Shops restock from the cheapest source: your own supplier at cost, then any rival supplier that beats the market, then the market. Build a supplier on an empty lot of yours.</p>`;
+  }
+
   // ----------------------------------------------------- landmarks ----
   landmarkCardHTML(lot) {
     const s = this.s, id = lot.landmark, def = LM[id], L = s.landmarks[id], o = L && L.owner >= 0 ? s.players[L.owner] : null;
@@ -7148,6 +7619,7 @@ class UI {
       return `<div class="list-item" data-act="goto" data-id="${ls[0].id}"><span>${BIZ[type].icon}</span><span class="grow"><b>${esc(tier ? brandName(s, b) : bizLabel(s, type))}</b><small>${ls.length} shops · ${tier ? `${tier[2]} · stock −${Math.round(tier[1] * 100)}%` : `${CHAIN_MIN - ls.length} more for a chain`}</small></span></div>`;
     }).join('');
     return `<div class="sh-head"><div class="chip" style="background:#6b4f2a">🏛️</div><div><div class="sh-title">City Hall</div><div class="sh-sub">Landmarks, city contracts and your brands</div></div></div>
+      ${this.marketHTML()}
       <h3>City jobs <em>tenders, sponsorships, grants</em></h3>${projs}${recent ? `<div class="dim-list">${recent}</div>` : ''}
       <h3>Landmarks <em>one of each · first to finish wins</em></h3>
       ${mine ? `<p class="note">🏗️ You're building the <b>${esc(LM[mine.id].name)}</b>: ${mine.left} day${mine.left === 1 ? '' : 's'} to go. <a data-act="goto" data-id="${mine.lot}">Show</a></p>` : ''}
@@ -7507,6 +7979,16 @@ class UI {
           () => act$('landmark', at, id).then(r => { if (res(r)) { sfx.build(); this.openLot(at); } }));
         return;
       }
+      case 'supplier': {
+        const L = SUPPLY_LINES[el.dataset.v];
+        this.confirm(`Build a ${L.name}?`, `${money(supplierCost(s, 0))}. Your ${L.types.map(t => bizLabel(s, t)).join(', ')} shops will restock here at cost, and you can sell to rival shops.`,
+          () => act$('supplier', lotId, el.dataset.v).then(r => res(r) && sfx.build()));
+        return;
+      }
+      case 'sup-price': act$('supPrice', lotId, Math.round((s.lots[lotId].supplier.price + +el.dataset.v) * 100) / 100).then(res); sfx.tap(); return;
+      case 'sup-up': act$('supUp', lotId).then(r => res(r) && sfx.build()); return;
+      case 'sup-close': this.confirm('Close this supplier?', 'You get half of what you invested back.', () => act$('supClose', lotId).then(res)); return;
+      case 'buy-rival': act$('buyRival', s.players[ME].buyRival === false).then(res); sfx.tap(); return;
       case 'lm-rush': act$('lmRush').then(r => res(r) && sfx.buy()); return;
       case 'chain-sync': act$('chainSync', lotId).then(res); sfx.tap(); return;
       case 'proj-adj': {

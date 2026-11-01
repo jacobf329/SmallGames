@@ -15,7 +15,7 @@ import {
   LOAN_LTV, START_CASH, RIVALS, HUMAN_COLORS, MAX_COMPANIES, SCENARIOS, DIFFICULTY, EVENTS, PRICE_MIN, PRICE_MAX,
   DELIVERY_HOUR, HOLD_COST, AUTO_STOCK_PREMIUM, TECH, YEAR_DAYS, GOAL_TEXT, bizName, eraName,
   BIZ_UTIL, STAFF_ROLES, MAX_FLOORS, FLOOR_COST, PARKS, PROMOS, SURVEY_COST, SURVEY_DAYS, BUYOUT_MULT, BUYOUT_SET_MULT,
-  CHAIN_TIERS, PROJECTS,
+  CHAIN_TIERS, PROJECTS, LINE_OF,
 } from './data.js';
 import { MAP, rand, setMap } from './map.js';
 import { NAT, bizOpen, defaultHours, yearOf, techOf, modFor, capacity, appeal, unitCost, blockStars, starFactor } from './demand.js';
@@ -92,7 +92,7 @@ export const LEDGER_LABELS = {
   sales: 'Sales', goods: 'Stock deliveries', storage: 'Storage', wages: 'Wages', rentPaid: 'Ground rent paid',
   rentIn: 'Ground rent received', overhead: 'Overheads & bills', fares: 'Station fares',
   utility: 'Utility income', aptRent: 'Apartment rents', interest: 'Loan interest',
-  landmarks: 'Landmarks', projects: 'City contracts & grants',
+  landmarks: 'Landmarks', projects: 'City contracts & grants', wholesale: 'Wholesale sales', production: 'Supplier running costs',
   trade: 'Land trades', capex: 'Building & land',
 };
 
@@ -102,12 +102,16 @@ export function chainBulk(n) {
   for (const [min, off] of CHAIN_TIERS) if (n >= min) d = off;
   return d;
 }
-export const goodsUnit = b => unitCost(BIZ[b.type]) * (1 - (b.bulk || 0));
+// Today's wholesale price index for a business type's goods (1 = normal).
+export const marketIdx = (s, type) => s.market?.[LINE_OF[type]] ?? 1;
+export const goodsUnit = (b, s) => unitCost(BIZ[b.type]) * (1 - (b.bulk || 0)) * (s ? marketIdx(s, b.type) : 1);
+// The supply chain (supply.js) plugs in here: buyGoods(s, lot, marketValue) -> what the shop pays.
+export const hooks = { buyGoods: null, quote: null };
 // A shop type this company may build: invented already, or close enough for
 // a Tech Campus owner.
 export const canTech = (s, pid, type) => techOf(s).biz.has(type) || (!!s.players[pid]?.perks?.techAhead && BIZ[type].year <= yearOf(s) + s.players[pid].perks.techAhead);
 // Locked lots: a landmark stands (or is going up) here.
-export const lockedLot = lot => !!(lot.landmark || lot.lmBuild);
+export const lockedLot = lot => !!(lot.landmark || lot.lmBuild || lot.supplier);
 export const operating = led => Object.entries(led).filter(([k]) => k !== 'capex' && k !== 'trade').reduce((a, [, v]) => a + v, 0);
 
 // ------------------------------------------------------ valuations ----
@@ -166,7 +170,7 @@ export function bizValue(b) { return Math.round(b.invested * 0.6 + b.stock * uni
 export function playerAssets(s, pid) {
   let land = 0, biz = 0, apt = 0;
   for (const l of s.lots) {
-    if (l.owner === pid) { land += landValue(s, l) + (l.lmValue || 0); apt += Math.round(l.aptInvested * 0.75); }
+    if (l.owner === pid) { land += landValue(s, l) + (l.lmValue || 0) + (l.supplier ? Math.round(l.supplier.invested * 0.5) : 0); apt += Math.round(l.aptInvested * 0.75); }
     if (l.business && l.business.owner === pid) biz += bizValue(l.business);
   }
   return { land, biz, apt, total: land + biz + apt };
@@ -312,7 +316,7 @@ export function estimate(s, lotId, type, ownerId, cfg = {}) {
   const rev = cust * def.ticket * b.price;
   // Goods sold, plus a little waste on perishables.
   const mates = s.lots.filter(l => l.id !== lotId && l.business && l.business.owner === ownerId && l.business.type === type).length;
-  const goods = cust * unitCost(def) * (1 - chainBulk(mates + 1)) * (1 + def.perish * 0.15);
+  const goods = cust * unitCost(def) * (1 - chainBulk(mates + 1)) * (1 + def.perish * 0.15) * (hooks.quote ? hooks.quote(s, ownerId, type) : marketIdx(s, type));
   const wages = teamWage(b) * hours;
   const rent = lot.owner === ownerId ? 0 : rentFor(s, lot);
   const overhead = billFor(def, b.floors);
@@ -375,7 +379,8 @@ export function deliver(s, lot) {
   const target = b.autoStock ? autoTarget(b) : b.stockTarget;
   const order = Math.max(0, Math.round(target - b.stock));
   if (!order) return 0;
-  const cost = order * goodsUnit(b) * (b.autoStock ? 1 + AUTO_STOCK_PREMIUM : 1);
+  const value = order * unitCost(def) * (1 - (b.bulk || 0)) * (b.autoStock ? 1 + AUTO_STOCK_PREMIUM : 1);
+  const cost = hooks.buyGoods ? hooks.buyGoods(s, lot, value) : value * marketIdx(s, b.type);
   ledger(s.players[b.owner], 'goods', -cost);
   bizBook(b, 'goods', -cost);
   b.stock += order;
@@ -573,7 +578,7 @@ export function bankrupt(s, p) {
 }
 
 function returnToCity(s, lot) {
-  lot.owner = -1; lot.apt = 0; lot.aptInvested = 0;
+  lot.owner = -1; lot.apt = 0; lot.aptInvested = 0; lot.supplier = null;
   if (!s.auctionQueue.includes(lot.id)) s.auctionQueue.push(lot.id);
 }
 
@@ -713,7 +718,7 @@ export function nextAuctionSlot(s) {
 export function sellLand(s, pid, lotId) {
   const p = s.players[pid], lot = s.lots[lotId];
   if (lot.owner !== pid) return fail('You do not own this.');
-  if (lockedLot(lot)) return fail('A landmark stands here: it cannot be sold.');
+  if (lockedLot(lot)) return fail(lot.supplier ? 'Close the supplier first.' : 'A landmark stands here: it cannot be sold.');
   const value = Math.round(landValue(s, lot) * SELL_LAND_RATE + lot.aptInvested * 0.5);
   ledger(p, 'capex', value);
   returnToCity(s, lot);
@@ -1008,7 +1013,7 @@ export function rushDelivery(s, pid, lotId) {
   const target = b.autoStock ? autoTarget(b) : b.stockTarget;
   const order = Math.max(0, Math.round(target - b.stock));
   if (!order) return fail('Shelves are already full.');
-  const cost = order * goodsUnit(b) * 1.25;
+  const cost = order * goodsUnit(b, s) * 1.25;
   if (s.players[pid].cash < cost) return fail(`Need ${money(cost)}.`);
   ledger(s.players[pid], 'goods', -cost);
   bizBook(b, 'goods', -cost);

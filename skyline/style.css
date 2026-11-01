@@ -456,3 +456,4 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .chain-card { margin: 8px 0; }
 .dim-list { opacity: 0.7; }
 #nav button span { white-space: nowrap; }
+.biz-opt span small { display: block; }

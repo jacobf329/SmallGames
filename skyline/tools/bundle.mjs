@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
-const ORDER = ['data', 'map', 'staff', 'demand', 'citizens', 'sim', 'ai', 'auction', 'civic', 'advisor', 'game', 'actions', 'net', 'audio', 'music', 'lens', 'render3d', 'ui', 'main'];
+const ORDER = ['data', 'map', 'staff', 'demand', 'citizens', 'sim', 'ai', 'auction', 'supply', 'civic', 'advisor', 'game', 'actions', 'net', 'audio', 'music', 'lens', 'render3d', 'ui', 'main'];
 
 // three.js ships as one module ending in `export{a as B, ...}`.
 function wrapThree() {
