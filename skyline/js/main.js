@@ -2,7 +2,7 @@
 //
 // Single-player runs the simulation right here. In a LAN game the server
 // (server.mjs) owns the city: this phone shows the state it receives, sends
-// actions, and proposes speed changes that the other players vote on.
+// actions, and sets the speed it would like (the city runs at the slowest).
 
 import { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, MAPS, eraName } from './data.js';
 import { createGame, serialize, deserialize, money, netWorth, dayName, yearOf, operating, goalProgress, goalText, raceGoal, setMap, MAP } from './sim.js';
@@ -33,7 +33,7 @@ const app = {
   renderer: null,
   ui: null,
   lastDay: 0,
-  mp: null,                 // LAN session: { net, pid, host, vote, cooldowns, pending, ... }
+  mp: null,                 // LAN session: { net, pid, host, flow, pending, ... }
   citizenCache: new Map(),
   histCache: new Map(),
   histAsked: new Map(),
@@ -57,24 +57,28 @@ const app = {
     });
   },
 
-  // Speed buttons: instant in single-player, a proposal in LAN games.
+  // Speed buttons: instant in single-player. In LAN games ⏸ pauses for
+  // everyone at once, and the others set the speed you'd like: the city runs
+  // at the slowest player's choice.
   requestSpeed(i) {
     if (!this.mp) return this.setSpeed(i);
-    this.mp.net.send({ t: 'speed', speed: i });
+    if (i === 0 || (this.mp.flow?.pause && this.mp.flow.pause.by === getMe())) this.mp.net.send({ t: 'pause' });
+    if (i > 0) { this.mp.net.send({ t: 'want', speed: i }); (this.mp.flow ||= { wants: {} }).wants[getMe()] = i; this.speedButtons(); }
   },
   setSpeed(i) {
     this.speed = i;
     this.speedButtons();
   },
   speedButtons() {
-    const cd = this.mp ? (this.mp.cooldowns[getMe()] || 0) : 0;
-    const voting = this.mp?.vote;
+    const want = this.mp ? this.mp.flow?.wants?.[getMe()] || 1 : this.speed;
+    const pause = this.mp?.flow?.pause;
     document.querySelectorAll('#speeds button').forEach(b => {
-      b.classList.toggle('on', +b.dataset.speed === this.speed);
-      b.classList.toggle('wait', !!(cd || voting) && +b.dataset.speed !== this.speed);
+      const v = +b.dataset.speed;
+      b.classList.toggle('on', v === this.speed);
+      b.classList.toggle('mine', !!this.mp && v === want && v !== this.speed);
     });
-    $('speed-cd').textContent = cd ? `${cd}s` : '';
-    $('speed-cd').classList.toggle('hidden', !cd);
+    $('speed-cd').textContent = pause ? `${pause.left}s` : '';
+    $('speed-cd').classList.toggle('hidden', !pause);
   },
   pauseFor(why) { this.holds.add(why); },
   resume(why) { this.holds.delete(why); },
@@ -253,7 +257,7 @@ function joinLan() {
   localStorage.setItem('skyline-company', company);
   localStorage.setItem('skyline-name', name);
   const mp = {
-    net: null, pid: -1, host: false, vote: null, cooldowns: {}, pending: new Map(), seq: 0,
+    net: null, pid: -1, host: false, flow: null, pending: new Map(), seq: 0,
     lobby: null, seats: [], addresses: app.lan?.addresses || [], lastState: 0,
   };
   app.mp = mp;
@@ -294,8 +298,9 @@ function onNet(m) {
     case 'clock':
       if (app.s && app.s.day === m.day && app.s.hour === m.hour) app.s.t = Math.max(app.s.t, m.tt);
       if (m.speed !== app.speed) app.setSpeed(m.speed);
-      mp.vote = m.vote;
-      app.ui.voteFrame(mp);
+      mp.flow = m.flow;
+      app.ui.flowFrame(mp);
+      app.speedButtons();
       break;
     case 'result': {
       const r = mp.pending.get(m.id);
@@ -319,8 +324,7 @@ function applyState(m) {
   const prev = app.s;
   const s = m.s;
   s.cz = { list: [], trips: m.trips, visitsToday: 0 };
-  mp.vote = m.vote;
-  mp.cooldowns = m.cooldowns || {};
+  mp.flow = m.flow;
   mp.seatInfo = m.seats;
   if (s.mapId && s.mapId !== MAP.id) { setMap(s.mapId); app.renderer.setCity(); }
   app.s = s;
@@ -331,7 +335,7 @@ function applyState(m) {
   }
   if (m.speed !== app.speed) app.setSpeed(m.speed);
   app.speedButtons();
-  app.ui.voteFrame(mp);
+  app.ui.flowFrame(mp);
   // Did the clock move?
   const steps = prev ? (s.day - prev.day) * 24 + (s.hour - prev.hour) : 0;
   if (steps > 0) app.afterHour(steps);
@@ -356,6 +360,8 @@ function renderLobby() {
       <p class="note">${esc(sc.blurb)}</p>
       <div class="seg wrap" id="lob-map">${Object.entries(MAPS).map(([k, v]) => `<button data-v="${k}" class="${k === (L.settings.map || 'town') ? 'on' : ''}">${v.name}<small>${v.cols * v.rows - v.parks - v.transit - v.utility} blocks</small></button>`).join('')}</div>
       <p class="note">${esc(MAPS[L.settings.map || 'town'].blurb)}</p>
+      <div class="seg" id="lob-check">${[['off', 'No check-ins'], ['weekly', 'Weekly review'], ['daily', 'Daily review']].map(([k, n]) => `<button data-v="${k}" class="${k === (L.settings.checkpoint || 'weekly') ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <p class="note">Speed: everyone picks the speed they'd like and the city runs at the slowest. Anyone can pause (up to ${60}s at a time). Reviews stop the clock for a summary until everyone taps Ready.</p>
       <div class="seg" id="lob-diff">${[['easy', 'Relaxed'], ['normal', 'Sharp'], ['hard', 'Ruthless']].map(([k, n]) => `<button data-v="${k}" class="${k === L.settings.difficulty ? 'on' : ''}">${n}</button>`).join('')}</div>
       <div class="row"><button class="btn go wide" id="lob-start">Start game for everyone</button></div>
       ${L.canResume ? '<div class="row"><button class="btn wide" id="lob-resume">Resume the saved LAN game</button></div>' : ''}`
@@ -363,6 +369,7 @@ function renderLobby() {
     <div class="row"><button class="btn small" id="lob-leave">Back to title</button></div>`;
   const bind = (sel, fn) => document.querySelectorAll(sel).forEach(b => b.addEventListener('click', () => { sfx.tap(); fn(b); }));
   bind('#lob-scenario button', b => mp.net.send({ t: 'setup', scenario: b.dataset.v }));
+  bind('#lob-check button', b => mp.net.send({ t: 'setup', checkpoint: b.dataset.v }));
   bind('#lob-map button', b => mp.net.send({ t: 'setup', map: b.dataset.v }));
   bind('#lob-diff button', b => mp.net.send({ t: 'setup', difficulty: b.dataset.v }));
   bind('#lob-start', () => mp.net.send({ t: 'start' }));
@@ -397,8 +404,7 @@ function frame(now) {
       if (s.auction) app.ui.auctionFrame();
       if (now > cdAt) {
         cdAt = now + 1000;
-        for (const k in app.mp.cooldowns) if (--app.mp.cooldowns[k] <= 0) delete app.mp.cooldowns[k];
-        if (app.mp.vote) { app.mp.vote.left--; app.ui.voteFrame(app.mp); }
+        if (app.mp.flow?.pause) { app.mp.flow.pause.left = Math.max(0, app.mp.flow.pause.left - 1); app.ui.flowFrame(app.mp); }
         app.speedButtons();
       }
     } else if (s.auction) {

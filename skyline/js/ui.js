@@ -1027,7 +1027,7 @@ export class UI {
       <div class="row"><button class="btn" data-act="save">💾 Save now</button><button class="btn" data-act="help">❓ How to play</button></div>
       <div class="row"><button class="btn small" data-act="export-save">📤 Export save file</button>${this.app.mp ? '' : '<button class="btn small" data-act="import-save">📂 Load save file</button>'}</div>
       ${this.app.mp ? `<div class="card"><b>📶 LAN game</b><div class="note">${this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
-        Speed changes need everyone's agreement. You can propose once every 60 seconds.</div>
+        Tap a speed to say how fast you'd like to go: the city runs at the slowest player's choice. ⏸ pauses for everyone, for up to a minute.</div>
         ${this.app.mp.host ? '<div class="row"><button class="btn danger small" data-act="end-lan">End the game for everyone</button></div>' : ''}</div>` : ''}
       <div class="row"><button class="btn danger" data-act="quit">🚪 ${this.app.mp ? 'Leave (your company keeps trading)' : 'Quit to title'}</button></div>
       <p class="note"><b>Camera:</b> drag to pan · pinch to zoom · twist two fingers to rotate · drag two fingers up/down to tilt.
@@ -1190,26 +1190,62 @@ export class UI {
 
   // ----------------------------------------------------- speed vote ----
   // LAN games: one player proposes a speed, everyone else must agree.
-  voteFrame(mp) {
-    const el = $('vote');
-    const v = mp && mp.vote;
-    if (!v || !this.s) { el.classList.add('hidden'); document.body.classList.remove('voting'); this.voteKey = null; return; }
-    // Rebuild only when the vote itself changes; tick the countdown in place
-    // so the buttons never move under a finger.
-    const key = `${v.id}|${v.yes.length}`;
-    const info = `${v.yes.length}/${v.need.length} agreed · ${Math.max(0, v.left)}s`;
-    if (key === this.voteKey) { const sm = el.querySelector('small'); if (sm) sm.textContent = info; return; }
-    this.voteKey = key;
+  // LAN status bar: who paused, who's holding the speed down, check-ins.
+  flowFrame(mp) {
+    const el = $('vote'), f = mp && mp.flow, s = this.s;
+    const hide = () => { el.classList.add('hidden'); document.body.classList.remove('voting'); this.flowKey = null; };
+    if (!f || !s) return hide();
+    if (!f.check && this.modalKind === 'review') this.hideModal();   // everyone was ready
+    const who = pid => pid === ME ? 'You' : s.players[pid]?.company || '?';
+    let html = '', key = '';
+    if (f.check) {
+      const waiting = f.check.need.filter(pid => !f.check.ready.includes(pid));
+      const me = waiting.includes(ME);
+      key = `c${f.check.day}|${waiting.join()}`;
+      html = `<div class="vote-row"><span>📋 <b>Review</b> <small>waiting for ${waiting.map(pid => pid === ME ? 'you' : who(pid)).map(esc).join(', ') || 'nobody'}</small></span>
+        ${me ? '<span class="vote-btns"><button class="btn small buy" data-act="lan-ready">Ready</button></span>' : ''}</div>`;
+      if (me && this.checkShown !== f.check.day) { this.checkShown = f.check.day; this.weekReview(f.check.day); }
+    } else if (f.pause) {
+      const mine = f.pause.by === ME;
+      key = `p${f.pause.by}|${f.pause.left}`;
+      html = `<div class="vote-row"><span>⏸ <b style="color:${s.players[f.pause.by]?.color}">${esc(who(f.pause.by))}</b> paused <small>back in ${f.pause.left}s</small></span>
+        ${mine ? '<span class="vote-btns"><button class="btn small buy" data-act="lan-pause">Resume</button></span>' : ''}</div>`;
+    } else {
+      const wants = Object.entries(f.wants || {}).map(([pid, v]) => [+pid, v]);
+      const slow = Math.min(...wants.map(w => w[1]));
+      const mineW = f.wants?.[ME] || 1;
+      if (wants.length > 1 && mineW > slow) {
+        const holders = wants.filter(([, v]) => v === slow).map(([pid]) => who(pid));
+        key = `w${slow}|${holders.join()}`;
+        html = `<div class="vote-row"><span>▶ Running at <b>${['', '1×', '2.5×', '6×'][slow]}</b> <small>${holders.map(esc).join(', ')} ${holders.length > 1 ? 'want' : 'wants'} it slower</small></span></div>`;
+      }
+    }
+    if (!html) return hide();
+    if (key === this.flowKey) return;
+    this.flowKey = key;
     document.body.classList.add('voting');
     el.classList.remove('hidden');
-    const who = this.s.players[v.from];
-    const label = v.speed === 0 ? 'pause the game' : `play at ${['', '1×', '2.5×', '6×'][v.speed]}`;
-    const mine = v.from === ME;
-    const asked = v.need.includes(ME) && !v.yes.includes(ME);
-    el.innerHTML = `<div class="vote-row"><span><b style="color:${who.color}">${esc(mine ? 'You' : who.company)}</b> ${mine ? 'proposed' : 'want'} to <b>${label}</b>.
-      <small>${info}</small></span>
-      ${asked ? `<span class="vote-btns"><button class="btn small buy" data-act="vote-yes" data-id="${v.id}">Agree</button><button class="btn small danger" data-act="vote-no" data-id="${v.id}">No</button></span>` : ''}</div>`;
-    if (asked && this.voteBuzz !== v.id) { this.voteBuzz = v.id; sfx.offer(); }
+    el.innerHTML = html;
+  }
+
+  // The weekly summary shown at a LAN check-in.
+  weekReview(day) {
+    const s = this.s, week = Math.max(1, Math.floor((day - 1) / 7));
+    const rows = s.players.map(p => {
+      const w = p.bankrupt ? 0 : netWorth(s, p.id);
+      const prev = p.worthHist?.length > 7 ? p.worthHist[p.worthHist.length - 8] : p.worthHist?.[0] ?? w;
+      const profit = (p.profitHist || []).slice(-7).reduce((a, v) => a + v, 0);
+      return { p, w, d: w - prev, profit };
+    }).sort((a, b) => b.w - a.w);
+    const me = rows.find(r => r.p.id === ME);
+    const alerts = (s.players[ME].inbox?.list || []).filter(a => !a.done && (a.sev === 'bad' || a.sev === 'warn')).slice(0, 3);
+    this.modal(`<h2>📋 ${s.players.length && (day - 1) % 7 === 0 ? `Week ${week} review` : `Day ${day - 1} review`}</h2>
+      ${me ? `<div class="stats"><div class="stat"><small>Your worth</small><b>${money(me.w)}</b></div><div class="stat"><small>Change</small><b class="${cls(me.d)}">${sign(me.d)}</b></div><div class="stat"><small>Profit</small><b class="${cls(me.profit)}">${sign(me.profit)}</b></div></div>` : ''}
+      ${rows.map(({ p, w, d }, i) => `<div class="list-item">${faceHTML(p, 32)}<span class="grow"><b style="color:${p.color}">${i + 1}. ${esc(p.company)}</b><small>${p.human ? (p.id === ME ? 'you' : 'player') : 'rival'}</small></span><span class="amt">${money(w)}<small class="${cls(d)}">${sign(d)}</small></span></div>`).join('')}
+      ${alerts.length ? `<h3>Needs a look</h3>${alerts.map(a => `<p class="note">${a.icon} ${esc(a.title)}</p>`).join('')}` : ''}
+      <p class="note">The clock is stopped until everyone taps Ready.</p>
+      <div class="row"><button class="btn buy wide" data-act="lan-ready">Ready ✓</button></div>`);
+    this.modalKind = 'review';
   }
 
   // -------------------------------------------------------- actions ----
@@ -1346,7 +1382,8 @@ export class UI {
       case 'end-lan': this.confirm('End the game for everyone?', 'Everyone goes back to the lobby. The game is saved and can be resumed.', () => this.app.mp?.net.send({ t: 'end' })); return;
       case 'claim': this.app.mp?.net.send({ t: 'claim', pid: +el.dataset.pid }); return;
       case 'accept-offer': case 'decline-offer': case 'view-offer': this.resolveOffer(act, +el.dataset.id); return;
-      case 'vote-yes': case 'vote-no': this.app.mp?.net.send({ t: 'vote', id: +el.dataset.id, yes: act === 'vote-yes' }); sfx.tap(); return;
+      case 'lan-pause': this.app.requestSpeed(0); sfx.tap(); return;
+      case 'lan-ready': this.app.mp?.net.send({ t: 'ready' }); this.hideModal(); sfx.tap(); return;
       case 'modal-ok': this.hideModal(); this._ok && this._ok(); return;
       case 'modal-cancel': this.hideModal(); return;
       case 'keep-playing':
@@ -1486,10 +1523,11 @@ export class UI {
     setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 350); }, kind === 'set' || kind === 'tech' || kind === 'goal' ? 4200 : 2800);
   }
   modal(html) {
+    this.modalKind = null;
     $('modal-card').innerHTML = html;
     $('modal').classList.remove('hidden');
   }
-  hideModal() { $('modal').classList.add('hidden'); }
+  hideModal() { $('modal').classList.add('hidden'); this.modalKind = null; }
   modalOpen() { return !$('modal').classList.contains('hidden'); }
   confirm(title, text, ok) {
     this._ok = ok;

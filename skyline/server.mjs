@@ -5,10 +5,11 @@
 //
 //   node skyline/server.mjs [port]        (zero dependencies, Node 18+)
 //
-// Game speed is shared. Anyone can propose a new speed (pausing included);
-// every other connected player has VOTE_SECONDS to agree, and one "no"
-// cancels it. A player who proposes must then wait SPEED_COOLDOWN seconds
-// before proposing again.
+// Game speed is shared without any voting. Every player picks the speed
+// they'd like and the city runs at the slowest choice. Anyone can pause at
+// once; the game resumes when they unpause, or by itself after PAUSE_SECONDS.
+// Optionally (lobby setting) the clock stops at the end of every week or day
+// for a short summary, and carries on when everyone taps Ready.
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -25,8 +26,7 @@ import { perform } from './js/actions.js';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = +(process.argv[2] || process.env.PORT || 8090);
 const SAVE_FILE = path.join(ROOT, 'saves', 'lan-game.json');
-export const VOTE_SECONDS = 20;
-export const SPEED_COOLDOWN = 60;
+export const PAUSE_SECONDS = 60;
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
 
 // ------------------------------------------------------------- static ----
@@ -57,11 +57,11 @@ const server = http.createServer((req, res) => {
 // -------------------------------------------------------------- state ----
 let game = null;                 // the sim state while a game runs
 let seats = [];                  // [{ pid, token, name, company }]
-let settings = { scenario: 'boomtown', difficulty: 'normal', map: 'town' };
-let speed = 1;
-let vote = null;                 // { id, from, speed, need: [pid], yes: [pid], expires }
-let voteSeq = 0;
-const cooldown = {};             // pid -> ms timestamp
+let settings = { scenario: 'boomtown', difficulty: 'normal', map: 'town', checkpoint: 'weekly' };
+let speed = 1;                   // effective speed, worked out by flow()
+const wants = {};                // pid -> wanted speed 1..3
+let pause = null;                // { by: pid, until: ms }
+let check = null;                // { day, need: [pid], ready: [pid] } end-of-week check-in
 const clients = new Set();       // { conn, token, name, company, pid, joined }
 let hostToken = null;
 
@@ -99,11 +99,8 @@ function stateMsg() {
   const json = JSON.stringify(game, (k, v) => (k === 'cz' || k === 'bidders' || k === 'days' ? undefined : v));
   const T = game.day * 24 + game.hour + game.t;
   const trips = game.cz.trips.filter(t => t.t0 + 2 * t.walk + t.stay > T - 0.1 && t.t0 < T + 1.7);
-  const now = Date.now();
-  const cd = {};
-  for (const pid in cooldown) if (cooldown[pid] > now) cd[pid] = Math.ceil((cooldown[pid] - now) / 1000);
   const seatInfo = seats.map(st => ({ pid: st.pid, name: st.name, company: st.company, connected: connectedPids().has(st.pid) }));
-  return `{"t":"state","s":${json},"trips":${JSON.stringify(trips)},"speed":${speed},"vote":${JSON.stringify(vote ? { ...vote, left: Math.ceil((vote.expires - now) / 1000) } : null)},"cooldowns":${JSON.stringify(cd)},"seats":${JSON.stringify(seatInfo)},"host":"${(hostToken || '').slice(0, 6)}"}`;
+  return `{"t":"state","s":${json},"trips":${JSON.stringify(trips)},"speed":${speed},"flow":${JSON.stringify(flowInfo())},"seats":${JSON.stringify(seatInfo)},"host":"${(hostToken || '').slice(0, 6)}"}`;
 }
 function sendState() {
   if (!game) return;
@@ -134,8 +131,9 @@ function startGame(fromSave) {
     seats = people.map((c, i) => ({ pid: i, token: c.token, name: c.name, company: c.company }));
   }
   game.liveAuctions = true;
-  speed = 1; vote = null;
-  for (const k in cooldown) delete cooldown[k];
+  pause = null; check = null;
+  for (const k in wants) delete wants[k];
+  flow();
   for (const c of clients) {
     const seat = seats.find(st => st.token === c.token);
     c.pid = seat ? seat.pid : -1;
@@ -147,56 +145,56 @@ function startGame(fromSave) {
 
 function endGame() {
   save();
-  game = null; seats = []; vote = null;
+  game = null; seats = []; pause = null; check = null;
   for (const c of clients) c.pid = -1;
   sendLobby();
 }
 
 // -------------------------------------------------------------- speed ----
-function applySpeed(sp, why) {
-  speed = sp;
-  vote = null;
-  notice(why, 'good');
-  stateDirty = true;
-}
-function requestSpeed(c, sp) {
-  if (!game || c.pid < 0 || !Number.isInteger(sp) || sp < 0 || sp >= SPEEDS.length) return;
-  const label = ['pause', '1×', '2.5×', '6×'][sp];
-  if (sp === speed) return send(c, { t: 'notice', text: 'The game is already at that speed.' });
-  const others = [...connectedPids()].filter(pid => pid !== c.pid);
-  if (!others.length) return applySpeed(sp, `${nameOf(c.pid)} set the speed to ${label}.`);
-  if (vote) return send(c, { t: 'notice', text: 'A speed vote is already running.', kind: 'bad' });
-  const wait = Math.ceil(((cooldown[c.pid] || 0) - Date.now()) / 1000);
-  if (wait > 0) return send(c, { t: 'notice', text: `You can propose again in ${wait}s.`, kind: 'bad' });
-  cooldown[c.pid] = Date.now() + SPEED_COOLDOWN * 1000;
-  vote = { id: ++voteSeq, from: c.pid, speed: sp, need: others, yes: [], expires: Date.now() + VOTE_SECONDS * 1000 };
-  notice(`${nameOf(c.pid)} proposes ${sp ? 'speed ' + label : 'a pause'}. Everyone else must agree.`, 'event');
-  stateDirty = true;
-}
-function castVote(c, id, yes) {
-  if (!vote || vote.id !== id || !vote.need.includes(c.pid) || vote.yes.includes(c.pid)) return;
-  if (!yes) {
-    notice(`${nameOf(c.pid)} said no to ${vote.speed ? 'the speed change' : 'pausing'}.`, 'bad');
-    vote = null;
-    stateDirty = true;
-    return;
+// Works out the speed: paused or checking in -> 0, else the slowest wish.
+function flow() {
+  const live = [...connectedPids()];
+  if (pause && Date.now() > pause.until) { notice(`${nameOf(pause.by)}'s pause ran out: back to it.`); pause = null; }
+  if (pause && !live.includes(pause.by)) pause = null;
+  if (check) {
+    check.need = check.need.filter(pid => live.includes(pid));
+    if (check.need.every(pid => check.ready.includes(pid))) { check = null; notice('Everyone is ready. On with the week!', 'good'); }
   }
-  vote.yes.push(c.pid);
-  checkVote();
-  stateDirty = true;
+  const sp = pause || check ? 0 : live.length ? Math.min(...live.map(pid => wants[pid] || 1)) : 1;
+  if (sp !== speed) { speed = sp; stateDirty = true; }
 }
-function checkVote() {
-  if (!vote) return;
-  const live = connectedPids();
-  vote.need = vote.need.filter(pid => live.has(pid));
-  if (vote.need.every(pid => vote.yes.includes(pid))) {
-    const label = ['paused', '1×', '2.5×', '6×'][vote.speed];
-    applySpeed(vote.speed, vote.speed ? `Everyone agreed: speed ${label}.` : 'Everyone agreed: game paused.');
-  } else if (Date.now() > vote.expires) {
-    notice('Not everyone answered in time: the speed stays as it is.', 'bad');
-    vote = null;
-    stateDirty = true;
-  }
+function flowInfo() {
+  return {
+    wants: Object.fromEntries([...connectedPids()].map(pid => [pid, wants[pid] || 1])),
+    pause: pause ? { by: pause.by, left: Math.max(0, Math.ceil((pause.until - Date.now()) / 1000)) } : null,
+    check: check ? { day: check.day, need: check.need, ready: check.ready } : null,
+  };
+}
+function setWant(c, sp) {
+  if (!game || c.pid < 0 || !Number.isInteger(sp) || sp < 1 || sp >= SPEEDS.length) return;
+  wants[c.pid] = sp;
+  flow(); stateDirty = true;
+}
+function togglePause(c) {
+  if (!game || c.pid < 0) return;
+  if (pause && pause.by === c.pid) { pause = null; notice(`${nameOf(c.pid)} unpaused.`); }
+  else { pause = { by: c.pid, until: Date.now() + PAUSE_SECONDS * 1000 }; notice(`${nameOf(c.pid)} paused the game.`, 'event'); }
+  flow(); stateDirty = true;
+}
+function setReady(c) {
+  if (!check || c.pid < 0 || check.ready.includes(c.pid)) return;
+  check.ready.push(c.pid);
+  flow(); stateDirty = true;
+}
+// End of the week (or day): stop for a summary until everyone is ready.
+function maybeCheckIn(prevDay) {
+  const mode = settings.checkpoint || 'weekly';
+  if (!game || game.over || mode === 'off' || game.day === prevDay) return;
+  if (mode === 'weekly' && (game.day - 1) % 7 !== 0) return;
+  const need = [...connectedPids()];
+  if (need.length < 2) return;           // nobody to wait for
+  check = { day: game.day, need, ready: [] };
+  flow(); stateDirty = true;
 }
 
 // ------------------------------------------------------------ sockets ----
@@ -237,6 +235,7 @@ attachWebSocket(server, conn => {
         if (SCENARIOS[m.scenario]) settings.scenario = m.scenario;
         if (DIFFICULTY[m.difficulty]) settings.difficulty = m.difficulty;
         if (MAPS[m.map]) settings.map = m.map;
+        if (['off', 'weekly', 'daily'].includes(m.checkpoint)) settings.checkpoint = m.checkpoint;
         sendLobby();
         break;
       case 'start':
@@ -263,8 +262,9 @@ attachWebSocket(server, conn => {
         stateDirty = true;
         break;
       }
-      case 'speed': requestSpeed(c, m.speed); break;
-      case 'vote': castVote(c, m.id, !!m.yes); break;
+      case 'want': setWant(c, m.speed); break;
+      case 'pause': togglePause(c); break;
+      case 'ready': setReady(c); break;
       case 'hist': {
         // Books history for one of your businesses (lot >= 0) or your company (-1).
         if (!game || c.pid < 0) break;
@@ -298,7 +298,7 @@ attachWebSocket(server, conn => {
     pickHost();
     if (game) {
       if (c.pid >= 0) notice(`${nameOf(c.pid)} disconnected. Their company keeps trading.`);
-      checkVote();
+      flow();
       stateDirty = true;
     } else sendLobby();
   });
@@ -311,7 +311,7 @@ setInterval(() => {
   const dt = Math.min(1, (now - last) / 1000);
   last = now;
   if (!game) return;
-  checkVote();
+  flow();
   const live = connectedPids();
   if (!game.over && live.size) {
     if (game.auction) {
@@ -323,13 +323,13 @@ setInterval(() => {
       const day = game.day;
       const steps = advanceGame(game, dt * SPEEDS[speed] / SECONDS_PER_HOUR);
       if (steps) stateDirty = true;
-      if (game.day !== day) save();
+      if (game.day !== day) { save(); maybeCheckIn(day); }
       if (game.auction) stateDirty = true;
     }
   }
   if (game.over && !game.overSaved) { game.overSaved = true; try { fs.unlinkSync(SAVE_FILE); } catch {} stateDirty = true; }
   // Light clock sync so phones stay in step between hours.
-  if (now - lastClock > 1000) { lastClock = now; if (!stateDirty) broadcast({ t: 'clock', day: game.day, hour: game.hour, tt: game.t, speed, vote: vote ? { ...vote, left: Math.ceil((vote.expires - now) / 1000) } : null }); }
+  if (now - lastClock > 1000) { lastClock = now; if (!stateDirty) broadcast({ t: 'clock', day: game.day, hour: game.hour, tt: game.t, speed, flow: flowInfo() }); }
   if (stateDirty) sendState();
 }, 50);
 

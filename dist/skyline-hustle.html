@@ -493,6 +493,7 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .auc-leader .face { border-width: 2px; }
 .profile h2 { text-align: center; margin-bottom: 4px; }
 a.link { color: var(--you); font-size: 13px; text-decoration: underline; cursor: pointer; }
+.speeds button.mine { box-shadow: inset 0 0 0 2px var(--you); opacity: 0.85; }
 
 </style>
 </head>
@@ -8083,7 +8084,7 @@ class UI {
       <div class="row"><button class="btn" data-act="save">💾 Save now</button><button class="btn" data-act="help">❓ How to play</button></div>
       <div class="row"><button class="btn small" data-act="export-save">📤 Export save file</button>${this.app.mp ? '' : '<button class="btn small" data-act="import-save">📂 Load save file</button>'}</div>
       ${this.app.mp ? `<div class="card"><b>📶 LAN game</b><div class="note">${this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
-        Speed changes need everyone's agreement. You can propose once every 60 seconds.</div>
+        Tap a speed to say how fast you'd like to go: the city runs at the slowest player's choice. ⏸ pauses for everyone, for up to a minute.</div>
         ${this.app.mp.host ? '<div class="row"><button class="btn danger small" data-act="end-lan">End the game for everyone</button></div>' : ''}</div>` : ''}
       <div class="row"><button class="btn danger" data-act="quit">🚪 ${this.app.mp ? 'Leave (your company keeps trading)' : 'Quit to title'}</button></div>
       <p class="note"><b>Camera:</b> drag to pan · pinch to zoom · twist two fingers to rotate · drag two fingers up/down to tilt.
@@ -8246,26 +8247,62 @@ class UI {
 
   // ----------------------------------------------------- speed vote ----
   // LAN games: one player proposes a speed, everyone else must agree.
-  voteFrame(mp) {
-    const el = $('vote');
-    const v = mp && mp.vote;
-    if (!v || !this.s) { el.classList.add('hidden'); document.body.classList.remove('voting'); this.voteKey = null; return; }
-    // Rebuild only when the vote itself changes; tick the countdown in place
-    // so the buttons never move under a finger.
-    const key = `${v.id}|${v.yes.length}`;
-    const info = `${v.yes.length}/${v.need.length} agreed · ${Math.max(0, v.left)}s`;
-    if (key === this.voteKey) { const sm = el.querySelector('small'); if (sm) sm.textContent = info; return; }
-    this.voteKey = key;
+  // LAN status bar: who paused, who's holding the speed down, check-ins.
+  flowFrame(mp) {
+    const el = $('vote'), f = mp && mp.flow, s = this.s;
+    const hide = () => { el.classList.add('hidden'); document.body.classList.remove('voting'); this.flowKey = null; };
+    if (!f || !s) return hide();
+    if (!f.check && this.modalKind === 'review') this.hideModal();   // everyone was ready
+    const who = pid => pid === ME ? 'You' : s.players[pid]?.company || '?';
+    let html = '', key = '';
+    if (f.check) {
+      const waiting = f.check.need.filter(pid => !f.check.ready.includes(pid));
+      const me = waiting.includes(ME);
+      key = `c${f.check.day}|${waiting.join()}`;
+      html = `<div class="vote-row"><span>📋 <b>Review</b> <small>waiting for ${waiting.map(pid => pid === ME ? 'you' : who(pid)).map(esc).join(', ') || 'nobody'}</small></span>
+        ${me ? '<span class="vote-btns"><button class="btn small buy" data-act="lan-ready">Ready</button></span>' : ''}</div>`;
+      if (me && this.checkShown !== f.check.day) { this.checkShown = f.check.day; this.weekReview(f.check.day); }
+    } else if (f.pause) {
+      const mine = f.pause.by === ME;
+      key = `p${f.pause.by}|${f.pause.left}`;
+      html = `<div class="vote-row"><span>⏸ <b style="color:${s.players[f.pause.by]?.color}">${esc(who(f.pause.by))}</b> paused <small>back in ${f.pause.left}s</small></span>
+        ${mine ? '<span class="vote-btns"><button class="btn small buy" data-act="lan-pause">Resume</button></span>' : ''}</div>`;
+    } else {
+      const wants = Object.entries(f.wants || {}).map(([pid, v]) => [+pid, v]);
+      const slow = Math.min(...wants.map(w => w[1]));
+      const mineW = f.wants?.[ME] || 1;
+      if (wants.length > 1 && mineW > slow) {
+        const holders = wants.filter(([, v]) => v === slow).map(([pid]) => who(pid));
+        key = `w${slow}|${holders.join()}`;
+        html = `<div class="vote-row"><span>▶ Running at <b>${['', '1×', '2.5×', '6×'][slow]}</b> <small>${holders.map(esc).join(', ')} ${holders.length > 1 ? 'want' : 'wants'} it slower</small></span></div>`;
+      }
+    }
+    if (!html) return hide();
+    if (key === this.flowKey) return;
+    this.flowKey = key;
     document.body.classList.add('voting');
     el.classList.remove('hidden');
-    const who = this.s.players[v.from];
-    const label = v.speed === 0 ? 'pause the game' : `play at ${['', '1×', '2.5×', '6×'][v.speed]}`;
-    const mine = v.from === ME;
-    const asked = v.need.includes(ME) && !v.yes.includes(ME);
-    el.innerHTML = `<div class="vote-row"><span><b style="color:${who.color}">${esc(mine ? 'You' : who.company)}</b> ${mine ? 'proposed' : 'want'} to <b>${label}</b>.
-      <small>${info}</small></span>
-      ${asked ? `<span class="vote-btns"><button class="btn small buy" data-act="vote-yes" data-id="${v.id}">Agree</button><button class="btn small danger" data-act="vote-no" data-id="${v.id}">No</button></span>` : ''}</div>`;
-    if (asked && this.voteBuzz !== v.id) { this.voteBuzz = v.id; sfx.offer(); }
+    el.innerHTML = html;
+  }
+
+  // The weekly summary shown at a LAN check-in.
+  weekReview(day) {
+    const s = this.s, week = Math.max(1, Math.floor((day - 1) / 7));
+    const rows = s.players.map(p => {
+      const w = p.bankrupt ? 0 : netWorth(s, p.id);
+      const prev = p.worthHist?.length > 7 ? p.worthHist[p.worthHist.length - 8] : p.worthHist?.[0] ?? w;
+      const profit = (p.profitHist || []).slice(-7).reduce((a, v) => a + v, 0);
+      return { p, w, d: w - prev, profit };
+    }).sort((a, b) => b.w - a.w);
+    const me = rows.find(r => r.p.id === ME);
+    const alerts = (s.players[ME].inbox?.list || []).filter(a => !a.done && (a.sev === 'bad' || a.sev === 'warn')).slice(0, 3);
+    this.modal(`<h2>📋 ${s.players.length && (day - 1) % 7 === 0 ? `Week ${week} review` : `Day ${day - 1} review`}</h2>
+      ${me ? `<div class="stats"><div class="stat"><small>Your worth</small><b>${money(me.w)}</b></div><div class="stat"><small>Change</small><b class="${cls(me.d)}">${sign(me.d)}</b></div><div class="stat"><small>Profit</small><b class="${cls(me.profit)}">${sign(me.profit)}</b></div></div>` : ''}
+      ${rows.map(({ p, w, d }, i) => `<div class="list-item">${faceHTML(p, 32)}<span class="grow"><b style="color:${p.color}">${i + 1}. ${esc(p.company)}</b><small>${p.human ? (p.id === ME ? 'you' : 'player') : 'rival'}</small></span><span class="amt">${money(w)}<small class="${cls(d)}">${sign(d)}</small></span></div>`).join('')}
+      ${alerts.length ? `<h3>Needs a look</h3>${alerts.map(a => `<p class="note">${a.icon} ${esc(a.title)}</p>`).join('')}` : ''}
+      <p class="note">The clock is stopped until everyone taps Ready.</p>
+      <div class="row"><button class="btn buy wide" data-act="lan-ready">Ready ✓</button></div>`);
+    this.modalKind = 'review';
   }
 
   // -------------------------------------------------------- actions ----
@@ -8402,7 +8439,8 @@ class UI {
       case 'end-lan': this.confirm('End the game for everyone?', 'Everyone goes back to the lobby. The game is saved and can be resumed.', () => this.app.mp?.net.send({ t: 'end' })); return;
       case 'claim': this.app.mp?.net.send({ t: 'claim', pid: +el.dataset.pid }); return;
       case 'accept-offer': case 'decline-offer': case 'view-offer': this.resolveOffer(act, +el.dataset.id); return;
-      case 'vote-yes': case 'vote-no': this.app.mp?.net.send({ t: 'vote', id: +el.dataset.id, yes: act === 'vote-yes' }); sfx.tap(); return;
+      case 'lan-pause': this.app.requestSpeed(0); sfx.tap(); return;
+      case 'lan-ready': this.app.mp?.net.send({ t: 'ready' }); this.hideModal(); sfx.tap(); return;
       case 'modal-ok': this.hideModal(); this._ok && this._ok(); return;
       case 'modal-cancel': this.hideModal(); return;
       case 'keep-playing':
@@ -8542,10 +8580,11 @@ class UI {
     setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 350); }, kind === 'set' || kind === 'tech' || kind === 'goal' ? 4200 : 2800);
   }
   modal(html) {
+    this.modalKind = null;
     $('modal-card').innerHTML = html;
     $('modal').classList.remove('hidden');
   }
-  hideModal() { $('modal').classList.add('hidden'); }
+  hideModal() { $('modal').classList.add('hidden'); this.modalKind = null; }
   modalOpen() { return !$('modal').classList.contains('hidden'); }
   confirm(title, text, ok) {
     this._ok = ok;
@@ -8583,7 +8622,7 @@ __mods.main = (() => {
 //
 // Single-player runs the simulation right here. In a LAN game the server
 // (server.mjs) owns the city: this phone shows the state it receives, sends
-// actions, and proposes speed changes that the other players vote on.
+// actions, and sets the speed it would like (the city runs at the slowest).
 
 const { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, MAPS, eraName } = __mods.data;
 const { createGame, serialize, deserialize, money, netWorth, dayName, yearOf, operating, goalProgress, goalText, raceGoal, setMap, MAP } = __mods.sim;
@@ -8614,7 +8653,7 @@ const app = {
   renderer: null,
   ui: null,
   lastDay: 0,
-  mp: null,                 // LAN session: { net, pid, host, vote, cooldowns, pending, ... }
+  mp: null,                 // LAN session: { net, pid, host, flow, pending, ... }
   citizenCache: new Map(),
   histCache: new Map(),
   histAsked: new Map(),
@@ -8638,24 +8677,28 @@ const app = {
     });
   },
 
-  // Speed buttons: instant in single-player, a proposal in LAN games.
+  // Speed buttons: instant in single-player. In LAN games ⏸ pauses for
+  // everyone at once, and the others set the speed you'd like: the city runs
+  // at the slowest player's choice.
   requestSpeed(i) {
     if (!this.mp) return this.setSpeed(i);
-    this.mp.net.send({ t: 'speed', speed: i });
+    if (i === 0 || (this.mp.flow?.pause && this.mp.flow.pause.by === getMe())) this.mp.net.send({ t: 'pause' });
+    if (i > 0) { this.mp.net.send({ t: 'want', speed: i }); (this.mp.flow ||= { wants: {} }).wants[getMe()] = i; this.speedButtons(); }
   },
   setSpeed(i) {
     this.speed = i;
     this.speedButtons();
   },
   speedButtons() {
-    const cd = this.mp ? (this.mp.cooldowns[getMe()] || 0) : 0;
-    const voting = this.mp?.vote;
+    const want = this.mp ? this.mp.flow?.wants?.[getMe()] || 1 : this.speed;
+    const pause = this.mp?.flow?.pause;
     document.querySelectorAll('#speeds button').forEach(b => {
-      b.classList.toggle('on', +b.dataset.speed === this.speed);
-      b.classList.toggle('wait', !!(cd || voting) && +b.dataset.speed !== this.speed);
+      const v = +b.dataset.speed;
+      b.classList.toggle('on', v === this.speed);
+      b.classList.toggle('mine', !!this.mp && v === want && v !== this.speed);
     });
-    $('speed-cd').textContent = cd ? `${cd}s` : '';
-    $('speed-cd').classList.toggle('hidden', !cd);
+    $('speed-cd').textContent = pause ? `${pause.left}s` : '';
+    $('speed-cd').classList.toggle('hidden', !pause);
   },
   pauseFor(why) { this.holds.add(why); },
   resume(why) { this.holds.delete(why); },
@@ -8834,7 +8877,7 @@ function joinLan() {
   localStorage.setItem('skyline-company', company);
   localStorage.setItem('skyline-name', name);
   const mp = {
-    net: null, pid: -1, host: false, vote: null, cooldowns: {}, pending: new Map(), seq: 0,
+    net: null, pid: -1, host: false, flow: null, pending: new Map(), seq: 0,
     lobby: null, seats: [], addresses: app.lan?.addresses || [], lastState: 0,
   };
   app.mp = mp;
@@ -8875,8 +8918,9 @@ function onNet(m) {
     case 'clock':
       if (app.s && app.s.day === m.day && app.s.hour === m.hour) app.s.t = Math.max(app.s.t, m.tt);
       if (m.speed !== app.speed) app.setSpeed(m.speed);
-      mp.vote = m.vote;
-      app.ui.voteFrame(mp);
+      mp.flow = m.flow;
+      app.ui.flowFrame(mp);
+      app.speedButtons();
       break;
     case 'result': {
       const r = mp.pending.get(m.id);
@@ -8900,8 +8944,7 @@ function applyState(m) {
   const prev = app.s;
   const s = m.s;
   s.cz = { list: [], trips: m.trips, visitsToday: 0 };
-  mp.vote = m.vote;
-  mp.cooldowns = m.cooldowns || {};
+  mp.flow = m.flow;
   mp.seatInfo = m.seats;
   if (s.mapId && s.mapId !== MAP.id) { setMap(s.mapId); app.renderer.setCity(); }
   app.s = s;
@@ -8912,7 +8955,7 @@ function applyState(m) {
   }
   if (m.speed !== app.speed) app.setSpeed(m.speed);
   app.speedButtons();
-  app.ui.voteFrame(mp);
+  app.ui.flowFrame(mp);
   // Did the clock move?
   const steps = prev ? (s.day - prev.day) * 24 + (s.hour - prev.hour) : 0;
   if (steps > 0) app.afterHour(steps);
@@ -8937,6 +8980,8 @@ function renderLobby() {
       <p class="note">${esc(sc.blurb)}</p>
       <div class="seg wrap" id="lob-map">${Object.entries(MAPS).map(([k, v]) => `<button data-v="${k}" class="${k === (L.settings.map || 'town') ? 'on' : ''}">${v.name}<small>${v.cols * v.rows - v.parks - v.transit - v.utility} blocks</small></button>`).join('')}</div>
       <p class="note">${esc(MAPS[L.settings.map || 'town'].blurb)}</p>
+      <div class="seg" id="lob-check">${[['off', 'No check-ins'], ['weekly', 'Weekly review'], ['daily', 'Daily review']].map(([k, n]) => `<button data-v="${k}" class="${k === (L.settings.checkpoint || 'weekly') ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <p class="note">Speed: everyone picks the speed they'd like and the city runs at the slowest. Anyone can pause (up to ${60}s at a time). Reviews stop the clock for a summary until everyone taps Ready.</p>
       <div class="seg" id="lob-diff">${[['easy', 'Relaxed'], ['normal', 'Sharp'], ['hard', 'Ruthless']].map(([k, n]) => `<button data-v="${k}" class="${k === L.settings.difficulty ? 'on' : ''}">${n}</button>`).join('')}</div>
       <div class="row"><button class="btn go wide" id="lob-start">Start game for everyone</button></div>
       ${L.canResume ? '<div class="row"><button class="btn wide" id="lob-resume">Resume the saved LAN game</button></div>' : ''}`
@@ -8944,6 +8989,7 @@ function renderLobby() {
     <div class="row"><button class="btn small" id="lob-leave">Back to title</button></div>`;
   const bind = (sel, fn) => document.querySelectorAll(sel).forEach(b => b.addEventListener('click', () => { sfx.tap(); fn(b); }));
   bind('#lob-scenario button', b => mp.net.send({ t: 'setup', scenario: b.dataset.v }));
+  bind('#lob-check button', b => mp.net.send({ t: 'setup', checkpoint: b.dataset.v }));
   bind('#lob-map button', b => mp.net.send({ t: 'setup', map: b.dataset.v }));
   bind('#lob-diff button', b => mp.net.send({ t: 'setup', difficulty: b.dataset.v }));
   bind('#lob-start', () => mp.net.send({ t: 'start' }));
@@ -8978,8 +9024,7 @@ function frame(now) {
       if (s.auction) app.ui.auctionFrame();
       if (now > cdAt) {
         cdAt = now + 1000;
-        for (const k in app.mp.cooldowns) if (--app.mp.cooldowns[k] <= 0) delete app.mp.cooldowns[k];
-        if (app.mp.vote) { app.mp.vote.left--; app.ui.voteFrame(app.mp); }
+        if (app.mp.flow?.pause) { app.mp.flow.pause.left = Math.max(0, app.mp.flow.pause.left - 1); app.ui.flowFrame(app.mp); }
         app.speedButtons();
       }
     } else if (s.auction) {

@@ -24,11 +24,15 @@ Everyone opens the address the server prints, enters a name and taps
 map and difficulty. The server runs the one shared city: everyone bids in the
 same live auctions, rents your land, and competes for the same customers.
 
-- **Shared speed, by agreement.** Tapping a speed button (pause included)
-  *proposes* it. Every other connected player gets a banner with **Agree / No**
-  and has 20 seconds to answer. One "no", or silence, cancels it. After
-  proposing you must wait **60 seconds** before proposing again (this stops
-  anyone spamming requests). Playing alone on the server? Changes apply instantly.
+- **Speed without voting.** Each player taps the speed they'd like, and the
+  city runs at the **slowest** choice. A banner shows who is holding it down.
+  To go faster, everyone taps faster.
+- **Pause any time.** ⏸ stops the clock for everyone at once. It carries on
+  when the same player unpauses, or by itself after **60 seconds**.
+- **Reviews (host setting: off, weekly or daily).** At the end of each week
+  (or day) the clock stops and everyone sees a summary: net worth, change,
+  profit, standings, anything urgent. Play carries on when everyone has
+  tapped **Ready**. Disconnected players are not waited for.
 - **Auctions** pause everyone's clock. When every player who isn't leading
   has tapped *Pass*, the rivals settle it at once.
 - **Offers** from rivals don't pause the shared game; they wait until they expire.
