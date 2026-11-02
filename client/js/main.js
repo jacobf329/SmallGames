@@ -5,6 +5,8 @@ import { Track, laneX, laneCount } from '/shared/track.js';
 import { createPlayer, resetForRace, stepPlayer } from '/shared/physics.js';
 import { ITEM_META } from '/shared/items.js';
 import { Net } from './net.js';
+import { Host, LocalTransport, RtcTransport, normCode, onlineSupported } from './rtc.js';
+import { createRaceServer } from '/shared/session.js';
 import { Input } from './input.js';
 import { Renderer } from './render.js';
 import { Sfx } from './audio.js';
@@ -55,6 +57,83 @@ $('#btn-join').addEventListener('click', () => {
   net.send({ t: 'join', name, room });
   $('#btn-join').disabled = true;
 });
+
+// ============================== online ===================================
+// Host: this phone runs the race (shared/session.js) and friends connect to
+// it with a room code. Practice is the same with nobody invited.
+const myName = () => { const n = $('#in-name').value.trim() || 'Runner'; localStorage.setItem('ts.name', n); return n; };
+let hostSession = null, raceLoop = null;
+
+async function hostRace(practice) {
+  sfx.resume();
+  const name = myName();
+  $('#connect-status').textContent = practice ? 'starting practice…' : 'getting a room code…';
+  let code = 'SOLO', server = null;
+  if (!practice) {
+    hostSession = new Host({ connect: (conn) => server.connect(conn) }, { name });
+    try { code = await hostSession.start(); }
+    catch { $('#connect-status').textContent = "Couldn't create a room: check your internet connection."; hostSession = null; return; }
+  }
+  server = createRaceServer({ fixedRoom: code });
+  let last = performance.now();
+  raceLoop = setInterval(() => { const now = performance.now(); server.tick((now - last) / 1000); last = now; }, 1000 / C.TICK_RATE);
+  G.name = name; G.room = code; G.hosting = !practice; G.practice = practice; G.autoJoin = true;
+  net.close();
+  net.useTransport(new LocalTransport(server));
+  net.connect();
+  try { G.wake = await navigator.wakeLock?.request('screen'); } catch { /* not supported */ }
+}
+
+const STAGES = { finding: 'finding the race…', gathering: 'working out how to reach the host…', waiting: "waiting for the host's phone to answer…",
+  linking: 'connecting to the host…', online: 'connected!', retrying: 'trying again…' };
+let guest = null;
+function joinOnline() {
+  sfx.resume();
+  const code = normCode($('#in-code').value);
+  if (code.length !== 4) { $('#connect-status').textContent = 'Race codes have 4 letters.'; return; }
+  const name = myName();
+  G.name = name; G.room = code; G.autoJoin = true;
+  $('#btn-joinretry').classList.add('hidden');
+  guest = new RtcTransport(code, name, (stage, diag) => {
+    const st = $('#connect-status');
+    if (stage === 'noroom') { st.textContent = `No race with the code ${code}. Check it with the host.`; return; }
+    if (stage === 'blocked') {
+      st.innerHTML = "Couldn't reach the host's phone. Make sure the host still has the race open on screen, then try again. Same wifi as the host always works." +
+        (diag ? `<br><small style="opacity:.6">you: ${(diag.mine || []).join(', ') || 'none'}${diag.host ? ` · host: ${diag.host.join(', ')}` : ''}</small>` : '');
+      $('#btn-joinretry').classList.remove('hidden');
+      return;
+    }
+    st.textContent = STAGES[stage] || 'connecting…';
+  });
+  net.close();
+  net.useTransport(guest);
+  net.connect();
+}
+$('#btn-host').addEventListener('click', () => hostRace(false));
+$('#btn-practice').addEventListener('click', () => hostRace(true));
+$('#btn-code').addEventListener('click', joinOnline);
+$('#btn-joinretry').addEventListener('click', () => { $('#btn-joinretry').classList.add('hidden'); net.close(); joinOnline(); });
+$('#in-code').addEventListener('input', (e) => { e.target.value = normCode(e.target.value); });
+const joinParam = new URLSearchParams(location.search).get('join');
+if (joinParam) $('#in-code').value = normCode(joinParam);
+if (!onlineSupported()) { $('#btn-host').classList.add('hidden'); $('#btn-code').parentElement.classList.add('hidden'); }
+
+$('#btn-share').addEventListener('click', async () => {
+  const url = `${location.origin}${location.pathname}?join=${G.room}`;
+  try {
+    if (navigator.share) await navigator.share({ title: 'Turbo Surfers', text: `Race me in Turbo Surfers: code ${G.room}`, url });
+    else { await navigator.clipboard.writeText(url); $('#btn-share').textContent = 'LINK COPIED'; }
+  } catch { /* cancelled */ }
+});
+$('#btn-leave').addEventListener('click', async (e) => {
+  e.preventDefault();
+  net.close();
+  if (raceLoop) clearInterval(raceLoop);
+  try { await hostSession?.stop(); } catch { /* offline */ }
+  G.wake?.release?.();
+  location.href = location.pathname;
+});
+window.addEventListener('pagehide', () => { hostSession?.stop(); });
 $('#in-room').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
 $('#btn-retry').addEventListener('click', () => net.connect());
 
@@ -86,7 +165,9 @@ function segment(sel, fn) {
 function renderLobby() {
   const L = G.lobby;
   if (!L) return;
-  $('#lobby-code').textContent = L.code;
+  $('#lobby-code').textContent = G.practice ? 'PRACTICE' : L.code;
+  $('#online-host').classList.toggle('hidden', !G.hosting);
+  $('#share-code').textContent = L.code;
   $('#lobby-count').textContent = `${L.players.length} / ${L.max}`;
   G.isHost = L.host === G.id;
 
@@ -135,10 +216,12 @@ net.on('open', () => {
   $('#connect-status').textContent = 'connected';
   $('#disconnected').classList.add('hidden');
   $('#btn-join').disabled = false;
-  if (G.id && G.name) net.send({ t: 'join', name: G.name, room: G.room });   // re-join after a drop
+  if ((G.id || G.autoJoin) && G.name) net.send({ t: 'join', name: G.name, room: G.room });   // first join online, or re-join after a drop
+  G.autoJoin = false;
 });
 net.on('close', () => {
-  $('#connect-status').textContent = 'server not reachable — retrying…';
+  if (net.transport && !G.id) return;          // online joining reports its own progress
+  $('#connect-status').textContent = net.transport ? 'connection lost: reconnecting…' : 'server not reachable — retrying…';
   if (G.state !== 'lobby' || G.id) $('#disconnected').classList.remove('hidden');
 });
 net.on('hello', (m) => {
@@ -147,8 +230,9 @@ net.on('hello', (m) => {
 });
 net.on('joined', (m) => {
   G.id = m.id; G.room = m.room; G.name = m.name;
-  location.hash = m.room;
+  if (!net.transport) location.hash = m.room;
   show('screen-lobby');
+  if (G.practice && !G.botsSet) { G.botsSet = true; net.send({ t: 'setup', bots: 7 }); net.send({ t: 'ready', v: true }); }
 });
 net.on('error', (m) => {
   $('#connect-status').textContent = m.msg;
@@ -628,6 +712,13 @@ function showResults(m) {
 // ================================ boot ===================================
 window.__TS = { G, net, renderer, sfx };     // handy for debugging from the console
 show('screen-connect');
-net.connect();
+// From the Turbo Surfers LAN server, also offer the wifi race; on a plain web
+// page (jteef.com/play) there's no server, only online and practice.
+(window.TS_WEB ? Promise.resolve(null) : fetch('/api/health', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)).then(info => {
+  if (!info?.ok) return;
+  $('#lan-box').classList.remove('hidden');
+  $('#connect-status').textContent = 'connecting…';
+  net.connect();
+});
 document.addEventListener('visibilitychange', () => { if (!document.hidden) sfx.resume(); });
 window.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });

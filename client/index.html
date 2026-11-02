@@ -26,14 +26,26 @@
       <input id="in-name" maxlength="14" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Runner">
     </label>
 
-    <label class="field">
-      <span>Race code <em>(share it, or leave as MAIN)</em></span>
-      <input id="in-room" maxlength="6" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="MAIN">
-    </label>
+    <!-- Online: the host's phone runs the race; friends join with a code. -->
+    <div id="online-box">
+      <button id="btn-host" class="btn big">HOST ONLINE RACE</button>
+      <div class="join-row">
+        <input id="in-code" maxlength="4" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" placeholder="CODE">
+        <button id="btn-code" class="btn">JOIN</button>
+      </div>
+      <button id="btn-practice" class="btn ghost">PRACTICE VS BOTS</button>
+    </div>
 
-    <button id="btn-join" class="btn big">JOIN RACE</button>
-    <p id="connect-status" class="status">connecting…</p>
-    <p class="status"><a href="/solo.html" style="color:var(--neon);font-weight:700">Practice offline against bots →</a></p>
+    <!-- LAN: shown when the page comes from the Turbo Surfers server. -->
+    <div id="lan-box" class="hidden">
+      <label class="field">
+        <span>Race code <em>(share it, or leave as MAIN)</em></span>
+        <input id="in-room" maxlength="6" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="MAIN">
+      </label>
+      <button id="btn-join" class="btn big">JOIN WIFI RACE</button>
+    </div>
+    <p id="connect-status" class="status"></p>
+    <button id="btn-joinretry" class="btn hidden">TRY AGAIN</button>
     <div id="join-urls" class="urls"></div>
   </div>
 </section>
@@ -44,6 +56,10 @@
     <div class="lobby-head">
       <h2>RACE <span id="lobby-code">MAIN</span></h2>
       <div id="lobby-count" class="pill">0 / 12</div>
+    </div>
+    <div id="online-host" class="online-host hidden">
+      <p>Friends open this page and enter <b id="share-code"></b> under JOIN. Keep this screen on: your phone runs the race.</p>
+      <button id="btn-share" class="btn small">SHARE INVITE LINK</button>
     </div>
 
     <div id="player-grid" class="player-grid"></div>
@@ -85,6 +101,7 @@
     </div>
     <p id="lobby-hint" class="status">Waiting for the host to start…</p>
     <div id="lobby-urls" class="urls"></div>
+    <p class="status"><a href="#" id="btn-leave" style="color:var(--neon);font-weight:700">Leave</a></p>
 
     <details class="howto">
       <summary>How to play</summary>

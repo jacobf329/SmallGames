@@ -274,3 +274,14 @@ html, body {
   .item-slot span { font-size: 26px; }
   .place-box b { font-size: 24px; }
 }
+
+/* ------------------------------------------------------------ online -- */
+#online-box { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.join-row { display: flex; gap: 8px; }
+.join-row input { flex: 1; min-width: 0; text-align: center; font: 800 22px/1 system-ui, sans-serif; letter-spacing: .3em; text-transform: uppercase;
+  background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); border-radius: 12px; color: inherit; padding: 12px; }
+.btn.ghost { background: transparent; border: 1px solid rgba(255,255,255,.25); }
+#lan-box { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.1); }
+.online-host { margin: 8px 0 12px; padding: 10px 12px; border-radius: 12px; background: rgba(0,255,200,.07); border: 1px solid rgba(0,255,200,.25); font-size: 14px; }
+.online-host p { margin: 0 0 8px; }
+.online-host b { letter-spacing: .15em; }

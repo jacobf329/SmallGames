@@ -52,6 +52,25 @@ PORT=3000 node server/index.js
 npm start
 ```
 
+## Play online, no server needed
+
+`node tools/bundle-web.mjs` builds the whole game into one file
+(`dist/turbo-surfers.html`) that runs from any static web host, e.g.
+**jteef.com/play/turbo**. On that page:
+
+- **Host online race** gives you a four-letter code and a share link. Your
+  phone runs the race (the same `shared/session.js` the LAN server runs), so
+  keep the screen on while you host.
+- Friends type the code and tap **Join**: their phones connect straight to
+  yours over WebRTC. A tiny Firestore mailbox (`gameRooms/{CODE}`, shared with
+  Skyline Hustle) only swaps connection details while someone joins, and is
+  cleaned up when the host leaves.
+- **Practice vs bots** runs a race against seven bots with no network at all.
+
+Same wifi always works; most home internet does too. A few strict networks
+(some mobile data, work wifi) can't connect phone to phone, and there is no
+paid relay server to fall back on.
+
 ## Play solo first
 
 Want to try the feel before rounding up twelve people?
@@ -118,6 +137,7 @@ server/
   index.js    HTTP static server + room manager + 60 Hz simulation loop
   ws.js       RFC-6455 WebSocket server written from scratch (no deps)
 shared/       imported by BOTH the server and the browser
+  session.js    rooms, messages and the race loop (LAN server and online host)
   constants.js  every tuning number
   rng.js        seeded RNG (mulberry32)
   track.js      deterministic procedural track: obstacles, coins, shortcuts
@@ -127,6 +147,7 @@ shared/       imported by BOTH the server and the browser
   bots.js       AI runners; they send the same inputs a phone does
 tools/
   bundle.mjs    inlines practice mode into one standalone HTML file
+  bundle-web.mjs  the full game (online + practice) as one HTML file
 client/
   index.html  connect / lobby / race / results screens
   solo.html   offline practice mode against bots
@@ -135,7 +156,9 @@ client/
   js/solo.js  drives a Room locally for offline practice
   js/render.js pseudo-3D canvas renderer
   js/input.js  swipe + keyboard
-  js/net.js    WebSocket with auto-reconnect and latency estimate
+  js/net.js    connection with auto-reconnect and latency estimate; WebSocket
+               on LAN, or an online transport from rtc.js
+  js/rtc.js    online play: room codes, Firestore mailbox, WebRTC host/guest
   js/audio.js  synthesised sound effects (no audio assets)
 ```
 
