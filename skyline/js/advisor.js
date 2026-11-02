@@ -259,6 +259,26 @@ function supplyAlerts(s, pid, out) {
   }
 }
 
+// The stock market: someone buying into you, or a takeover within reach.
+function stockAlerts(s, pid, out) {
+  if (!s.shares?.[pid]) return;
+  const tot = s.shares[pid].total || 1000;
+  for (const [k, n] of Object.entries(s.shares[pid].holders)) {
+    const h = +k;
+    if (h < 0 || h === pid || n / tot < 0.2) continue;
+    const pct = n / tot, fl = s.shares[pid].holders[-1] || 0;
+    out.push({ key: `stake:${h}`, cat: 'rivals', sev: pct + fl / tot > 0.5 ? 'bad' : 'warn', icon: '📈', title: `${s.players[h].company} owns ${Math.round(pct * 100)}% of you`,
+      text: `${fl ? `${fl} of your shares are on the market. ` : ''}Above 50% they take over everything you own. Buy back shares in the Bank tab.`, tab: 'bank' });
+  }
+  for (const [tid, st] of Object.entries(s.shares)) {
+    const t = +tid, mine = st.holders[pid] || 0, tot2 = st.total || 1000;
+    if (t === pid || s.players[t].bankrupt || mine / tot2 < 0.3) continue;
+    const need = Math.floor(tot2 / 2) + 1 - mine;
+    if ((st.holders[-1] || 0) >= need) out.push({ key: `bid:${t}`, cat: 'tips', sev: 'good', icon: '🏦', title: `${s.players[t].company} is within reach`,
+      text: `You own ${Math.round(mine / tot2 * 100)}%. Buy ${need} more shares (about ${money(need * st.price)}) to take it over.`, tab: 'bank' });
+  }
+}
+
 // ------------------------------------------------------------ events ----
 // One-off things: new shop types, a rival muscling in, staff walking out.
 function eventAlerts(s, pid, inbox, add) {
@@ -317,6 +337,7 @@ export function advise(s) {
     goalAlerts(s, pid, out);
     civicAlerts(s, pid, out);
     supplyAlerts(s, pid, out);
+    stockAlerts(s, pid, out);
     for (const a of out) if (!inbox.mute[a.cat] || a.sev === 'bad') add(a);
     const live = new Set(out.map(a => a.key));
     for (const a of inbox.list) {

@@ -494,6 +494,10 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .profile h2 { text-align: center; margin-bottom: 4px; }
 a.link { color: var(--you); font-size: 13px; text-decoration: underline; cursor: pointer; }
 .speeds button.mine { box-shadow: inset 0 0 0 2px var(--you); opacity: 0.85; }
+.card.stock .face { margin-right: 6px; }
+.own-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 6px; background: #ffffff12; }
+.own-bar i { display: block; height: 100%; }
+.card.stock .grow b, .card.stock .grow small { display: block; } .card.stock .amt small { display: block; }
 
 </style>
 </head>
@@ -2028,7 +2032,7 @@ const LEDGER_LABELS = {
   rentIn: 'Ground rent received', overhead: 'Overheads & bills', fares: 'Station fares',
   utility: 'Utility income', aptRent: 'Apartment rents', interest: 'Loan interest',
   landmarks: 'Landmarks', projects: 'City contracts & grants', wholesale: 'Wholesale sales', production: 'Supplier running costs',
-  trade: 'Land trades', capex: 'Building & land',
+  dividends: 'Dividends', trade: 'Land & share trades', capex: 'Building & land',
 };
 
 // Chains buy stock in bulk: the discount for a chain of n shops.
@@ -2110,9 +2114,22 @@ function playerAssets(s, pid) {
   }
   return { land, biz, apt, total: land + biz + apt };
 }
-function netWorth(s, pid) {
+// Shares: every company has SHARES of them. Until it sells some, its founder
+// owns them all. A player's net worth is their stake in their own company
+// (which includes any shares it holds in others).
+const SHARES = 1000;
+function holdingsValue(s, pid) {
+  let v = 0;
+  if (s.shares) for (const [tid, st] of Object.entries(s.shares)) if (+tid !== pid && !s.players[+tid].bankrupt) v += (st.holders[pid] || 0) * st.price;
+  return v;
+}
+function companyValue(s, pid) {
   const p = s.players[pid];
-  return Math.round(p.cash - p.loan + playerAssets(s, pid).total);
+  return p.cash - p.loan + playerAssets(s, pid).total + holdingsValue(s, pid);
+}
+const ownStake = (s, pid) => (s.shares?.[pid] ? (s.shares[pid].holders[pid] ?? SHARES) / (s.shares[pid].total || SHARES) : 1);
+function netWorth(s, pid) {
+  return Math.round(companyValue(s, pid) * ownStake(s, pid));
 }
 function loanLimit(s, pid) {
   const cap = Math.floor(playerAssets(s, pid).total * LOAN_LTV / LOAN_STEP) * LOAN_STEP;
@@ -2587,7 +2604,10 @@ function checkGoals(s) {
 function checkEnd(s) {
   const sc = SCENARIOS[s.scenario];
   const people = humans(s);
-  if (people.every(p => p.bankrupt)) return finish(s, -1, people.length > 1 ? 'Every player went bankrupt.' : 'You went bankrupt.');
+  if (people.every(p => p.bankrupt)) {
+    const by = people.length === 1 && people[0].takenBy != null ? s.players[people[0].takenBy] : null;
+    return finish(s, by ? by.id : -1, by ? `${by.company} took over your company.` : people.length > 1 ? 'Every player went bankrupt.' : 'You went bankrupt.');
+  }
   if (s.freePlay) return;              // after "keep playing": no more deadlines
   const alive = s.players.filter(p => !p.bankrupt);
   if (alive.length === 1 && sc.mode === 'race') return finish(s, alive[0].id, 'Every rival has gone bust.');
@@ -2606,7 +2626,8 @@ function continueGame(s) {
   s.freePlay = true;
   for (const p of s.players) {
     if (!p.human || !p.bankrupt) continue;
-    p.bankrupt = false; p.cash = Math.round(START_CASH / 2); p.loan = 0; p.debtDays = 0;
+    p.bankrupt = false; p.cash = Math.round(START_CASH / 2); p.loan = 0; p.debtDays = 0; delete p.takenBy;
+    if (s.shares) delete s.shares[p.id];     // a fresh company, wholly yours
     news(s, `${p.company} is back in business with fresh backing of ${money(p.cash)}.`, 'info', p.id);
   }
   news(s, 'The game goes on in free play. Build whatever you like.', 'info');
@@ -3122,7 +3143,7 @@ function claimGrant(s, pid, type, d, cost) {
   return amt;
 }
 
-return { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars, setMap, createGame, news, bizLabel, ledger, LEDGER_LABELS, chainBulk, marketIdx, goodsUnit, hooks, canTech, lockedLot, operating, dayName, districtStats, parkStars, landValue, setCount, ownsSet, setsOwned, rentFor, aptCost, aptRentFor, bizValue, playerAssets, netWorth, loanLimit, districtPopulation, allocate, newBizConfig, estimate, utilityPools, utilityIncome, billFor, stepHour, bizBook, BIZ_LEDGER, HISTORY_DAYS, deliver, autoTarget, runHour, bankrupt, goalProgress, goalText, humans, continueGame, raceGoal, grantLand, petition, nextAuctionSlot, sellLand, canBuild, build, buildCost, sellBusiness, setPrice, setStaff, hireStaff, fireStaff, trainStaff, trainCost, raiseStaff, setRole, floorCost, addFloor, promoCost, startPromo, parkSlots, canLandscape, buildPark, buyoutPrice, buyout, survey, setHours, setStock, rushDelivery, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize, claimGrant };
+return { MAP, rand, yearOf, techOf, capacity, bizOpen, blockStars, setMap, createGame, news, bizLabel, ledger, LEDGER_LABELS, chainBulk, marketIdx, goodsUnit, hooks, canTech, lockedLot, operating, dayName, districtStats, parkStars, landValue, setCount, ownsSet, setsOwned, rentFor, aptCost, aptRentFor, bizValue, playerAssets, SHARES, holdingsValue, companyValue, ownStake, netWorth, loanLimit, districtPopulation, allocate, newBizConfig, estimate, utilityPools, utilityIncome, billFor, stepHour, bizBook, BIZ_LEDGER, HISTORY_DAYS, deliver, autoTarget, runHour, bankrupt, goalProgress, goalText, humans, checkEnd, continueGame, raceGoal, grantLand, petition, nextAuctionSlot, sellLand, canBuild, build, buildCost, sellBusiness, setPrice, setStaff, hireStaff, fireStaff, trainStaff, trainCost, raiseStaff, setRole, floorCost, addFloor, promoCost, startPromo, parkSlots, canLandscape, buildPark, buyoutPrice, buyout, survey, setHours, setStock, rushDelivery, fitCost, upgradeFit, aptCheck, buildApt, sellApt, askingPrice, transfer, makeOffer, acceptOffer, declineOffer, takeLoan, repayLoan, money, serialize, deserialize, claimGrant };
 })();
 
 /* ===== ai.js ===== */
@@ -3848,6 +3869,226 @@ function supplyHour(s) {
 return { suppliers, capOf, spare, supplierName, buyGoods, quote, lineDemand, supplierCost, buildSupplier, upgradeSupplier, priceSupplier, closeSupplier, setBuyRival, supplyHour };
 })();
 
+/* ===== stocks.js ===== */
+__mods.stocks = (() => {
+// Skyline Hustle - the stock market.
+//
+// Every company starts with 1,000 shares, all held by its founder. Issuing
+// new shares raises cash; they go to the open market, where anyone can buy
+// them (your stake shrinks, the cash makes up for it). Buying them back
+// retires them. Prices follow each company's
+// value and recent profits, plus a little market mood, and big trades move
+// them. A slice of each day's profit is paid out as dividends. Hold more
+// than half of a company and you take it over: its land, shops, suppliers,
+// cash and debts become yours, and other shareholders are bought out.
+// DOM-free: runs on the server in LAN games.
+
+const { rand, ledger, news, money, SHARES, companyValue, operating, checkEnd } = __mods.sim;
+
+const fail = msg => ({ ok: false, msg });
+const MARKET = -1;
+const IMPACT = 0.0002;           // price moves 0.02% per share traded
+const DIVIDEND = 0.12;           // share of a day's operating profit paid out
+const totalOf = (s, t) => market(s)[t].total || SHARES;
+const pctOf = (s, owner, t) => holding(s, owner, t) / totalOf(s, t);
+const LOTS = [10, 50, 100];
+
+function market(s) {
+  s.shares ||= {};
+  for (const p of s.players) {
+    if (!s.shares[p.id]) {
+      const price = Math.max(1, fundamental(s, p.id));
+      s.shares[p.id] = { holders: { [p.id]: SHARES }, total: SHARES, price, hist: [price], mood: 1, open: price };
+    }
+  }
+  return s.shares;
+}
+const holding = (s, owner, target) => market(s)[target].holders[owner] || 0;
+const float = (s, target) => market(s)[target].holders[MARKET] || 0;
+const stakeOf = (s, target) => Object.entries(market(s)[target].holders).filter(([k, n]) => n > 0).map(([k, n]) => [+k, n]).sort((a, b) => b[1] - a[1]);
+
+// What a share "should" be worth: book value plus a few weeks of profit.
+function fundamental(s, pid) {
+  const p = s.players[pid];
+  if (p.bankrupt) return 0;
+  const recent = (p.profitHist || []).slice(-7);
+  const earn = recent.length ? recent.reduce((a, v) => a + v, 0) / recent.length : 0;
+  return Math.max(1, (companyValue(s, pid) + 14 * earn) / (s.shares?.[pid]?.total || SHARES));
+}
+
+// Before a trade, the price catches up with the company's value today, so
+// nobody trades on yesterday's numbers.
+function refresh(s, t) {
+  const st = s.shares[t];
+  st.price = Math.max(0.5, (st.price + fundamental(s, t) * (st.mood || 1)) / 2);
+}
+// Average price of a block of n shares, given the impact of the trade.
+const fill = (price, n, dir) => price * (1 + dir * IMPACT * n / 2);
+
+// ------------------------------------------------------------- trading ----
+function buyShares(s, pid, target, n) {
+  market(s);
+  const p = s.players[pid], t = s.players[target], st = s.shares[target];
+  n = Math.floor(n);
+  if (!t || t.bankrupt || n <= 0) return fail('Nothing to buy.');
+  refresh(s, target);
+  const avail = st.holders[MARKET] || 0;
+  if (!avail) return fail(target === pid ? 'None of your shares are on the market.' : `${t.company} has no shares on the market. They have to sell some first.`);
+  n = Math.min(n, avail);
+  const cost = Math.round(fill(st.price, n, 1) * n);
+  if (p.cash < cost) return fail(`Need ${money(cost)}.`);
+  ledger(p, 'trade', -cost);
+  st.holders[MARKET] -= n;
+  st.holders[pid] = (st.holders[pid] || 0) + n;
+  st.price = st.price * (1 + IMPACT * n);
+  if (pid === target) {
+    // A buy-back retires the shares.
+    st.holders[pid] -= n; st.total = (st.total || SHARES) - n;
+    return { ok: true, msg: `Bought back and retired ${n} shares for ${money(cost)}. You own ${Math.round(st.holders[pid] / st.total * 100)}% of your company.` };
+  }
+  const pct = st.holders[pid] / (st.total || SHARES);
+  if (pct > 0.5) return takeover(s, pid, target);
+  if (t.human && pct >= 0.25 && (st.holders[pid] - n) / (st.total || SHARES) < 0.25) news(s, `${p.company} now owns ${Math.round(pct * 100)}% of ${t.company}.`, 'warn', target);
+  return { ok: true, msg: `Bought ${n} ${t.company} shares for ${money(cost)} (${Math.round(pct * 100)}%).` };
+}
+
+// Selling another company's shares, or issuing new shares of your own.
+function sellShares(s, pid, target, n) {
+  market(s);
+  const p = s.players[pid], t = s.players[target], st = s.shares[target];
+  if (!t || t.bankrupt) return fail('No shares to sell.');
+  n = Math.floor(n);
+  refresh(s, target);
+  if (pid === target) {
+    // Issue: never let your own stake fall below 10%.
+    n = Math.min(n, st.holders[pid] * 10 - (st.total || SHARES));
+    if (n <= 0) return fail('Keep at least 10% of your own company.');
+    const got = Math.round(fill(st.price, n, -1) * n);
+    ledger(p, 'trade', got);
+    st.total = (st.total || SHARES) + n;
+    st.holders[MARKET] = (st.holders[MARKET] || 0) + n;
+    st.price = Math.max(0.5, st.price * (1 - IMPACT * n));
+    const own = st.holders[pid] / st.total;
+    news(s, `${p.company} issued ${n} new shares and raised ${money(got)}.`, 'deal', pid);
+    return { ok: true, msg: `Raised ${money(got)}. You now own ${Math.round(own * 100)}% of your company${own <= 0.55 ? ': careful, above 50% someone can take you over' : ''}.` };
+  }
+  n = Math.min(n, st.holders[pid] || 0);
+  if (n <= 0) return fail('No shares to sell.');
+  const got = Math.round(fill(st.price, n, -1) * n);
+  ledger(p, 'trade', got);
+  st.holders[pid] -= n;
+  st.holders[MARKET] = (st.holders[MARKET] || 0) + n;
+  st.price = Math.max(0.5, st.price * (1 - IMPACT * n));
+  return { ok: true, msg: `Sold ${n} shares for ${money(got)}.` };
+}
+
+// ------------------------------------------------------------ takeover ----
+function takeover(s, pid, target) {
+  const A = s.players[pid], B = s.players[target], st = s.shares[target];
+  const price = st.price;
+  // Everyone else holding B is bought out at the market price.
+  for (const [k, n] of Object.entries(st.holders)) {
+    const h = +k;
+    if (h === pid || h === MARKET || h === target || n <= 0) continue;
+    const pay = Math.round(n * price);
+    ledger(A, 'trade', -pay);
+    ledger(s.players[h], 'trade', pay);
+  }
+  // B's empire becomes A's.
+  for (const l of s.lots) {
+    if (l.owner === target) l.owner = pid;
+    if (l.business?.owner === target) l.business.owner = pid;
+    if (l.supplier?.owner === target) l.supplier.owner = pid;
+  }
+  for (const b of s.lmBuilds || []) if (b.pid === target) b.pid = pid;
+  for (const L of Object.values(s.landmarks || {})) if (L.owner === target) L.owner = pid;
+  A.cash += B.cash; A.loan += B.loan;
+  B.cash = 0; B.loan = 0;
+  // Shares B held in other companies pass to A.
+  for (const [tid, os] of Object.entries(s.shares)) {
+    if (+tid === target || !os.holders[target]) continue;
+    os.holders[pid] = (os.holders[pid] || 0) + os.holders[target];
+    delete os.holders[target];
+  }
+  st.holders = { [pid]: st.total || SHARES };
+  s.offers = s.offers.filter(o => o.from !== target && o.to !== target);
+  B.bankrupt = true; B.takenBy = pid;
+  news(s, `🏦 TAKEOVER! ${A.company} bought control of ${B.company} and absorbed its whole empire.`, 'set', pid);
+  if (B.human) { news(s, `${A.company} took over your company. Your empire is theirs now.`, 'bad', target); checkEnd(s); }
+  return { ok: true, takeover: true, msg: `Takeover! ${B.company} and everything it owns are yours.` };
+}
+
+// ---------------------------------------------------------------- daily ----
+function marketDay(s) {
+  for (const p of s.players) {
+    const st = s.shares[p.id];
+    if (p.bankrupt) {
+      if (st.price) { st.price = 0; st.holders = {}; }
+      // A bust company's holdings go back on the market.
+      for (const os of Object.values(s.shares)) if (os.holders[p.id]) { os.holders[MARKET] = (os.holders[MARKET] || 0) + os.holders[p.id]; delete os.holders[p.id]; }
+      st.hist.push(0); if (st.hist.length > 60) st.hist.shift();
+      continue;
+    }
+    st.mood = Math.max(0.8, Math.min(1.2, st.mood + (rand(s) - 0.5) * 0.06 + (1 - st.mood) * 0.1));
+    const target = fundamental(s, p.id) * st.mood;
+    st.open = st.price;
+    st.price = Math.max(0.5, st.price + (target - st.price) * 0.35);
+    st.hist.push(Math.round(st.price * 100) / 100);
+    if (st.hist.length > 60) st.hist.shift();
+    // Dividends from yesterday's profit, to everyone but the company itself.
+    const op = operating(p.yesterday || {});
+    if (op > 0) {
+      const perShare = op * DIVIDEND / SHARES;
+      for (const [k, n] of Object.entries(st.holders)) {
+        const h = +k;
+        if (h === p.id || h === MARKET || n <= 0 || s.players[h].bankrupt) continue;
+        const amt = perShare * n;
+        ledger(p, 'dividends', -amt);
+        ledger(s.players[h], 'dividends', amt);
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------------- AI ----
+function aiMarket(s) {
+  for (const p of s.players) {
+    if (p.human || p.bankrupt) continue;
+    const mine = s.shares[p.id];
+    // Short of cash: sell some of itself (never below 55%).
+    const own = mine.holders[p.id] / (mine.total || SHARES);
+    if (p.cash < 8000 && p.debtDays > 0 && own > 0.6) sellShares(s, p.id, p.id, 150);
+    else if (p.cash < 15000 && p.style === 'baron' && rand(s) < 0.15 && own > 0.7) sellShares(s, p.id, p.id, 100);
+    // Someone circling? Buy back the float.
+    const threat = stakeOf(s, p.id).find(([h, n]) => h !== p.id && h >= 0 && n / (mine.total || SHARES) >= 0.3);
+    if (threat && float(s, p.id) && p.cash > 30000) buyShares(s, p.id, p.id, Math.min(float(s, p.id), Math.floor((p.cash - 20000) / mine.price)));
+    // Invest spare cash in undervalued companies with shares on the market.
+    if (p.cash < 120000 || rand(s) > 0.35) continue;
+    const picks = s.players.filter(t => t.id !== p.id && !t.bankrupt && float(s, t.id) > 0 && (!t.human || s.difficulty !== 'easy'))
+      .map(t => ({ t, st: s.shares[t.id], val: fundamental(s, t.id) / s.shares[t.id].price }))
+      .sort((a, b) => b.val - a.val);
+    const best = picks[0];
+    if (!best || best.val < 0.95) continue;
+    const have = holding(s, p.id, best.t.id);
+    const budget = (p.cash - 80000) * (p.style === 'baron' ? 0.6 : 0.4);
+    let n = Math.min(float(s, best.t.id), Math.floor(budget / best.st.price), 120);
+    // A takeover in reach and affordable? Go for it.
+    const tot = best.st.total || SHARES;
+    const need = Math.floor(tot / 2) + 1 - have;
+    const others = tot - have - float(s, best.t.id);
+    if (need <= float(s, best.t.id) && need * best.st.price * 1.3 + others * best.st.price < p.cash - 40000) n = need;
+    if (n > 0) buyShares(s, p.id, best.t.id, n);
+  }
+}
+
+function stocksHour(s) {
+  market(s);
+  if (s.hour === 0) { marketDay(s); aiMarket(s); }
+}
+
+return { totalOf, pctOf, LOTS, market, holding, float, stakeOf, fundamental, buyShares, sellShares, stocksHour };
+})();
+
 /* ===== civic.js ===== */
 __mods.civic = (() => {
 // Skyline Hustle - brands, landmarks and City Hall.
@@ -4541,6 +4782,26 @@ function supplyAlerts(s, pid, out) {
   }
 }
 
+// The stock market: someone buying into you, or a takeover within reach.
+function stockAlerts(s, pid, out) {
+  if (!s.shares?.[pid]) return;
+  const tot = s.shares[pid].total || 1000;
+  for (const [k, n] of Object.entries(s.shares[pid].holders)) {
+    const h = +k;
+    if (h < 0 || h === pid || n / tot < 0.2) continue;
+    const pct = n / tot, fl = s.shares[pid].holders[-1] || 0;
+    out.push({ key: `stake:${h}`, cat: 'rivals', sev: pct + fl / tot > 0.5 ? 'bad' : 'warn', icon: '📈', title: `${s.players[h].company} owns ${Math.round(pct * 100)}% of you`,
+      text: `${fl ? `${fl} of your shares are on the market. ` : ''}Above 50% they take over everything you own. Buy back shares in the Bank tab.`, tab: 'bank' });
+  }
+  for (const [tid, st] of Object.entries(s.shares)) {
+    const t = +tid, mine = st.holders[pid] || 0, tot2 = st.total || 1000;
+    if (t === pid || s.players[t].bankrupt || mine / tot2 < 0.3) continue;
+    const need = Math.floor(tot2 / 2) + 1 - mine;
+    if ((st.holders[-1] || 0) >= need) out.push({ key: `bid:${t}`, cat: 'tips', sev: 'good', icon: '🏦', title: `${s.players[t].company} is within reach`,
+      text: `You own ${Math.round(mine / tot2 * 100)}%. Buy ${need} more shares (about ${money(need * st.price)}) to take it over.`, tab: 'bank' });
+  }
+}
+
 // ------------------------------------------------------------ events ----
 // One-off things: new shop types, a rival muscling in, staff walking out.
 function eventAlerts(s, pid, inbox, add) {
@@ -4599,6 +4860,7 @@ function advise(s) {
     goalAlerts(s, pid, out);
     civicAlerts(s, pid, out);
     supplyAlerts(s, pid, out);
+    stockAlerts(s, pid, out);
     for (const a of out) if (!inbox.mute[a.cat] || a.sev === 'bad') add(a);
     const live = new Set(out.map(a => a.key));
     for (const a of inbox.list) {
@@ -4667,9 +4929,10 @@ const { aiCallAuctions } = __mods.auction;
 const { advise } = __mods.advisor;
 const { civicHour } = __mods.civic;
 const { supplyHour } = __mods.supply;
+const { stocksHour } = __mods.stocks;
 
 const HOOKS = {
-  onHour(s) { supplyHour(s); civicHour(s); aiHour(s); aiCallAuctions(s); advise(s); },
+  onHour(s) { supplyHour(s); stocksHour(s); civicHour(s); aiHour(s); aiCallAuctions(s); advise(s); },
   onDay: aiDay,
 };
 
@@ -4703,6 +4966,7 @@ const {
   hireStaff, fireStaff, trainStaff, raiseStaff, setRole, addFloor, startPromo, buildPark, buyout, survey,
 } = __mods.sim;
 const { auctionBid, auctionPass, callAuction } = __mods.auction;
+const { buyShares, sellShares } = __mods.stocks;
 const { buildSupplier, upgradeSupplier, priceSupplier, closeSupplier, setBuyRival } = __mods.supply;
 const { chainSync, startLandmark, rushLandmark, bidProject } = __mods.civic;
 const { inboxRead, inboxDismiss, inboxClear, inboxMute } = __mods.advisor;
@@ -4742,6 +5006,8 @@ const ACTIONS = {
   buyout:    (s, p, [l]) => buyout(s, p, lot(s, l)),
   survey:    (s, p, [d]) => survey(s, p, Math.round(num(d))),
   pass:      (s, p) => auctionPass(s, p),
+  buyShares: (s, p, [t, n]) => buyShares(s, p, Math.round(num(t)), num(n)),
+  sellShares: (s, p, [t, n]) => sellShares(s, p, Math.round(num(t)), num(n)),
   supplier:  (s, p, [l, line]) => buildSupplier(s, p, lot(s, l), String(line)),
   supUp:     (s, p, [l]) => upgradeSupplier(s, p, lot(s, l)),
   supPrice:  (s, p, [l, v]) => priceSupplier(s, p, lot(s, l), num(v)),
@@ -7075,6 +7341,7 @@ const {
 } = __mods.sim;
 const { PROJECTS, CHAIN_MIN, LANDMARKS, SUPPLY_LINES, LINE_OF, SUPPLIER_LEVELS, PRODUCTION_COST } = __mods.data;
 const { suppliers, capOf, supplierName, supplierCost, lineDemand } = __mods.supply;
+const { market, holding, float, stakeOf, totalOf, pctOf, fundamental } = __mods.stocks;
 const { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers, hoursEach, crewFor, ROTA_HOURS } = __mods.staff;
 const { LENSES, LENS, lensData } = __mods.lens;
 const { auctionBid, settleRest, minBid, increment, canCall, reservePrice, auctionGap } = __mods.auction;
@@ -7838,6 +8105,7 @@ class UI {
         <button class="btn small" data-act="repay-all" ${!me.loan || me.cash < me.loan ? 'disabled' : ''}>Repay all</button>
       </div>
       ${this.companyChartHTML()}
+      ${this.stocksHTML()}
       <h3>Yesterday's books <em class="${cls(op)}">${sign(op)}</em></h3>`;
     if (!keys.length) h += '<p class="note">Nothing to report yet. Come back after midnight.</p>';
     else h += `<table class="ledger">${keys.map(k => `<tr><td>${LEDGER_LABELS[k]}</td><td class="${cls(y[k])}">${sign(y[k])}</td></tr>`).join('')}
@@ -7848,6 +8116,35 @@ class UI {
       <div class="stat"><small>Apartments</small><b>${money(assets.apt)}</b></div></div>
       <p class="note">Go overdrawn and the bank tops you up from your credit line. With no credit left you have three days to raise cash before you are declared bankrupt.</p>`;
     return h;
+  }
+
+  // ---------------------------------------------------- stock market ----
+  stocksHTML() {
+    const s = this.s, me = s.players[ME];
+    market(s);
+    const lot = this.shareLot || 50;
+    const rows = s.players.filter(p => !p.bankrupt).map(p => {
+      const st = s.shares[p.id], tot = totalOf(s, p.id), mine = p.id === ME;
+      const chg = st.open ? st.price / st.open - 1 : 0;
+      const segs = stakeOf(s, p.id).map(([h, n]) => `<i style="width:${n / tot * 100}%;background:${h < 0 ? '#5d6475' : s.players[h].color}" title="${h < 0 ? 'market' : esc(s.players[h].company)}"></i>`).join('');
+      const have = holding(s, ME, p.id), fl = float(s, p.id);
+      const owners = stakeOf(s, p.id).filter(([h]) => h >= 0 && h !== p.id).map(([h, n]) => `${esc(h === ME ? 'you' : s.players[h].company.split(/[ &]/)[0])} ${Math.round(n / tot * 100)}%`).join(', ');
+      const btns = mine
+        ? `<button class="btn small" data-act="sh-sell" data-id="${p.id}">Issue ${lot}</button><button class="btn small" data-act="sh-buy" data-id="${p.id}" ${fl ? '' : 'disabled'}>Buy back ${Math.min(lot, fl) || ''}</button>`
+        : `<button class="btn small buy" data-act="sh-buy" data-id="${p.id}" ${fl ? '' : 'disabled'}>Buy ${Math.min(lot, fl) || lot}</button><button class="btn small" data-act="sh-sell" data-id="${p.id}" ${have ? '' : 'disabled'}>Sell ${Math.min(lot, have) || lot}</button>`;
+      return `<div class="card stock">
+        <div class="row" style="margin:0">${faceHTML(p, 34)}<span class="grow"><b>${esc(mine ? 'Your company' : p.company)}</b><small>${money(st.price)}/share <span class="${chg >= 0 ? 'pos' : 'neg'}">${chg >= 0 ? '▲' : '▼'}${Math.abs(chg * 100).toFixed(1)}%</span> · value ${money(st.price * tot)}${fl ? ` · ${fl} on market` : ' · none on market'}</small></span>
+          <span class="amt">${mine ? `${Math.round(pctOf(s, ME, ME) * 100)}%<small>you own</small>` : have ? `${Math.round(have / tot * 100)}%<small>${money(have * st.price)}</small>` : ''}</span></div>
+        <div class="own-bar">${segs}</div>
+        ${owners ? `<div class="note" style="margin:2px 0 0">Shareholders: ${owners}</div>` : ''}
+        <div class="row" style="margin:6px 0 0">${btns}</div></div>`;
+    }).join('');
+    const threat = stakeOf(s, ME).find(([h, n]) => h >= 0 && h !== ME && n / totalOf(s, ME) >= 0.25);
+    return `<h3>Stock market <em>dividends daily · over 50% = takeover</em></h3>
+      <div class="seg" style="margin-bottom:6px">${[10, 50, 100].map(n => `<button data-act="sh-lot" data-v="${n}" class="${n === lot ? 'on' : ''}">${n} shares</button>`).join('')}</div>
+      ${threat ? `<p class="note warn">⚠ ${esc(s.players[threat[0]].company)} owns ${Math.round(threat[1] / totalOf(s, ME) * 100)}% of you. Buy back shares on the market before they pass 50%.</p>` : ''}
+      ${rows}
+      <p class="note">Issue shares to raise cash: your stake shrinks but your worth doesn't. Shares on the market can be bought by anyone, and whoever owns more than half of a company takes over everything it has. Companies pay ${12}% of each day's profit to their other shareholders.</p>`;
   }
 
   // --------------------------------------------------- supply chain ----
@@ -8439,6 +8736,16 @@ class UI {
       case 'end-lan': this.confirm('End the game for everyone?', 'Everyone goes back to the lobby. The game is saved and can be resumed.', () => this.app.mp?.net.send({ t: 'end' })); return;
       case 'claim': this.app.mp?.net.send({ t: 'claim', pid: +el.dataset.pid }); return;
       case 'accept-offer': case 'decline-offer': case 'view-offer': this.resolveOffer(act, +el.dataset.id); return;
+      case 'sh-lot': this.shareLot = +el.dataset.v; sfx.tap(); break;
+      case 'sh-buy': case 'sh-sell': {
+        const t = +el.dataset.id, n = this.shareLot || 50;
+        const go = () => act$(act === 'sh-buy' ? 'buyShares' : 'sellShares', t, n).then(r => { if (res(r)) { sfx.coin(); if (r.takeover) sfx.set(); } });
+        if (act === 'sh-sell' && t === ME) {
+          const tot = totalOf(s, ME), own = holding(s, ME, ME), after = own / (tot + n);
+          if (after <= 0.55) { this.confirm('Issue shares?', `You'd own ${Math.round(after * 100)}% of your company. Anyone who gets more than 50% takes over everything you own.`, go); return; }
+        }
+        go(); return;
+      }
       case 'lan-pause': this.app.requestSpeed(0); sfx.tap(); return;
       case 'lan-ready': this.app.mp?.net.send({ t: 'ready' }); this.hideModal(); sfx.tap(); return;
       case 'modal-ok': this.hideModal(); this._ok && this._ok(); return;
@@ -8536,6 +8843,7 @@ class UI {
       ${shops.length ? `<p class="note" style="text-align:center;font-size:18px">${Object.entries(byType).map(([t, n]) => `${BIZ[t].icon}<small>×${n}</small>`).join(' ')}</p>` : ''}
       ${lms.length ? `<p class="note" style="text-align:center">Landmarks: ${lms.map(d => `${d.icon} ${esc(d.name)}`).join(', ')}</p>` : ''}
       ${sups.length ? `<p class="note" style="text-align:center">Suppliers: ${sups.map(l => `${SUPPLY_LINES[l.supplier.line].icon} ${esc(SUPPLY_LINES[l.supplier.line].name)}`).join(', ')}</p>` : ''}
+      ${s.shares?.[pid] ? `<p class="note" style="text-align:center">Shares ${money(s.shares[pid].price)} · ${stakeOf(s, pid).map(([h, n]) => `${h < 0 ? 'market' : esc(h === pid ? 'founder' : s.players[h].company)} ${Math.round(n / totalOf(s, pid) * 100)}%`).join(' · ')}</p>` : ''}
       ${this.spark(p)}
       <div class="row"><button class="btn wide" data-act="modal-cancel">Close</button></div></div>`);
   }

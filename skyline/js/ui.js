@@ -18,6 +18,7 @@ import {
 } from './sim.js';
 import { PROJECTS, CHAIN_MIN, LANDMARKS, SUPPLY_LINES, LINE_OF, SUPPLIER_LEVELS, PRODUCTION_COST } from './data.js';
 import { suppliers, capOf, supplierName, supplierCost, lineDemand } from './supply.js';
+import { market, holding, float, stakeOf, totalOf, pctOf, fundamental } from './stocks.js';
 import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers, hoursEach, crewFor, ROTA_HOURS } from './staff.js';
 import { LENSES, LENS, lensData } from './lens.js';
 import { auctionBid, settleRest, minBid, increment, canCall, reservePrice, auctionGap } from './auction.js';
@@ -781,6 +782,7 @@ export class UI {
         <button class="btn small" data-act="repay-all" ${!me.loan || me.cash < me.loan ? 'disabled' : ''}>Repay all</button>
       </div>
       ${this.companyChartHTML()}
+      ${this.stocksHTML()}
       <h3>Yesterday's books <em class="${cls(op)}">${sign(op)}</em></h3>`;
     if (!keys.length) h += '<p class="note">Nothing to report yet. Come back after midnight.</p>';
     else h += `<table class="ledger">${keys.map(k => `<tr><td>${LEDGER_LABELS[k]}</td><td class="${cls(y[k])}">${sign(y[k])}</td></tr>`).join('')}
@@ -791,6 +793,35 @@ export class UI {
       <div class="stat"><small>Apartments</small><b>${money(assets.apt)}</b></div></div>
       <p class="note">Go overdrawn and the bank tops you up from your credit line. With no credit left you have three days to raise cash before you are declared bankrupt.</p>`;
     return h;
+  }
+
+  // ---------------------------------------------------- stock market ----
+  stocksHTML() {
+    const s = this.s, me = s.players[ME];
+    market(s);
+    const lot = this.shareLot || 50;
+    const rows = s.players.filter(p => !p.bankrupt).map(p => {
+      const st = s.shares[p.id], tot = totalOf(s, p.id), mine = p.id === ME;
+      const chg = st.open ? st.price / st.open - 1 : 0;
+      const segs = stakeOf(s, p.id).map(([h, n]) => `<i style="width:${n / tot * 100}%;background:${h < 0 ? '#5d6475' : s.players[h].color}" title="${h < 0 ? 'market' : esc(s.players[h].company)}"></i>`).join('');
+      const have = holding(s, ME, p.id), fl = float(s, p.id);
+      const owners = stakeOf(s, p.id).filter(([h]) => h >= 0 && h !== p.id).map(([h, n]) => `${esc(h === ME ? 'you' : s.players[h].company.split(/[ &]/)[0])} ${Math.round(n / tot * 100)}%`).join(', ');
+      const btns = mine
+        ? `<button class="btn small" data-act="sh-sell" data-id="${p.id}">Issue ${lot}</button><button class="btn small" data-act="sh-buy" data-id="${p.id}" ${fl ? '' : 'disabled'}>Buy back ${Math.min(lot, fl) || ''}</button>`
+        : `<button class="btn small buy" data-act="sh-buy" data-id="${p.id}" ${fl ? '' : 'disabled'}>Buy ${Math.min(lot, fl) || lot}</button><button class="btn small" data-act="sh-sell" data-id="${p.id}" ${have ? '' : 'disabled'}>Sell ${Math.min(lot, have) || lot}</button>`;
+      return `<div class="card stock">
+        <div class="row" style="margin:0">${faceHTML(p, 34)}<span class="grow"><b>${esc(mine ? 'Your company' : p.company)}</b><small>${money(st.price)}/share <span class="${chg >= 0 ? 'pos' : 'neg'}">${chg >= 0 ? '▲' : '▼'}${Math.abs(chg * 100).toFixed(1)}%</span> · value ${money(st.price * tot)}${fl ? ` · ${fl} on market` : ' · none on market'}</small></span>
+          <span class="amt">${mine ? `${Math.round(pctOf(s, ME, ME) * 100)}%<small>you own</small>` : have ? `${Math.round(have / tot * 100)}%<small>${money(have * st.price)}</small>` : ''}</span></div>
+        <div class="own-bar">${segs}</div>
+        ${owners ? `<div class="note" style="margin:2px 0 0">Shareholders: ${owners}</div>` : ''}
+        <div class="row" style="margin:6px 0 0">${btns}</div></div>`;
+    }).join('');
+    const threat = stakeOf(s, ME).find(([h, n]) => h >= 0 && h !== ME && n / totalOf(s, ME) >= 0.25);
+    return `<h3>Stock market <em>dividends daily · over 50% = takeover</em></h3>
+      <div class="seg" style="margin-bottom:6px">${[10, 50, 100].map(n => `<button data-act="sh-lot" data-v="${n}" class="${n === lot ? 'on' : ''}">${n} shares</button>`).join('')}</div>
+      ${threat ? `<p class="note warn">⚠ ${esc(s.players[threat[0]].company)} owns ${Math.round(threat[1] / totalOf(s, ME) * 100)}% of you. Buy back shares on the market before they pass 50%.</p>` : ''}
+      ${rows}
+      <p class="note">Issue shares to raise cash: your stake shrinks but your worth doesn't. Shares on the market can be bought by anyone, and whoever owns more than half of a company takes over everything it has. Companies pay ${12}% of each day's profit to their other shareholders.</p>`;
   }
 
   // --------------------------------------------------- supply chain ----
@@ -1382,6 +1413,16 @@ export class UI {
       case 'end-lan': this.confirm('End the game for everyone?', 'Everyone goes back to the lobby. The game is saved and can be resumed.', () => this.app.mp?.net.send({ t: 'end' })); return;
       case 'claim': this.app.mp?.net.send({ t: 'claim', pid: +el.dataset.pid }); return;
       case 'accept-offer': case 'decline-offer': case 'view-offer': this.resolveOffer(act, +el.dataset.id); return;
+      case 'sh-lot': this.shareLot = +el.dataset.v; sfx.tap(); break;
+      case 'sh-buy': case 'sh-sell': {
+        const t = +el.dataset.id, n = this.shareLot || 50;
+        const go = () => act$(act === 'sh-buy' ? 'buyShares' : 'sellShares', t, n).then(r => { if (res(r)) { sfx.coin(); if (r.takeover) sfx.set(); } });
+        if (act === 'sh-sell' && t === ME) {
+          const tot = totalOf(s, ME), own = holding(s, ME, ME), after = own / (tot + n);
+          if (after <= 0.55) { this.confirm('Issue shares?', `You'd own ${Math.round(after * 100)}% of your company. Anyone who gets more than 50% takes over everything you own.`, go); return; }
+        }
+        go(); return;
+      }
       case 'lan-pause': this.app.requestSpeed(0); sfx.tap(); return;
       case 'lan-ready': this.app.mp?.net.send({ t: 'ready' }); this.hideModal(); sfx.tap(); return;
       case 'modal-ok': this.hideModal(); this._ok && this._ok(); return;
@@ -1479,6 +1520,7 @@ export class UI {
       ${shops.length ? `<p class="note" style="text-align:center;font-size:18px">${Object.entries(byType).map(([t, n]) => `${BIZ[t].icon}<small>×${n}</small>`).join(' ')}</p>` : ''}
       ${lms.length ? `<p class="note" style="text-align:center">Landmarks: ${lms.map(d => `${d.icon} ${esc(d.name)}`).join(', ')}</p>` : ''}
       ${sups.length ? `<p class="note" style="text-align:center">Suppliers: ${sups.map(l => `${SUPPLY_LINES[l.supplier.line].icon} ${esc(SUPPLY_LINES[l.supplier.line].name)}`).join(', ')}</p>` : ''}
+      ${s.shares?.[pid] ? `<p class="note" style="text-align:center">Shares ${money(s.shares[pid].price)} · ${stakeOf(s, pid).map(([h, n]) => `${h < 0 ? 'market' : esc(h === pid ? 'founder' : s.players[h].company)} ${Math.round(n / totalOf(s, pid) * 100)}%`).join(' · ')}</p>` : ''}
       ${this.spark(p)}
       <div class="row"><button class="btn wide" data-act="modal-cancel">Close</button></div></div>`);
   }

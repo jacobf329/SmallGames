@@ -94,7 +94,7 @@ export const LEDGER_LABELS = {
   rentIn: 'Ground rent received', overhead: 'Overheads & bills', fares: 'Station fares',
   utility: 'Utility income', aptRent: 'Apartment rents', interest: 'Loan interest',
   landmarks: 'Landmarks', projects: 'City contracts & grants', wholesale: 'Wholesale sales', production: 'Supplier running costs',
-  trade: 'Land trades', capex: 'Building & land',
+  dividends: 'Dividends', trade: 'Land & share trades', capex: 'Building & land',
 };
 
 // Chains buy stock in bulk: the discount for a chain of n shops.
@@ -176,9 +176,22 @@ export function playerAssets(s, pid) {
   }
   return { land, biz, apt, total: land + biz + apt };
 }
-export function netWorth(s, pid) {
+// Shares: every company has SHARES of them. Until it sells some, its founder
+// owns them all. A player's net worth is their stake in their own company
+// (which includes any shares it holds in others).
+export const SHARES = 1000;
+export function holdingsValue(s, pid) {
+  let v = 0;
+  if (s.shares) for (const [tid, st] of Object.entries(s.shares)) if (+tid !== pid && !s.players[+tid].bankrupt) v += (st.holders[pid] || 0) * st.price;
+  return v;
+}
+export function companyValue(s, pid) {
   const p = s.players[pid];
-  return Math.round(p.cash - p.loan + playerAssets(s, pid).total);
+  return p.cash - p.loan + playerAssets(s, pid).total + holdingsValue(s, pid);
+}
+export const ownStake = (s, pid) => (s.shares?.[pid] ? (s.shares[pid].holders[pid] ?? SHARES) / (s.shares[pid].total || SHARES) : 1);
+export function netWorth(s, pid) {
+  return Math.round(companyValue(s, pid) * ownStake(s, pid));
 }
 export function loanLimit(s, pid) {
   const cap = Math.floor(playerAssets(s, pid).total * LOAN_LTV / LOAN_STEP) * LOAN_STEP;
@@ -650,10 +663,13 @@ function checkGoals(s) {
   }
 }
 
-function checkEnd(s) {
+export function checkEnd(s) {
   const sc = SCENARIOS[s.scenario];
   const people = humans(s);
-  if (people.every(p => p.bankrupt)) return finish(s, -1, people.length > 1 ? 'Every player went bankrupt.' : 'You went bankrupt.');
+  if (people.every(p => p.bankrupt)) {
+    const by = people.length === 1 && people[0].takenBy != null ? s.players[people[0].takenBy] : null;
+    return finish(s, by ? by.id : -1, by ? `${by.company} took over your company.` : people.length > 1 ? 'Every player went bankrupt.' : 'You went bankrupt.');
+  }
   if (s.freePlay) return;              // after "keep playing": no more deadlines
   const alive = s.players.filter(p => !p.bankrupt);
   if (alive.length === 1 && sc.mode === 'race') return finish(s, alive[0].id, 'Every rival has gone bust.');
@@ -672,7 +688,8 @@ export function continueGame(s) {
   s.freePlay = true;
   for (const p of s.players) {
     if (!p.human || !p.bankrupt) continue;
-    p.bankrupt = false; p.cash = Math.round(START_CASH / 2); p.loan = 0; p.debtDays = 0;
+    p.bankrupt = false; p.cash = Math.round(START_CASH / 2); p.loan = 0; p.debtDays = 0; delete p.takenBy;
+    if (s.shares) delete s.shares[p.id];     // a fresh company, wholly yours
     news(s, `${p.company} is back in business with fresh backing of ${money(p.cash)}.`, 'info', p.id);
   }
   news(s, 'The game goes on in free play. Build whatever you like.', 'info');

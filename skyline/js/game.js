@@ -8,9 +8,10 @@ import { aiCallAuctions } from './auction.js';
 import { advise } from './advisor.js';
 import { civicHour } from './civic.js';
 import { supplyHour } from './supply.js';
+import { stocksHour } from './stocks.js';
 
 export const HOOKS = {
-  onHour(s) { supplyHour(s); civicHour(s); aiHour(s); aiCallAuctions(s); advise(s); },
+  onHour(s) { supplyHour(s); stocksHour(s); civicHour(s); aiHour(s); aiCallAuctions(s); advise(s); },
   onDay: aiDay,
 };
 

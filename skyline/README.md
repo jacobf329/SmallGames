@@ -177,6 +177,34 @@ they run three shops in a trade, cut prices when they sit idle and expand
 when they sell out. Delivery trucks in the owner's colour drive the morning
 runs. You can stop your shops buying from rival suppliers (City Hall tab).
 
+### Stock market
+
+Every company starts with 1,000 shares, all owned by its founder (the Bank
+tab lists them all).
+
+- **Issue shares** to raise cash. New shares go on the open market; your
+  stake shrinks but your net worth doesn't (the cash makes up for it).
+  You must keep at least 10%.
+- **Buy and sell** any company's shares that are on the market. Prices
+  follow each company's value plus a few weeks of profit, drift with market
+  mood every night, and big trades move them.
+- **Buy back** your own shares from the market (they're retired) to defend
+  yourself.
+- **Dividends:** every company pays 12% of each day's profit to its other
+  shareholders.
+- **Takeover:** own more than half of a company and you take it over: its
+  land, shops, suppliers, landmarks, cash, debts and shareholdings. Other
+  shareholders are paid out at the market price. Lose your own company
+  this way and the game is over.
+- **Net worth** is your stake in your own company, which includes any
+  shares it holds in others.
+
+Rivals issue shares when they're short of cash, invest spare cash in
+undervalued companies, buy back their float when someone builds a big
+stake, and go for takeovers they can afford. On Relaxed difficulty they
+leave human players' shares alone. The advisor warns you when anyone owns
+20% or more of you, and tells you when a takeover is within your reach.
+
 ### Landmarks
 
 One of each per city, built in a race. Meet the requirement, pick an
@@ -418,6 +446,7 @@ skyline/
   js/citizens.js   the citizens: needs, choices, queues, grudges, comments, trips
   js/staff.js      shop staff: roles, skill, wages, morale, training, quitting
   js/sim.js        economy: shops, stock, rent, sets, apartments, goals, trades, bank
+  js/stocks.js     shares, prices, dividends, issues and buy-backs, takeovers, AI investors
   js/supply.js     suppliers, wholesale market prices and shocks, restock routing, AI suppliers
   js/civic.js      chains, landmarks (race, perks), City Hall projects; hourly perk refresh
   js/advisor.js    the advisor inbox: alert rules, sorted/one-off tracking, mute
