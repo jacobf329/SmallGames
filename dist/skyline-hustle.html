@@ -499,6 +499,15 @@ a.link { color: var(--you); font-size: 13px; text-decoration: underline; cursor:
 .own-bar i { display: block; height: 100%; }
 .card.stock .grow b, .card.stock .grow small { display: block; } .card.stock .amt small { display: block; }
 
+/* -------------------------------------------------------------- online -- */
+.join-row { gap: 8px; }
+.join-row input { flex: 1; min-width: 0; text-align: center; font: 800 20px/1 system-ui, sans-serif; letter-spacing: 0.3em; text-transform: uppercase;
+  background: #0003; border: 1px solid var(--line); border-radius: 12px; color: inherit; padding: 10px; }
+.room-code { text-align: center; padding: 12px; border-radius: 16px; background: rgba(46, 230, 255, 0.08); border: 1px solid rgba(46, 230, 255, 0.35); margin-bottom: 8px; }
+.room-code b { display: block; font-size: 40px; letter-spacing: 0.25em; color: var(--you); margin: 2px 0 4px; }
+.room-code small { display: block; opacity: 0.8; }
+.room-code em { font-style: normal; font-weight: 800; color: var(--you); }
+
 </style>
 </head>
 <body>
@@ -564,7 +573,7 @@ a.link { color: var(--you); font-size: 13px; text-decoration: underline; cursor:
 
 <section id="lobby" class="screen hidden">
   <div class="title-card">
-    <div class="logo"><span class="logo-sky" style="font-size:30px">LAN</span><span class="logo-hustle" style="font-size:36px">LOBBY</span></div>
+    <div class="logo"><span class="logo-sky" id="lobby-kind" style="font-size:30px">LAN</span><span class="logo-hustle" style="font-size:36px">LOBBY</span></div>
     <div id="lobby-body"></div>
   </div>
 </section>
@@ -616,12 +625,17 @@ a.link { color: var(--you); font-size: 13px; text-decoration: underline; cursor:
 
     <button id="btn-new" class="btn go">New Game</button>
 
-    <div id="lan-box" class="card hidden">
-      <b>📶 LAN multiplayer</b>
-      <p class="note">Play with friends on the same wifi. Up to 4 players; rivals fill empty seats.
-        Speed changes need everyone to agree.</p>
+    <div id="mp-box" class="card">
+      <b>👥 Play with friends</b>
+      <p class="note">Up to 4 players; rivals fill the empty seats. The host's phone runs the game, so the host keeps their screen on.</p>
       <label class="field"><span>Your name</span><input id="in-name" maxlength="20" placeholder="Player" autocomplete="off"></label>
-      <div class="row"><button id="btn-lan" class="btn wide">Join LAN lobby</button></div>
+      <div id="online-row">
+        <div class="row"><button id="btn-host" class="btn go wide">Host a game</button></div>
+        <div class="row join-row"><input id="in-code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="btn-join" class="btn">Join</button></div>
+      </div>
+      <div id="lan-box" class="hidden">
+        <div class="row"><button id="btn-lan" class="btn wide">📶 Join this computer's LAN game</button></div>
+      </div>
     </div>
 
     <details class="howto">
@@ -5040,6 +5054,320 @@ function perform(s, pid, name, args = []) {
 return { perform };
 })();
 
+/* ===== room.js ===== */
+__mods.room = (() => {
+// Skyline Hustle - a multiplayer room: the lobby, the one authoritative city,
+// shared speed (slowest wish wins, instant pause, reviews), actions and
+// saves. Transport-free: the LAN server (server.mjs) plugs WebSockets into
+// it, and in online games the host's own phone runs it and plugs in WebRTC
+// data channels. A connection is anything with send(string) and close().
+//
+//   const room = createRoom({ store, log });
+//   const h = room.connect(conn);  h.message(text);  h.close();
+//   setInterval(room.tick, 50);
+
+const { SPEEDS, SECONDS_PER_HOUR, SCENARIOS, DIFFICULTY, MAX_COMPANIES, MAPS } = __mods.data;
+const { createGame, serialize, deserialize, news, continueGame } = __mods.sim;
+const { advanceGame } = __mods.game;
+const { auctionTick, maybeSettle } = __mods.auction;
+const { perform } = __mods.actions;
+
+const PAUSE_SECONDS = 60;
+
+// store: { load() -> string, save(string), exists() -> bool, remove() }
+function createRoom({ store, log = () => {} }) {
+// -------------------------------------------------------------- state ----
+let game = null;                 // the sim state while a game runs
+let seats = [];                  // [{ pid, token, name, company }]
+let settings = { scenario: 'boomtown', difficulty: 'normal', map: 'town', checkpoint: 'weekly' };
+let speed = 1;                   // effective speed, worked out by flow()
+const wants = {};                // pid -> wanted speed 1..3
+let pause = null;                // { by: pid, until: ms }
+let check = null;                // { day, need: [pid], ready: [pid] } end-of-week check-in
+const clients = new Set();       // { conn, token, name, company, pid, joined }
+let hostToken = null;
+
+const connectedPids = () => new Set([...clients].filter(c => c.pid >= 0).map(c => c.pid));
+const nameOf = pid => game?.players[pid]?.company ?? 'Someone';
+const isHost = c => c.token === hostToken;
+
+function pickHost() {
+  if ([...clients].some(c => c.token === hostToken)) return;
+  const first = [...clients].sort((a, b) => a.joined - b.joined)[0];
+  hostToken = first ? first.token : null;
+}
+
+function send(c, msg) { c.conn.send(typeof msg === 'string' ? msg : JSON.stringify(msg)); }
+function broadcast(msg) {
+  const str = JSON.stringify(msg);
+  for (const c of clients) c.conn.send(str);
+}
+function notice(text, kind = '') { broadcast({ t: 'notice', text, kind }); }
+
+function lobbyMsg() {
+  const list = [...clients].sort((a, b) => a.joined - b.joined).map(c => ({ name: c.name, company: c.company, avatar: c.avatar || 0, host: isHost(c), token: c.token.slice(0, 6) }));
+  return { t: 'lobby', players: list, settings, canResume: store.exists(), max: Math.min(MAX_COMPANIES, MAPS[settings.map || 'town'].companies) };
+}
+function sendLobby() {
+  const msg = lobbyMsg();
+  for (const c of clients) send(c, { ...msg, host: isHost(c), you: c.token.slice(0, 6) });
+}
+
+// The city as clients see it: no citizens list (too big; fetched on demand),
+// no secret rival auction limits, plus the trips currently on the streets.
+let stateDirty = false;
+function stateMsg() {
+  // Daily histories ('days') are large: phones fetch them on demand ('hist').
+  const json = JSON.stringify(game, (k, v) => (k === 'cz' || k === 'bidders' || k === 'days' ? undefined : v));
+  const T = game.day * 24 + game.hour + game.t;
+  const trips = game.cz.trips.filter(t => t.t0 + 2 * t.walk + t.stay > T - 0.1 && t.t0 < T + 1.7);
+  const seatInfo = seats.map(st => ({ pid: st.pid, name: st.name, company: st.company, connected: connectedPids().has(st.pid) }));
+  return `{"t":"state","s":${json},"trips":${JSON.stringify(trips)},"speed":${speed},"flow":${JSON.stringify(flowInfo())},"seats":${JSON.stringify(seatInfo)},"host":"${(hostToken || '').slice(0, 6)}"}`;
+}
+function sendState() {
+  if (!game) return;
+  const str = stateMsg();
+  for (const c of clients) c.conn.send(str);
+  stateDirty = false;
+}
+function you(c) { send(c, { t: 'you', pid: c.pid, host: isHost(c), seats: seats.map(st => ({ pid: st.pid, company: st.company, taken: connectedPids().has(st.pid) })) }); }
+
+// -------------------------------------------------------------- saves ----
+function save() {
+  if (!game || game.over) return;
+  try {
+    store.save(JSON.stringify({ seats, settings, game: serialize(game) }));
+  } catch (e) { log('could not save: ' + e.message); }
+}
+
+function startGame(fromSave) {
+  if (fromSave) {
+    const data = JSON.parse(store.load());
+    game = deserialize(data.game);
+    seats = data.seats;
+    settings = data.settings;
+  } else {
+    const people = [...clients].sort((a, b) => a.joined - b.joined).slice(0, MAX_COMPANIES);
+    game = createGame({ scenario: settings.scenario, difficulty: settings.difficulty, map: settings.map || 'town', humans: people.map(c => ({ name: c.name, company: c.company, avatar: c.avatar || 0 })) });
+    seats = people.map((c, i) => ({ pid: i, token: c.token, name: c.name, company: c.company }));
+  }
+  game.liveAuctions = true;
+  pause = null; check = null;
+  for (const k in wants) delete wants[k];
+  flow();
+  for (const c of clients) {
+    const seat = seats.find(st => st.token === c.token);
+    c.pid = seat ? seat.pid : -1;
+    you(c);
+  }
+  log(`game started: ${SCENARIOS[settings.scenario].name} on ${MAPS[settings.map || 'town'].name}, ${seats.length} player(s)`);
+  sendState();
+}
+
+function endGame() {
+  save();
+  game = null; seats = []; pause = null; check = null;
+  for (const c of clients) c.pid = -1;
+  sendLobby();
+}
+
+// -------------------------------------------------------------- speed ----
+// Works out the speed: paused or checking in -> 0, else the slowest wish.
+function flow() {
+  const live = [...connectedPids()];
+  if (pause && Date.now() > pause.until) { notice(`${nameOf(pause.by)}'s pause ran out: back to it.`); pause = null; }
+  if (pause && !live.includes(pause.by)) pause = null;
+  if (check) {
+    check.need = check.need.filter(pid => live.includes(pid));
+    if (check.need.every(pid => check.ready.includes(pid))) { check = null; notice('Everyone is ready. On with the week!', 'good'); }
+  }
+  const sp = pause || check ? 0 : live.length ? Math.min(...live.map(pid => wants[pid] || 1)) : 1;
+  if (sp !== speed) { speed = sp; stateDirty = true; }
+}
+function flowInfo() {
+  return {
+    wants: Object.fromEntries([...connectedPids()].map(pid => [pid, wants[pid] || 1])),
+    pause: pause ? { by: pause.by, left: Math.max(0, Math.ceil((pause.until - Date.now()) / 1000)) } : null,
+    check: check ? { day: check.day, need: check.need, ready: check.ready } : null,
+  };
+}
+function setWant(c, sp) {
+  if (!game || c.pid < 0 || !Number.isInteger(sp) || sp < 1 || sp >= SPEEDS.length) return;
+  wants[c.pid] = sp;
+  flow(); stateDirty = true;
+}
+function togglePause(c) {
+  if (!game || c.pid < 0) return;
+  if (pause && pause.by === c.pid) { pause = null; notice(`${nameOf(c.pid)} unpaused.`); }
+  else { pause = { by: c.pid, until: Date.now() + PAUSE_SECONDS * 1000 }; notice(`${nameOf(c.pid)} paused the game.`, 'event'); }
+  flow(); stateDirty = true;
+}
+function setReady(c) {
+  if (!check || c.pid < 0 || check.ready.includes(c.pid)) return;
+  check.ready.push(c.pid);
+  flow(); stateDirty = true;
+}
+// End of the week (or day): stop for a summary until everyone is ready.
+function maybeCheckIn(prevDay) {
+  const mode = settings.checkpoint || 'weekly';
+  if (!game || game.over || mode === 'off' || game.day === prevDay) return;
+  if (mode === 'weekly' && (game.day - 1) % 7 !== 0) return;
+  const need = [...connectedPids()];
+  if (need.length < 2) return;           // nobody to wait for
+  check = { day: game.day, need, ready: [] };
+  flow(); stateDirty = true;
+}
+
+// ------------------------------------------------------------ sockets ----
+function connect(conn) {
+  const c = { conn, token: '', name: 'Player', company: 'Company', pid: -1, joined: Date.now() };
+  const onMessage = raw => {
+    let m;
+    try { m = JSON.parse(raw); } catch { return; }
+    if (!m || typeof m.t !== 'string') return;
+    switch (m.t) {
+      case 'hello': {
+        c.token = String(m.token || Math.random()).slice(0, 40);
+        c.name = String(m.name || 'Player').slice(0, 20);
+        c.company = String(m.company || 'Company').slice(0, 22);
+        c.avatar = Math.max(0, Math.min(7, Math.floor(+m.avatar || 0)));
+        // A reconnecting phone kicks out its own stale connection.
+        for (const o of clients) if (o.token === c.token && o !== c) { clients.delete(o); o.conn.close?.(); }
+        clients.add(c);
+        pickHost();
+        if (game) {
+          const seat = seats.find(st => st.token === c.token);
+          c.pid = seat ? seat.pid : -1;
+          you(c);
+          send(c, stateMsg());
+          if (seat) notice(`${seat.company} is back.`);
+        } else sendLobby();
+        break;
+      }
+      case 'profile':
+        if (game) break;
+        c.name = String(m.name || c.name).slice(0, 20);
+        c.company = String(m.company || c.company).slice(0, 22);
+        if (m.avatar != null) c.avatar = Math.max(0, Math.min(7, Math.floor(+m.avatar || 0)));
+        sendLobby();
+        break;
+      case 'setup':
+        if (game || !isHost(c)) break;
+        if (SCENARIOS[m.scenario]) settings.scenario = m.scenario;
+        if (DIFFICULTY[m.difficulty]) settings.difficulty = m.difficulty;
+        if (MAPS[m.map]) settings.map = m.map;
+        if (['off', 'weekly', 'daily'].includes(m.checkpoint)) settings.checkpoint = m.checkpoint;
+        sendLobby();
+        break;
+      case 'start':
+        if (game || !isHost(c)) break;
+        try { startGame(!!m.resume); } catch (e) { send(c, { t: 'notice', text: 'Could not load the saved game.', kind: 'bad' }); }
+        break;
+      case 'claim': {
+        // Late joiner takes an empty seat.
+        if (!game || c.pid >= 0) break;
+        const seat = seats.find(st => st.pid === m.pid);
+        if (!seat || connectedPids().has(seat.pid)) break;
+        seat.token = c.token;
+        c.pid = seat.pid;
+        you(c);
+        notice(`${c.name} took over ${seat.company}.`);
+        stateDirty = true;
+        break;
+      }
+      case 'act': {
+        if (!game || c.pid < 0) break;
+        const res = perform(game, c.pid, String(m.name), m.args);
+        if (game.auction) maybeSettle(game, connectedPids());
+        send(c, { t: 'result', id: m.id, res });
+        stateDirty = true;
+        break;
+      }
+      case 'want': setWant(c, m.speed); break;
+      case 'pause': togglePause(c); break;
+      case 'ready': setReady(c); break;
+      case 'hist': {
+        // Books history for one of your businesses (lot >= 0) or your company (-1).
+        if (!game || c.pid < 0) break;
+        const lot = game.lots[m.lot];
+        const days = m.lot === -1 ? game.players[c.pid].days : lot && lot.business && lot.business.owner === c.pid ? lot.business.days : null;
+        send(c, { t: 'hist', lot: m.lot, days: days || [] });
+        break;
+      }
+      case 'citizen': {
+        if (!game) break;
+        const ct = game.cz.list.find(x => x.id === m.id);
+        send(c, { t: 'citizen', c: ct || null, id: m.id });
+        break;
+      }
+      case 'end':
+        if (game && isHost(c)) { notice('The host ended the game.'); endGame(); }
+        break;
+      case 'continue':
+        // The host chooses to carry on after a win or loss.
+        if (game && game.over && isHost(c)) {
+          continueGame(game);
+          game.overSaved = false;
+          notice('The host kept the game going: free play, no more deadlines.', 'good');
+          stateDirty = true;
+        }
+        break;
+    }
+  };
+  const onClose = () => {
+    clients.delete(c);
+    pickHost();
+    if (game) {
+      if (c.pid >= 0) notice(`${nameOf(c.pid)} disconnected. Their company keeps trading.`);
+      flow();
+      stateDirty = true;
+    } else sendLobby();
+  };
+  return { message: onMessage, close: onClose };
+}
+
+
+// --------------------------------------------------------------- loop ----
+let last = Date.now(), lastAuctionSend = 0, lastClock = 0;
+function tick() {
+  const now = Date.now();
+  const dt = Math.min(1, (now - last) / 1000);
+  last = now;
+  if (!game) return;
+  flow();
+  const live = connectedPids();
+  if (!game.over && live.size) {
+    if (game.auction) {
+      const before = game.auction;
+      auctionTick(game, dt);
+      maybeSettle(game, live);
+      if (game.auction !== before || now - lastAuctionSend > 120) { stateDirty = true; lastAuctionSend = now; }
+    } else if (speed > 0) {
+      const day = game.day;
+      const steps = advanceGame(game, dt * SPEEDS[speed] / SECONDS_PER_HOUR);
+      if (steps) stateDirty = true;
+      if (game.day !== day) { save(); maybeCheckIn(day); }
+      if (game.auction) stateDirty = true;
+    }
+  }
+  if (game.over && !game.overSaved) { game.overSaved = true; store.remove(); stateDirty = true; }
+  // Light clock sync so phones stay in step between hours.
+  if (now - lastClock > 1000) { lastClock = now; if (!stateDirty) broadcast({ t: 'clock', day: game.day, hour: game.hour, tt: game.t, speed, flow: flowInfo() }); }
+  if (stateDirty) sendState();
+}
+
+
+return {
+  connect,
+  tick,
+  info: () => ({ started: !!game, canResume: store.exists(), players: clients.size }),
+  hasGame: () => !!game,
+};
+}
+
+return { PAUSE_SECONDS, createRoom };
+})();
+
 /* ===== net.js ===== */
 __mods.net = (() => {
 // Skyline Hustle - LAN client connection: one WebSocket to server.mjs that
@@ -5106,6 +5434,273 @@ async function lanAvailable() {
 }
 
 return { Net, lanAvailable };
+})();
+
+/* ===== online.js ===== */
+__mods.online = (() => {
+// Skyline Hustle - online play with the host's phone as the server.
+//
+// The host's browser runs the room (room.js: lobby, the authoritative city,
+// speed, saves) exactly as the LAN server does. Friends' phones connect to it
+// directly over WebRTC data channels. The only thing in the cloud is a tiny
+// "mailbox" in Firestore used to swap connection details:
+//
+//   gameRooms/{CODE}                     the host's room (created when hosting)
+//   gameRooms/{CODE}/joins/{id}          a friend's offer; the host writes back an answer
+//
+// A join costs a handful of document reads and writes. No Firebase library:
+// plain REST calls with the site's public web API key. Google's public STUN
+// server helps phones on different networks find each other; there is no
+// relay server, so a few strict networks (some mobile data, some work wifi)
+// can't connect directly.
+
+const FIRESTORE = {
+  project: 'campaign-e0a68',
+  apiKey: 'AIzaSyAJMmGnR-izbXyriN6iWdip4cgXhWmi-fQ',
+};
+const ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';        // no I or O
+const CHUNK = 15000;
+
+// Tests can point signalling at a local stand-in: ?signal=http://localhost:9099
+function base() {
+  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('signal') : null;
+  return `${q || 'https://firestore.googleapis.com'}/v1/projects/${FIRESTORE.project}/databases/(default)/documents`;
+}
+const keyQ = (sep = '?') => `${sep}key=${FIRESTORE.apiKey}`;
+const toFields = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'number' ? { integerValue: String(Math.round(v)) } : { stringValue: String(v) }]));
+const fromFields = f => Object.fromEntries(Object.entries(f || {}).map(([k, v]) => [k, v.stringValue ?? (v.integerValue != null ? +v.integerValue : v.timestampValue)]));
+
+async function rest(method, path, body) {
+  const url = `${base()}/${path}${keyQ(path.includes('?') ? '&' : '?')}`;
+  const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 404) return null;
+  if (!r.ok) { const e = new Error(`signal ${r.status}`); e.status = r.status; throw e; }
+  return r.status === 204 ? {} : r.json();
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const onlineSupported = () => typeof RTCPeerConnection !== 'undefined' && typeof fetch !== 'undefined';
+const normCode = c => String(c || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+
+// ------------------------------------------------------------- WebRTC ----
+async function gathered(pc, ms = 3000) {
+  if (pc.iceGatheringState === 'complete') return;
+  await new Promise(res => {
+    const t = setTimeout(res, ms);
+    pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); res(); } });
+  });
+}
+// Data channels have message size limits: split big messages, rejoin them.
+function framed(ch) {
+  let seq = 0;
+  return str => {
+    if (ch.readyState !== 'open') return;
+    if (str.length <= CHUNK) return ch.send(str);
+    const id = ++seq, n = Math.ceil(str.length / CHUNK);
+    for (let i = 0; i < n; i++) ch.send(`\u0001${id}|${i}|${n}|${str.slice(i * CHUNK, (i + 1) * CHUNK)}`);
+  };
+}
+function unframer(onText) {
+  const parts = new Map();
+  return data => {
+    if (typeof data !== 'string') return;
+    if (data[0] !== '\u0001') return onText(data);
+    const a = data.indexOf('|'), b = data.indexOf('|', a + 1), c = data.indexOf('|', b + 1);
+    const id = data.slice(1, a), i = +data.slice(a + 1, b), n = +data.slice(b + 1, c);
+    const arr = parts.get(id) || [];
+    arr[i] = data.slice(c + 1);
+    parts.set(id, arr);
+    if (arr.filter(x => x != null).length === n) { parts.delete(id); onText(arr.join('')); }
+  };
+}
+
+// -------------------------------------------------------------- host ----
+// Runs on the host's phone: creates a room code, answers friends' offers and
+// plugs each data channel into the room.
+class Host {
+  constructor(room, { name = 'Host', onStatus } = {}) {
+    this.room = room;
+    this.name = name;
+    this.onStatus = onStatus;
+    this.code = null;
+    this.peers = new Map();          // join id -> { pc }
+    this.stopped = false;
+  }
+
+  async start() {
+    for (let tries = 0; tries < 8; tries++) {
+      const code = Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
+      try {
+        await rest('POST', `gameRooms?documentId=${code}`, { fields: toFields({ game: 'skyline', host: this.name, created: Date.now() }) });
+        this.code = code;
+        this.poll();
+        return code;
+      } catch (e) {
+        if (e.status !== 409) throw e;   // code taken: try another
+      }
+    }
+    throw new Error('No free room code');
+  }
+
+  async poll() {
+    while (!this.stopped) {
+      try {
+        const list = await rest('GET', `gameRooms/${this.code}/joins`);
+        for (const doc of list?.documents || []) {
+          const id = doc.name.split('/').pop();
+          const f = fromFields(doc.fields);
+          if (f.offer && !f.answer && !this.peers.has(id)) this.accept(id, f.offer).catch(() => {});
+        }
+        this.onStatus?.('online');
+      } catch (e) { this.onStatus?.('offline'); }
+      await sleep(2500);
+    }
+  }
+
+  async accept(id, offer) {
+    const pc = new RTCPeerConnection({ iceServers: ICE });
+    this.peers.set(id, { pc });
+    let h = null;
+    pc.ondatachannel = ev => {
+      const ch = ev.channel;
+      const send = framed(ch);
+      ch.onopen = () => {
+        h = this.room.connect({ send, close: () => pc.close() });
+        rest('DELETE', `gameRooms/${this.code}/joins/${id}`).catch(() => {});
+      };
+      const un = unframer(text => h?.message(text));
+      ch.onmessage = e => un(e.data);
+      ch.onclose = () => { h?.close(); h = null; this.peers.delete(id); };
+    };
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'closed'].includes(pc.connectionState)) { h?.close(); h = null; this.peers.delete(id); }
+    };
+    await pc.setRemoteDescription({ type: 'offer', sdp: offer });
+    await pc.setLocalDescription(await pc.createAnswer());
+    await gathered(pc);
+    await rest('PATCH', `gameRooms/${this.code}/joins/${id}?updateMask.fieldPaths=answer`, { fields: toFields({ answer: pc.localDescription.sdp }) });
+  }
+
+  async stop() {
+    this.stopped = true;
+    for (const { pc } of this.peers.values()) try { pc.close(); } catch {}
+    this.peers.clear();
+    if (this.code) {
+      try {
+        const list = await rest('GET', `gameRooms/${this.code}/joins`);
+        for (const doc of list?.documents || []) await rest('DELETE', `gameRooms/${this.code}/joins/${doc.name.split('/').pop()}`).catch(() => {});
+        await rest('DELETE', `gameRooms/${this.code}`);
+      } catch {}
+    }
+  }
+}
+
+// The host's own phone talks to its room directly, no network involved.
+class LocalNet {
+  constructor(room, onMessage, onStatus) {
+    this.room = room;
+    this.onMessage = onMessage;
+    this.onStatus = onStatus;
+    this.h = null;
+  }
+  connect(hello) {
+    this.h = this.room.connect({ send: str => setTimeout(() => this.onMessage(JSON.parse(str))), close: () => {} });
+    this.h.message(JSON.stringify({ t: 'hello', ...hello }));
+    this.onStatus?.('online');
+  }
+  send(msg) { this.h?.message(JSON.stringify(msg)); }
+  close() { this.h?.close(); this.h = null; }
+}
+
+// ------------------------------------------------------------- guest ----
+// A friend's phone: same interface as the LAN Net (connect / send / close),
+// reconnecting by itself if the link drops.
+class RtcNet {
+  constructor(code, onMessage, onStatus) {
+    this.code = normCode(code);
+    this.onMessage = onMessage;
+    this.onStatus = onStatus;
+    this.hello = null;
+    this.closed = false;
+    this.queue = [];
+    this.send$ = null;
+    this.fails = 0;
+  }
+
+  connect(hello) {
+    this.hello = hello;
+    this.closed = false;
+    this.open();
+  }
+
+  async open() {
+    if (this.closed) return;
+    this.onStatus?.('connecting');
+    let pc;
+    try {
+      const room = await rest('GET', `gameRooms/${this.code}`);
+      if (!room) { this.onStatus?.('noroom'); return; }
+      pc = new RTCPeerConnection({ iceServers: ICE });
+      this.pc = pc;
+      const ch = pc.createDataChannel('game', { ordered: true });
+      const send = framed(ch);
+      ch.onopen = () => {
+        this.fails = 0;
+        this.send$ = send;
+        this.onStatus?.('online');
+        send(JSON.stringify({ t: 'hello', ...this.hello }));
+        for (const m of this.queue.splice(0)) send(m);
+      };
+      const un = unframer(text => { let m; try { m = JSON.parse(text); } catch { return; } this.onMessage(m); });
+      ch.onmessage = e => un(e.data);
+      ch.onclose = () => this.dropped(pc);
+      pc.onconnectionstatechange = () => { if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) this.dropped(pc); };
+      await pc.setLocalDescription(await pc.createOffer());
+      await gathered(pc);
+      const doc = await rest('POST', `gameRooms/${this.code}/joins`, { fields: toFields({ offer: pc.localDescription.sdp, name: this.hello?.name || 'Player', created: Date.now() }) });
+      const id = doc.name.split('/').pop();
+      // Wait for the host's answer.
+      let answer = null;
+      for (let i = 0; i < 30 && !answer && !this.closed; i++) {
+        await sleep(1000);
+        const d = await rest('GET', `gameRooms/${this.code}/joins/${id}`);
+        answer = fromFields(d?.fields).answer;
+      }
+      if (!answer) { pc.close(); rest('DELETE', `gameRooms/${this.code}/joins/${id}`).catch(() => {}); throw new Error('no answer'); }
+      await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+      // If the link never opens, the networks can't see each other.
+      setTimeout(() => { if (this.pc === pc && !this.send$) { this.onStatus?.('blocked'); this.dropped(pc); } }, 15000);
+    } catch (e) {
+      this.fails++;
+      this.onStatus?.(this.fails > 2 ? 'blocked' : 'offline');
+      if (pc) try { pc.close(); } catch {}
+      if (!this.closed) setTimeout(() => this.open(), 3000);
+    }
+  }
+
+  dropped(pc) {
+    if (this.pc !== pc || this.closed) return;
+    this.pc = null;
+    this.send$ = null;
+    try { pc.close(); } catch {}
+    this.onStatus?.('offline');
+    setTimeout(() => this.open(), 2000);
+  }
+
+  send(msg) {
+    const str = JSON.stringify(msg);
+    if (this.send$) this.send$(str);
+    else if (this.queue.length < 50) this.queue.push(str);
+  }
+
+  close() {
+    this.closed = true;
+    try { this.pc?.close(); } catch {}
+  }
+}
+
+return { onlineSupported, normCode, Host, LocalNet, RtcNet };
 })();
 
 /* ===== audio.js ===== */
@@ -8380,7 +8975,7 @@ class UI {
       <div class="row"><button class="btn" data-act="sound">${soundOn() ? '🔊 Sound on' : '🔇 Sound off'}</button><button class="btn" data-act="quality">${q === 'high' ? '✨ Graphics: high' : q === 'medium' ? '⚖️ Graphics: medium' : '🔋 Graphics: battery'}</button></div>
       <div class="row"><button class="btn" data-act="save">💾 Save now</button><button class="btn" data-act="help">❓ How to play</button></div>
       <div class="row"><button class="btn small" data-act="export-save">📤 Export save file</button>${this.app.mp ? '' : '<button class="btn small" data-act="import-save">📂 Load save file</button>'}</div>
-      ${this.app.mp ? `<div class="card"><b>📶 LAN game</b><div class="note">${this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
+      ${this.app.mp ? `<div class="card"><b>${this.app.mp.online ? '🌐 Online game' : '📶 LAN game'}</b><div class="note">${this.app.mp.online ? (this.app.mp.code ? `Room code <b>${esc(this.app.mp.code)}</b>.${this.app.mp.room ? ' Your phone runs this game: keep the screen on.' : ''}` : '') : this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
         Tap a speed to say how fast you'd like to go: the city runs at the slowest player's choice. ⏸ pauses for everyone, for up to a minute.</div>
         ${this.app.mp.host ? '<div class="row"><button class="btn danger small" data-act="end-lan">End the game for everyone</button></div>' : ''}</div>` : ''}
       <div class="row"><button class="btn danger" data-act="quit">🚪 ${this.app.mp ? 'Leave (your company keeps trading)' : 'Quit to title'}</button></div>
@@ -8937,6 +9532,8 @@ const { createGame, serialize, deserialize, money, netWorth, dayName, yearOf, op
 const { advanceGame } = __mods.game;
 const { unreadCount } = __mods.advisor;
 const { AVATARS, faceHTML } = __mods.faces;
+const { createRoom } = __mods.room;
+const { Host, LocalNet, RtcNet, onlineSupported, normCode } = __mods.online;
 const { auctionTick } = __mods.auction;
 const { perform } = __mods.actions;
 const { Renderer3D } = __mods.render3d;
@@ -9071,7 +9668,13 @@ const app = {
   },
 
   toTitle() {
-    if (this.mp) { this.mp.net.close(); this.mp = null; }
+    if (this.mp) {
+      this.mp.net.close();
+      if (this.mp.tickTimer) clearInterval(this.mp.tickTimer);
+      this.mp.hostSession?.stop();
+      this.mp.wake?.release?.();
+      this.mp = null;
+    }
     this.s = null;
     if (MAP.id !== 'town' || !this.demo) {
       this.demo = createGame({ scenario: 'sandbox', seed: 4 });
@@ -9179,24 +9782,75 @@ app.fetchCitizen = id => { if (app.mp) app.mp.net.send({ t: 'citizen', id }); };
 document.querySelectorAll('#speeds button').forEach(b => b.addEventListener('click', () => app.requestSpeed(+b.dataset.speed)));
 
 // ---------------------------------------------------------------- LAN ----
-function joinLan() {
+function newSession(extra = {}) {
   const company = $('in-company').value.trim() || 'Your Company';
   const name = $('in-name').value.trim() || 'Player';
   localStorage.setItem('skyline-company', company);
   localStorage.setItem('skyline-name', name);
   const mp = {
     net: null, pid: -1, host: false, flow: null, pending: new Map(), seq: 0,
-    lobby: null, seats: [], addresses: app.lan?.addresses || [], lastState: 0,
+    lobby: null, seats: [], addresses: app.lan?.addresses || [], lastState: 0, ...extra,
   };
   app.mp = mp;
-  mp.net = new Net(onNet, status => {
-    $('net-status').textContent = status === 'online' ? '' : '📶 Reconnecting…';
-    $('net-status').classList.toggle('hidden', status === 'online');
-  });
-  mp.net.connect({ token, name, company, avatar: avatarPick });
   $('title').classList.add('hidden');
   $('lobby').classList.remove('hidden');
   $('lobby-body').innerHTML = '<p class="note">Connecting…</p>';
+  return { mp, hello: { token, name, company, avatar: avatarPick } };
+}
+const netStatus = status => {
+  const msg = { online: '', connecting: '📶 Connecting…', offline: '📶 Reconnecting…', blocked: '📶 Can\'t reach the host from this network. Try wifi, or the same wifi as the host.', noroom: '' }[status] ?? '📶 Reconnecting…';
+  $('net-status').textContent = msg;
+  $('net-status').classList.toggle('hidden', !msg);
+};
+
+function joinLan() {
+  const { mp, hello } = newSession();
+  mp.net = new Net(onNet, netStatus);
+  mp.net.connect(hello);
+}
+
+// Online, hosting: this phone runs the room; friends connect with the code.
+async function hostOnline() {
+  const { mp, hello } = newSession({ online: true });
+  const room = createRoom({
+    store: {
+      load: () => localStorage.getItem('skyline-online-save'),
+      save: d => { try { localStorage.setItem('skyline-online-save', d); } catch (e) { /* full */ } },
+      exists: () => !!localStorage.getItem('skyline-online-save'),
+      remove: () => localStorage.removeItem('skyline-online-save'),
+    },
+  });
+  mp.room = room;
+  mp.tickTimer = setInterval(room.tick, 50);
+  mp.net = new LocalNet(room, onNet, netStatus);
+  mp.net.connect(hello);
+  mp.hostSession = new Host(room, { name: hello.name, onStatus: s => { mp.signal = s; } });
+  try {
+    mp.code = await mp.hostSession.start();
+    renderLobby();
+  } catch (e) {
+    mp.code = null;
+    mp.codeError = true;
+    renderLobby();
+  }
+  // Keep the host's screen awake: the city runs here.
+  try { mp.wake = await navigator.wakeLock?.request('screen'); } catch (e) { /* not supported */ }
+}
+
+// Online, joining a friend's room by its code.
+function joinOnline(code) {
+  code = normCode(code);
+  if (code.length !== 4) { app.ui.toast('Room codes have 4 letters.', 'bad'); return; }
+  const { mp, hello } = newSession({ online: true, code });
+  mp.net = new RtcNet(code, onNet, status => {
+    if (status === 'noroom') {
+      app.toTitle();
+      app.ui.toast(`No game with the code ${code}. Check it with the host.`, 'bad');
+      return;
+    }
+    netStatus(status);
+  });
+  mp.net.connect(hello);
 }
 
 function onNet(m) {
@@ -9277,7 +9931,9 @@ function renderLobby() {
   const sc = SCENARIOS[L.settings.scenario];
   const full = L.players.length > L.max;
   $('lobby-body').innerHTML = `
-    <p class="note">${mp.addresses.length ? `Friends on the same wifi open <b>${esc(mp.addresses[0])}</b> and tap <b>LAN multiplayer</b>.` : 'Friends on the same wifi open this same address.'}</p>
+    ${mp.online ? `<div class="room-code">${mp.code ? `<small>Room code</small><b>${esc(mp.code)}</b><small>Friends open ${esc(location.host || 'the game')} and enter it under <em>Play with friends</em>.</small>${location.protocol.startsWith('http') ? '<div class="row" style="justify-content:center;margin:8px 0 0"><button class="btn small" id="lob-share">🔗 Share invite link</button></div>' : ''}` : mp.codeError ? '<small class="neg">Couldn\'t create a room code: check your internet connection and try again.</small>' : '<small>Getting a room code…</small>'}</div>
+      ${mp.room ? '<p class="note">📱 Your phone runs this game. Keep this screen open while you play; if it sleeps, the city pauses for everyone.</p>' : ''}`
+    : `<p class="note">${mp.addresses.length ? `Friends on the same wifi open <b>${esc(mp.addresses[0])}</b> and tap <b>LAN</b>.` : 'Friends on the same wifi open this same address.'}</p>`}
     <h3>Players <em>${Math.min(L.players.length, L.max)} / ${L.max}${L.players.length < L.max ? ' · rivals fill the rest' : ''}</em></h3>
     ${L.players.map((p, i) => `<div class="list-item">${faceHTML({ human: true, avatar: p.avatar, name: p.name, color: '#2ee6ff' }, 36)}<span class="grow"><b>${esc(p.company)}</b><small>${esc(p.name)}${p.host ? ' · host' : ''}${p.token === L.you ? ' · you' : ''}${i >= L.max ? ' · no seat (game full)' : ''}</small></span></div>`).join('')}
     ${full ? '<p class="note warn">Only the first 4 players get a company.</p>' : ''}
@@ -9304,6 +9960,14 @@ function renderLobby() {
   bind('#lob-resume', () => mp.net.send({ t: 'start', resume: true }));
   bind('#lob-leave', () => app.toTitle());
   avatarRow($('lob-avatar'), () => mp.net.send({ t: 'profile', avatar: avatarPick }));
+  $('lobby-kind').textContent = mp.online ? 'GAME' : 'LAN';
+  $('lob-share')?.addEventListener('click', async () => {
+    const url = `${location.origin}${location.pathname}?join=${mp.code}`;
+    try {
+      if (navigator.share) await navigator.share({ title: 'Skyline Hustle', text: `Join my Skyline Hustle game: code ${mp.code}`, url });
+      else { await navigator.clipboard.writeText(url); app.ui.toast('Invite link copied.', 'good'); }
+    } catch (e) { /* cancelled */ }
+  });
 }
 
 // Joined a game already under way without a seat: take over a free one.
@@ -9425,6 +10089,13 @@ $('btn-continue').addEventListener('click', () => {
   catch (e) { localStorage.removeItem(SAVE_KEY); app.toTitle(); }
 });
 $('btn-lan').addEventListener('click', () => { sfx.tap(); joinLan(); });
+$('btn-host').addEventListener('click', () => { sfx.tap(); hostOnline(); });
+$('btn-join').addEventListener('click', () => { sfx.tap(); joinOnline($('in-code').value); });
+$('in-code').addEventListener('input', e => { e.target.value = normCode(e.target.value); });
+if (!onlineSupported()) $('online-row').classList.add('hidden');
+// A shared link like play.jteef.com/?join=KXPF fills in the code.
+const joinParam = new URLSearchParams(location.search).get('join');
+if (joinParam) $('in-code').value = normCode(joinParam);
 $('btn-export').addEventListener('click', () => { sfx.tap(); app.exportSave(); });
 $('btn-import').addEventListener('click', () => { sfx.tap(); app.importSave(); });
 setSound(localStorage.getItem('skyline-sound') !== '0');

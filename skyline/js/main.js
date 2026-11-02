@@ -9,6 +9,8 @@ import { createGame, serialize, deserialize, money, netWorth, dayName, yearOf, o
 import { advanceGame } from './game.js';
 import { unreadCount } from './advisor.js';
 import { AVATARS, faceHTML } from './faces.js';
+import { createRoom } from './room.js';
+import { Host, LocalNet, RtcNet, onlineSupported, normCode } from './online.js';
 import { auctionTick } from './auction.js';
 import { perform } from './actions.js';
 import { Renderer3D } from './render3d.js';
@@ -143,7 +145,13 @@ const app = {
   },
 
   toTitle() {
-    if (this.mp) { this.mp.net.close(); this.mp = null; }
+    if (this.mp) {
+      this.mp.net.close();
+      if (this.mp.tickTimer) clearInterval(this.mp.tickTimer);
+      this.mp.hostSession?.stop();
+      this.mp.wake?.release?.();
+      this.mp = null;
+    }
     this.s = null;
     if (MAP.id !== 'town' || !this.demo) {
       this.demo = createGame({ scenario: 'sandbox', seed: 4 });
@@ -251,24 +259,75 @@ app.fetchCitizen = id => { if (app.mp) app.mp.net.send({ t: 'citizen', id }); };
 document.querySelectorAll('#speeds button').forEach(b => b.addEventListener('click', () => app.requestSpeed(+b.dataset.speed)));
 
 // ---------------------------------------------------------------- LAN ----
-function joinLan() {
+function newSession(extra = {}) {
   const company = $('in-company').value.trim() || 'Your Company';
   const name = $('in-name').value.trim() || 'Player';
   localStorage.setItem('skyline-company', company);
   localStorage.setItem('skyline-name', name);
   const mp = {
     net: null, pid: -1, host: false, flow: null, pending: new Map(), seq: 0,
-    lobby: null, seats: [], addresses: app.lan?.addresses || [], lastState: 0,
+    lobby: null, seats: [], addresses: app.lan?.addresses || [], lastState: 0, ...extra,
   };
   app.mp = mp;
-  mp.net = new Net(onNet, status => {
-    $('net-status').textContent = status === 'online' ? '' : '📶 Reconnecting…';
-    $('net-status').classList.toggle('hidden', status === 'online');
-  });
-  mp.net.connect({ token, name, company, avatar: avatarPick });
   $('title').classList.add('hidden');
   $('lobby').classList.remove('hidden');
   $('lobby-body').innerHTML = '<p class="note">Connecting…</p>';
+  return { mp, hello: { token, name, company, avatar: avatarPick } };
+}
+const netStatus = status => {
+  const msg = { online: '', connecting: '📶 Connecting…', offline: '📶 Reconnecting…', blocked: '📶 Can\'t reach the host from this network. Try wifi, or the same wifi as the host.', noroom: '' }[status] ?? '📶 Reconnecting…';
+  $('net-status').textContent = msg;
+  $('net-status').classList.toggle('hidden', !msg);
+};
+
+function joinLan() {
+  const { mp, hello } = newSession();
+  mp.net = new Net(onNet, netStatus);
+  mp.net.connect(hello);
+}
+
+// Online, hosting: this phone runs the room; friends connect with the code.
+async function hostOnline() {
+  const { mp, hello } = newSession({ online: true });
+  const room = createRoom({
+    store: {
+      load: () => localStorage.getItem('skyline-online-save'),
+      save: d => { try { localStorage.setItem('skyline-online-save', d); } catch (e) { /* full */ } },
+      exists: () => !!localStorage.getItem('skyline-online-save'),
+      remove: () => localStorage.removeItem('skyline-online-save'),
+    },
+  });
+  mp.room = room;
+  mp.tickTimer = setInterval(room.tick, 50);
+  mp.net = new LocalNet(room, onNet, netStatus);
+  mp.net.connect(hello);
+  mp.hostSession = new Host(room, { name: hello.name, onStatus: s => { mp.signal = s; } });
+  try {
+    mp.code = await mp.hostSession.start();
+    renderLobby();
+  } catch (e) {
+    mp.code = null;
+    mp.codeError = true;
+    renderLobby();
+  }
+  // Keep the host's screen awake: the city runs here.
+  try { mp.wake = await navigator.wakeLock?.request('screen'); } catch (e) { /* not supported */ }
+}
+
+// Online, joining a friend's room by its code.
+function joinOnline(code) {
+  code = normCode(code);
+  if (code.length !== 4) { app.ui.toast('Room codes have 4 letters.', 'bad'); return; }
+  const { mp, hello } = newSession({ online: true, code });
+  mp.net = new RtcNet(code, onNet, status => {
+    if (status === 'noroom') {
+      app.toTitle();
+      app.ui.toast(`No game with the code ${code}. Check it with the host.`, 'bad');
+      return;
+    }
+    netStatus(status);
+  });
+  mp.net.connect(hello);
 }
 
 function onNet(m) {
@@ -349,7 +408,9 @@ function renderLobby() {
   const sc = SCENARIOS[L.settings.scenario];
   const full = L.players.length > L.max;
   $('lobby-body').innerHTML = `
-    <p class="note">${mp.addresses.length ? `Friends on the same wifi open <b>${esc(mp.addresses[0])}</b> and tap <b>LAN multiplayer</b>.` : 'Friends on the same wifi open this same address.'}</p>
+    ${mp.online ? `<div class="room-code">${mp.code ? `<small>Room code</small><b>${esc(mp.code)}</b><small>Friends open ${esc(location.host || 'the game')} and enter it under <em>Play with friends</em>.</small>${location.protocol.startsWith('http') ? '<div class="row" style="justify-content:center;margin:8px 0 0"><button class="btn small" id="lob-share">🔗 Share invite link</button></div>' : ''}` : mp.codeError ? '<small class="neg">Couldn\'t create a room code: check your internet connection and try again.</small>' : '<small>Getting a room code…</small>'}</div>
+      ${mp.room ? '<p class="note">📱 Your phone runs this game. Keep this screen open while you play; if it sleeps, the city pauses for everyone.</p>' : ''}`
+    : `<p class="note">${mp.addresses.length ? `Friends on the same wifi open <b>${esc(mp.addresses[0])}</b> and tap <b>LAN</b>.` : 'Friends on the same wifi open this same address.'}</p>`}
     <h3>Players <em>${Math.min(L.players.length, L.max)} / ${L.max}${L.players.length < L.max ? ' · rivals fill the rest' : ''}</em></h3>
     ${L.players.map((p, i) => `<div class="list-item">${faceHTML({ human: true, avatar: p.avatar, name: p.name, color: '#2ee6ff' }, 36)}<span class="grow"><b>${esc(p.company)}</b><small>${esc(p.name)}${p.host ? ' · host' : ''}${p.token === L.you ? ' · you' : ''}${i >= L.max ? ' · no seat (game full)' : ''}</small></span></div>`).join('')}
     ${full ? '<p class="note warn">Only the first 4 players get a company.</p>' : ''}
@@ -376,6 +437,14 @@ function renderLobby() {
   bind('#lob-resume', () => mp.net.send({ t: 'start', resume: true }));
   bind('#lob-leave', () => app.toTitle());
   avatarRow($('lob-avatar'), () => mp.net.send({ t: 'profile', avatar: avatarPick }));
+  $('lobby-kind').textContent = mp.online ? 'GAME' : 'LAN';
+  $('lob-share')?.addEventListener('click', async () => {
+    const url = `${location.origin}${location.pathname}?join=${mp.code}`;
+    try {
+      if (navigator.share) await navigator.share({ title: 'Skyline Hustle', text: `Join my Skyline Hustle game: code ${mp.code}`, url });
+      else { await navigator.clipboard.writeText(url); app.ui.toast('Invite link copied.', 'good'); }
+    } catch (e) { /* cancelled */ }
+  });
 }
 
 // Joined a game already under way without a seat: take over a free one.
@@ -497,6 +566,13 @@ $('btn-continue').addEventListener('click', () => {
   catch (e) { localStorage.removeItem(SAVE_KEY); app.toTitle(); }
 });
 $('btn-lan').addEventListener('click', () => { sfx.tap(); joinLan(); });
+$('btn-host').addEventListener('click', () => { sfx.tap(); hostOnline(); });
+$('btn-join').addEventListener('click', () => { sfx.tap(); joinOnline($('in-code').value); });
+$('in-code').addEventListener('input', e => { e.target.value = normCode(e.target.value); });
+if (!onlineSupported()) $('online-row').classList.add('hidden');
+// A shared link like play.jteef.com/?join=KXPF fills in the code.
+const joinParam = new URLSearchParams(location.search).get('join');
+if (joinParam) $('in-code').value = normCode(joinParam);
 $('btn-export').addEventListener('click', () => { sfx.tap(); app.exportSave(); });
 $('btn-import').addEventListener('click', () => { sfx.tap(); app.importSave(); });
 setSound(localStorage.getItem('skyline-sound') !== '0');

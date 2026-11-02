@@ -1057,7 +1057,7 @@ export class UI {
       <div class="row"><button class="btn" data-act="sound">${soundOn() ? '🔊 Sound on' : '🔇 Sound off'}</button><button class="btn" data-act="quality">${q === 'high' ? '✨ Graphics: high' : q === 'medium' ? '⚖️ Graphics: medium' : '🔋 Graphics: battery'}</button></div>
       <div class="row"><button class="btn" data-act="save">💾 Save now</button><button class="btn" data-act="help">❓ How to play</button></div>
       <div class="row"><button class="btn small" data-act="export-save">📤 Export save file</button>${this.app.mp ? '' : '<button class="btn small" data-act="import-save">📂 Load save file</button>'}</div>
-      ${this.app.mp ? `<div class="card"><b>📶 LAN game</b><div class="note">${this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
+      ${this.app.mp ? `<div class="card"><b>${this.app.mp.online ? '🌐 Online game' : '📶 LAN game'}</b><div class="note">${this.app.mp.online ? (this.app.mp.code ? `Room code <b>${esc(this.app.mp.code)}</b>.${this.app.mp.room ? ' Your phone runs this game: keep the screen on.' : ''}` : '') : this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
         Tap a speed to say how fast you'd like to go: the city runs at the slowest player's choice. ⏸ pauses for everyone, for up to a minute.</div>
         ${this.app.mp.host ? '<div class="row"><button class="btn danger small" data-act="end-lan">End the game for everyone</button></div>' : ''}</div>` : ''}
       <div class="row"><button class="btn danger" data-act="quit">🚪 ${this.app.mp ? 'Leave (your company keeps trading)' : 'Quit to title'}</button></div>

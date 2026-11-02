@@ -486,3 +486,12 @@ a.link { color: var(--you); font-size: 13px; text-decoration: underline; cursor:
 .own-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 6px; background: #ffffff12; }
 .own-bar i { display: block; height: 100%; }
 .card.stock .grow b, .card.stock .grow small { display: block; } .card.stock .amt small { display: block; }
+
+/* -------------------------------------------------------------- online -- */
+.join-row { gap: 8px; }
+.join-row input { flex: 1; min-width: 0; text-align: center; font: 800 20px/1 system-ui, sans-serif; letter-spacing: 0.3em; text-transform: uppercase;
+  background: #0003; border: 1px solid var(--line); border-radius: 12px; color: inherit; padding: 10px; }
+.room-code { text-align: center; padding: 12px; border-radius: 16px; background: rgba(46, 230, 255, 0.08); border: 1px solid rgba(46, 230, 255, 0.35); margin-bottom: 8px; }
+.room-code b { display: block; font-size: 40px; letter-spacing: 0.25em; color: var(--you); margin: 2px 0 4px; }
+.room-code small { display: block; opacity: 0.8; }
+.room-code em { font-style: normal; font-weight: 800; color: var(--you); }

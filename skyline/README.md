@@ -16,6 +16,28 @@ Open the printed `http://<your-ip>:8090` on a phone on the same wifi (or
 `http://localhost:8090` on the computer). Single-player games save
 themselves every midnight in the browser.
 
+### Online with friends (no server needed)
+
+Tap **Host a game** on the title screen and you get a four-letter room code
+(and a share link). Friends open the same page (for example play.jteef.com),
+type the code under **Play with friends** and tap **Join**. Up to 4 players;
+rivals fill the empty seats. Everything else (lobby, speed, pause, reviews,
+auctions, saves) works exactly like LAN play.
+
+How it works: the host's phone runs the city in the browser (js/room.js, the
+same code the LAN server runs). Friends' phones connect straight to it over
+WebRTC data channels (js/online.js). The only cloud piece is a small mailbox
+in Firestore (`gameRooms/{CODE}` and its `joins`) used to swap connection
+details when someone joins: a few dozen document reads and writes per game,
+cleaned up when the host leaves. Google's public STUN servers help phones on
+different networks find each other. There's no relay server, so a few strict
+networks (some mobile data, some work or school wifi) can't connect;
+joining from the host's wifi always works.
+
+The host keeps the game screen open (the game asks the phone to stay awake);
+if the host's phone sleeps or the host leaves, the city pauses for everyone.
+Online saves stay on the host's phone and can be resumed from the lobby.
+
 ### LAN multiplayer
 
 Up to **4 players** on the same wifi, with AI rivals filling any empty seats.
@@ -454,6 +476,8 @@ skyline/
   js/ai.js         rival tycoons (build, tune, trade, bid)
   js/game.js       the clock: advances the sim, wakes the AI, opens auctions
   js/actions.js    every player action by name, validated (single-player and server)
+  js/room.js       the multiplayer room: lobby, authoritative city, speed, reviews, saves (LAN server and online host)
+  js/online.js     online play: room codes, Firestore mailbox, WebRTC host/guest
   js/net.js        LAN WebSocket client with auto-reconnect
   js/lens.js       city lenses: one number per block for heat maps and rankings
   js/portraits.js  embedded illustrated portraits (rivals and player avatars)
