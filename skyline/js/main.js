@@ -110,6 +110,34 @@ const app = {
     this.hud();
   },
 
+  // Download the current game (or, from the title, the last save) as a file.
+  exportSave() {
+    const data = this.s ? serialize(this.s) : localStorage.getItem(SAVE_KEY);
+    if (!data) { this.ui.toast('No saved game yet.', 'bad'); return; }
+    const s = this.s || JSON.parse(data);
+    const name = `skyline-${String(s.players?.[getMe() >= 0 ? getMe() : 0]?.company || 'save').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-day${s.day}.json`;
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    this.ui.toast(`Saved ${name}`, 'good');
+  },
+  importSave() {
+    const inp = Object.assign(document.createElement('input'), { type: 'file', accept: '.json,application/json' });
+    inp.addEventListener('change', async () => {
+      const f = inp.files[0];
+      if (!f) return;
+      try {
+        const s = deserialize(await f.text());
+        if (this.mp) return;
+        this.ui.hideModal();
+        this.start(s);
+        this.ui.toast(`Loaded day ${s.day}.`, 'good');
+      } catch (e) { this.ui.toast('That file is not a Skyline Hustle save.', 'bad'); }
+    });
+    inp.click();
+  },
+
   toTitle() {
     if (this.mp) { this.mp.net.close(); this.mp = null; }
     this.s = null;
@@ -122,6 +150,7 @@ const app = {
     ['hud', 'nav', 'sheet', 'auction', 'camctl', 'vote', 'lobby'].forEach(id => $(id).classList.add('hidden'));
     $('modal').classList.add('hidden');
     $('btn-continue').classList.toggle('hidden', !localStorage.getItem(SAVE_KEY));
+    $('btn-export').classList.toggle('hidden', !localStorage.getItem(SAVE_KEY));
     $('title').classList.remove('hidden');
     $('net-status').classList.add('hidden');
   },
@@ -196,7 +225,8 @@ const app = {
     if (!this.s.over) { if (this.overShown) { this.overShown = false; this.ui.hideModal(); } return; }
     if (!this.overShown) {
       this.overShown = true;
-      if (!this.mp) localStorage.removeItem(SAVE_KEY);
+      // Keep the finished game: Continue reopens it to keep playing or export.
+      if (!this.mp) try { localStorage.setItem(SAVE_KEY, serialize(this.s)); } catch (e) { /* storage full */ }
       this.ui.gameOver();
     }
   },
@@ -461,6 +491,8 @@ $('btn-continue').addEventListener('click', () => {
   catch (e) { localStorage.removeItem(SAVE_KEY); app.toTitle(); }
 });
 $('btn-lan').addEventListener('click', () => { sfx.tap(); joinLan(); });
+$('btn-export').addEventListener('click', () => { sfx.tap(); app.exportSave(); });
+$('btn-import').addEventListener('click', () => { sfx.tap(); app.importSave(); });
 setSound(localStorage.getItem('skyline-sound') !== '0');
 setMusic(localStorage.getItem('skyline-music') !== '0');
 setMusicVolume(+(localStorage.getItem('skyline-music-vol') || 0.6));

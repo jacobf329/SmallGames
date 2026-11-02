@@ -18,7 +18,7 @@ import {
 } from './sim.js';
 import { PROJECTS, CHAIN_MIN, LANDMARKS, SUPPLY_LINES, LINE_OF, SUPPLIER_LEVELS, PRODUCTION_COST } from './data.js';
 import { suppliers, capOf, supplierName, supplierCost, lineDemand } from './supply.js';
-import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } from './staff.js';
+import { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers, hoursEach, crewFor, ROTA_HOURS } from './staff.js';
 import { LENSES, LENS, lensData } from './lens.js';
 import { auctionBid, settleRest, minBid, increment, canCall, reservePrice, auctionGap } from './auction.js';
 import { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } from './citizens.js';
@@ -465,7 +465,7 @@ export class UI {
       <div class="stat"><small>Morale</small><b>${mood({ morale: avgMorale(b) })} ${Math.round(avgMorale(b) * 100)}%</b></div></div>
       <p class="note">${manager(b) ? `Managed by <b>${esc(manager(b).name)}</b>.` : 'No manager: promote someone to lift morale and service.'}
       ${clerks(b) ? ` ${clerks(b)} stock clerk${clerks(b) > 1 ? 's' : ''}: a 13:00 restock and less spoilage.` : ' A stock clerk adds a 13:00 restock.'}
-      ${b.len > 12 ? ' <span class="warn">Long opening hours are wearing the team down.</span>' : ''}</p>`;
+      ${(() => { const he = hoursEach(b), need = crewFor(b.len) - b.team.length; return he > ROTA_HOURS ? ` <span class="warn">Rota: ~${Math.round(he)}h a day each over ${b.len}h of opening. Hire ${need} more and nobody works over ${ROTA_HOURS}h.</span>` : ` Rota: ~${Math.round(he)}h a day each.`; })()}</p>`;
     h += b.team.map(m => {
       const fair = fairPay(b.type, m.role, m.skill);
       const role = STAFF_ROLES[m.role];
@@ -1025,6 +1025,7 @@ export class UI {
       <p class="note">🎶 Now playing: ${esc(eraName(yearOf(this.s)))} style. Every era has its own sound, and the tunes are made up as you play.</p>
       <div class="row"><button class="btn" data-act="sound">${soundOn() ? '🔊 Sound on' : '🔇 Sound off'}</button><button class="btn" data-act="quality">${q === 'high' ? '✨ Graphics: high' : q === 'medium' ? '⚖️ Graphics: medium' : '🔋 Graphics: battery'}</button></div>
       <div class="row"><button class="btn" data-act="save">💾 Save now</button><button class="btn" data-act="help">❓ How to play</button></div>
+      <div class="row"><button class="btn small" data-act="export-save">📤 Export save file</button>${this.app.mp ? '' : '<button class="btn small" data-act="import-save">📂 Load save file</button>'}</div>
       ${this.app.mp ? `<div class="card"><b>📶 LAN game</b><div class="note">${this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
         Speed changes need everyone's agreement. You can propose once every 60 seconds.</div>
         ${this.app.mp.host ? '<div class="row"><button class="btn danger small" data-act="end-lan">End the game for everyone</button></div>' : ''}</div>` : ''}
@@ -1339,6 +1340,8 @@ export class UI {
       case 'quality': { const q = this.app.renderer.quality; this.app.renderer.setQuality(q === 'high' ? 'medium' : q === 'medium' ? 'low' : 'high'); break; }
       case 'save': this.app.save(); this.toast(this.app.mp ? 'The server saves the LAN game every midnight.' : 'Game saved.', 'good'); break;
       case 'help': this.help(); return;
+      case 'export-save': this.app.exportSave(); sfx.tap(); return;
+      case 'import-save': this.app.importSave(); sfx.tap(); return;
       case 'quit': this.app.save(); this.app.toTitle(); return;
       case 'end-lan': this.confirm('End the game for everyone?', 'Everyone goes back to the lobby. The game is saved and can be resumed.', () => this.app.mp?.net.send({ t: 'end' })); return;
       case 'claim': this.app.mp?.net.send({ t: 'claim', pid: +el.dataset.pid }); return;
@@ -1504,7 +1507,10 @@ export class UI {
     won ? sfx.win() : sfx.bad();
     this.modal(`<h2>${won ? '🏆 You win!' : s.winner < 0 ? '💸 Game over' : `${esc(s.players[s.winner].company)} wins`}</h2>
       <p>${esc(s.endReason)}</p>
-      ${rows.map(({ p, w }, i) => `<div class="list-item">${faceHTML(p, 36)}<span class="grow"><b style="color:${p.color}">${i + 1}. ${esc(p.company)}</b><small>${p.bankrupt ? 'bankrupt' : esc(p.name)}</small></span><span class="amt">${money(w)}</span></div>`).join('')}
+      ${rows.map(({ p, w }, i) => { const a = playerAssets(s, p.id), lots = s.lots.filter(l => l.owner === p.id).length;
+        return `<div class="list-item">${faceHTML(p, 36)}<span class="grow"><b style="color:${p.color}">${i + 1}. ${esc(p.company)}</b><small>${p.bankrupt ? 'bankrupt' : `cash ${money(p.cash)} · land ${money(a.land)} (${lots} lots) · shops ${money(a.biz)} · apartments ${money(a.apt)}${p.loan ? ` · loan −${money(p.loan)}` : ''}`}</small></span><span class="amt">${money(w)}</span></div>`; }).join('')}
+      <p class="note">Net worth = cash + land at today's value + shops (60% of what was spent, plus stock) + apartments (75%) − loans.</p>
+      <div class="row"><button class="btn small wide" data-act="export-save">📤 Export this game as a file</button></div>
       ${this.app.mp && !this.app.mp.host ? '<p class="note">The host decides whether to keep playing or go back to the lobby.</p>' : ''}
       <div class="row"><button class="btn buy wide" data-act="keep-playing" ${this.app.mp && !this.app.mp.host ? 'disabled' : ''}>▶ Keep playing</button></div>
       <p class="note" style="text-align:center">${s.players[ME].bankrupt ? 'You get a fresh start with half the usual cash. ' : ''}No more goals or deadlines: the city and the rivals carry on.</p>

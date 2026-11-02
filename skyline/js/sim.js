@@ -282,7 +282,8 @@ function refreshMods(s) {
 
 // A new business's default settings.
 export function newBizConfig(def) {
-  return { price: 1, staff: 3, fit: 1, floors: 1, ...defaultHours(def) };
+  const h = defaultHours(def);
+  return { price: 1, staff: h.len > 16 ? Math.ceil(2 * h.len / 10) : 3, fit: 1, floors: 1, ...h };
 }
 
 // What would this business make per day, right now? Temporarily installs

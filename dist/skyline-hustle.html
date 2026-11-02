@@ -492,6 +492,7 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .auc-leader { display: flex; gap: 8px; align-items: center; }
 .auc-leader .face { border-width: 2px; }
 .profile h2 { text-align: center; margin-bottom: 4px; }
+a.link { color: var(--you); font-size: 13px; text-decoration: underline; cursor: pointer; }
 
 </style>
 </head>
@@ -569,6 +570,7 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
     <p class="tag">Win the land auctions. Paint the town your colour. Build to the clouds, decade by decade.</p>
 
     <button id="btn-continue" class="btn go hidden">Continue</button>
+    <div class="row" style="justify-content:center;gap:14px"><a id="btn-export" class="link hidden">📤 Export saved game</a><a id="btn-import" class="link">📂 Load a save file</a></div>
 
     <div class="field">
       <span>Your face</span>
@@ -1466,6 +1468,11 @@ function teamWage(b) {
 const servers = b => (b.team ? b.team.filter(m => m.role === 'server').length : b.staff);
 const clerks = b => (b.team ? b.team.filter(m => m.role === 'clerk').length : 0);
 const manager = b => (b.team ? b.team.find(m => m.role === 'manager') : null);
+// Each hour needs about two people on, so the team shares opening hours on
+// a rota. Hours each person works a day, and the crew a shop needs.
+const ROTA_HOURS = 10;
+const hoursEach = b => (b.len || 12) / Math.max(1, (b.team ? b.team.length : b.staff) / 2);
+const crewFor = len => Math.ceil(2 * (len || 12) / ROTA_HOURS);
 function avgMorale(b) {
   if (!b.team || !b.team.length) return 0.7;
   return b.team.reduce((a, m) => a + m.morale, 0) / b.team.length;
@@ -1492,7 +1499,9 @@ function staffNight(s, b) {
   const t = b.yesterday || b.today;
   const asked = t.cust + t.turned;
   const stress = (t.peak >= 1 ? 0.1 : 0) + (asked && t.turned / asked > 0.1 ? 0.05 : 0);
-  const longHours = 0.025 * Math.max(0, (b.len || 12) - 12);
+  // Fatigue comes from hours per person, not opening hours: a 24-hour hotel
+  // with enough staff on a rota is fine; a skeleton crew burns out.
+  const longHours = 0.03 * Math.max(0, hoursEach(b) - ROTA_HOURS);
   const mg = manager(b);
   const quit = [];
   for (const m of b.team) {
@@ -1514,7 +1523,7 @@ function staffNight(s, b) {
 
 
 
-return { TRAIN_DAYS, MAX_FLOORS, fairPay, maxStaff, floorCap, clamp01, makeStaff, refreshCandidates, effectiveness, teamPower, teamWage, servers, clerks, manager, avgMorale, avgSkill, serviceFactor, syncHeadcount, staffNight };
+return { TRAIN_DAYS, MAX_FLOORS, fairPay, maxStaff, floorCap, clamp01, makeStaff, refreshCandidates, effectiveness, teamPower, teamWage, servers, clerks, manager, ROTA_HOURS, hoursEach, crewFor, avgMorale, avgSkill, serviceFactor, syncHeadcount, staffNight };
 })();
 
 /* ===== demand.js ===== */
@@ -2206,7 +2215,8 @@ function refreshMods(s) {
 
 // A new business's default settings.
 function newBizConfig(def) {
-  return { price: 1, staff: 3, fit: 1, floors: 1, ...defaultHours(def) };
+  const h = defaultHours(def);
+  return { price: 1, staff: h.len > 16 ? Math.ceil(2 * h.len / 10) : 3, fit: 1, floors: 1, ...h };
 }
 
 // What would this business make per day, right now? Temporarily installs
@@ -4278,7 +4288,7 @@ __mods.advisor = (() => {
 
 const { BIZ, DISTRICTS, SCENARIOS, QUIT_MORALE, MAX_FLOORS } = __mods.data;
 const { MAP, bizLabel, money, setCount, goalProgress, goalText, netWorth, bizOpen, techOf, raceGoal } = __mods.sim;
-const { avgMorale } = __mods.staff;
+const { avgMorale, hoursEach, ROTA_HOURS } = __mods.staff;
 const { SHOP_COMMENTS } = __mods.citizens;
 const { LM, landmarkSet, landmarkState, reqProgress, rushCost, activeProjects, chainOf } = __mods.civic;
 const { PROJECTS, CHAIN_MIN, SUPPLY_LINES, LINE_OF } = __mods.data;
@@ -4347,7 +4357,7 @@ function shopAlerts(s, pid, out) {
       const m = avgMorale(b);
       if (m < QUIT_MORALE + 0.12) {
         out.push({ key: `morale:${l.id}`, cat: 'shops', sev: 'warn', icon: '😤', lot: l.id, title: `Unhappy staff: ${name}`,
-          text: `Team morale is ${pct(m)}. Someone may quit tonight. Pay, shorter hours or a manager help.`, tab: 'staff' });
+          text: `Team morale is ${pct(m)}. Someone may quit tonight. ${hoursEach(b) > ROTA_HOURS ? `They each work ~${Math.round(hoursEach(b))}h a day: hire more staff for the rota.` : 'Pay or a manager help.'}`, tab: 'staff' });
       }
     }
     if (y && y.wasteV > 150 && y.wasteV > 0.12 * y.rev) {
@@ -7064,7 +7074,7 @@ const {
 } = __mods.sim;
 const { PROJECTS, CHAIN_MIN, LANDMARKS, SUPPLY_LINES, LINE_OF, SUPPLIER_LEVELS, PRODUCTION_COST } = __mods.data;
 const { suppliers, capOf, supplierName, supplierCost, lineDemand } = __mods.supply;
-const { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers } = __mods.staff;
+const { maxStaff, fairPay, effectiveness, avgMorale, teamWage, manager, clerks, servers, hoursEach, crewFor, ROTA_HOURS } = __mods.staff;
 const { LENSES, LENS, lensData } = __mods.lens;
 const { auctionBid, settleRest, minBid, increment, canCall, reservePrice, auctionGap } = __mods.auction;
 const { citizenName, CHATTER_ICON, thoughtText, SHOP_COMMENTS } = __mods.citizens;
@@ -7511,7 +7521,7 @@ class UI {
       <div class="stat"><small>Morale</small><b>${mood({ morale: avgMorale(b) })} ${Math.round(avgMorale(b) * 100)}%</b></div></div>
       <p class="note">${manager(b) ? `Managed by <b>${esc(manager(b).name)}</b>.` : 'No manager: promote someone to lift morale and service.'}
       ${clerks(b) ? ` ${clerks(b)} stock clerk${clerks(b) > 1 ? 's' : ''}: a 13:00 restock and less spoilage.` : ' A stock clerk adds a 13:00 restock.'}
-      ${b.len > 12 ? ' <span class="warn">Long opening hours are wearing the team down.</span>' : ''}</p>`;
+      ${(() => { const he = hoursEach(b), need = crewFor(b.len) - b.team.length; return he > ROTA_HOURS ? ` <span class="warn">Rota: ~${Math.round(he)}h a day each over ${b.len}h of opening. Hire ${need} more and nobody works over ${ROTA_HOURS}h.</span>` : ` Rota: ~${Math.round(he)}h a day each.`; })()}</p>`;
     h += b.team.map(m => {
       const fair = fairPay(b.type, m.role, m.skill);
       const role = STAFF_ROLES[m.role];
@@ -8071,6 +8081,7 @@ class UI {
       <p class="note">🎶 Now playing: ${esc(eraName(yearOf(this.s)))} style. Every era has its own sound, and the tunes are made up as you play.</p>
       <div class="row"><button class="btn" data-act="sound">${soundOn() ? '🔊 Sound on' : '🔇 Sound off'}</button><button class="btn" data-act="quality">${q === 'high' ? '✨ Graphics: high' : q === 'medium' ? '⚖️ Graphics: medium' : '🔋 Graphics: battery'}</button></div>
       <div class="row"><button class="btn" data-act="save">💾 Save now</button><button class="btn" data-act="help">❓ How to play</button></div>
+      <div class="row"><button class="btn small" data-act="export-save">📤 Export save file</button>${this.app.mp ? '' : '<button class="btn small" data-act="import-save">📂 Load save file</button>'}</div>
       ${this.app.mp ? `<div class="card"><b>📶 LAN game</b><div class="note">${this.app.mp.addresses?.length ? `Friends join at <b>${esc(this.app.mp.addresses[0])}</b>` : 'Friends open this same address on the same wifi.'}<br>
         Speed changes need everyone's agreement. You can propose once every 60 seconds.</div>
         ${this.app.mp.host ? '<div class="row"><button class="btn danger small" data-act="end-lan">End the game for everyone</button></div>' : ''}</div>` : ''}
@@ -8385,6 +8396,8 @@ class UI {
       case 'quality': { const q = this.app.renderer.quality; this.app.renderer.setQuality(q === 'high' ? 'medium' : q === 'medium' ? 'low' : 'high'); break; }
       case 'save': this.app.save(); this.toast(this.app.mp ? 'The server saves the LAN game every midnight.' : 'Game saved.', 'good'); break;
       case 'help': this.help(); return;
+      case 'export-save': this.app.exportSave(); sfx.tap(); return;
+      case 'import-save': this.app.importSave(); sfx.tap(); return;
       case 'quit': this.app.save(); this.app.toTitle(); return;
       case 'end-lan': this.confirm('End the game for everyone?', 'Everyone goes back to the lobby. The game is saved and can be resumed.', () => this.app.mp?.net.send({ t: 'end' })); return;
       case 'claim': this.app.mp?.net.send({ t: 'claim', pid: +el.dataset.pid }); return;
@@ -8550,7 +8563,10 @@ class UI {
     won ? sfx.win() : sfx.bad();
     this.modal(`<h2>${won ? '🏆 You win!' : s.winner < 0 ? '💸 Game over' : `${esc(s.players[s.winner].company)} wins`}</h2>
       <p>${esc(s.endReason)}</p>
-      ${rows.map(({ p, w }, i) => `<div class="list-item">${faceHTML(p, 36)}<span class="grow"><b style="color:${p.color}">${i + 1}. ${esc(p.company)}</b><small>${p.bankrupt ? 'bankrupt' : esc(p.name)}</small></span><span class="amt">${money(w)}</span></div>`).join('')}
+      ${rows.map(({ p, w }, i) => { const a = playerAssets(s, p.id), lots = s.lots.filter(l => l.owner === p.id).length;
+        return `<div class="list-item">${faceHTML(p, 36)}<span class="grow"><b style="color:${p.color}">${i + 1}. ${esc(p.company)}</b><small>${p.bankrupt ? 'bankrupt' : `cash ${money(p.cash)} · land ${money(a.land)} (${lots} lots) · shops ${money(a.biz)} · apartments ${money(a.apt)}${p.loan ? ` · loan −${money(p.loan)}` : ''}`}</small></span><span class="amt">${money(w)}</span></div>`; }).join('')}
+      <p class="note">Net worth = cash + land at today's value + shops (60% of what was spent, plus stock) + apartments (75%) − loans.</p>
+      <div class="row"><button class="btn small wide" data-act="export-save">📤 Export this game as a file</button></div>
       ${this.app.mp && !this.app.mp.host ? '<p class="note">The host decides whether to keep playing or go back to the lobby.</p>' : ''}
       <div class="row"><button class="btn buy wide" data-act="keep-playing" ${this.app.mp && !this.app.mp.host ? 'disabled' : ''}>▶ Keep playing</button></div>
       <p class="note" style="text-align:center">${s.players[ME].bankrupt ? 'You get a fresh start with half the usual cash. ' : ''}No more goals or deadlines: the city and the rivals carry on.</p>
@@ -8675,6 +8691,34 @@ const app = {
     this.hud();
   },
 
+  // Download the current game (or, from the title, the last save) as a file.
+  exportSave() {
+    const data = this.s ? serialize(this.s) : localStorage.getItem(SAVE_KEY);
+    if (!data) { this.ui.toast('No saved game yet.', 'bad'); return; }
+    const s = this.s || JSON.parse(data);
+    const name = `skyline-${String(s.players?.[getMe() >= 0 ? getMe() : 0]?.company || 'save').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-day${s.day}.json`;
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    this.ui.toast(`Saved ${name}`, 'good');
+  },
+  importSave() {
+    const inp = Object.assign(document.createElement('input'), { type: 'file', accept: '.json,application/json' });
+    inp.addEventListener('change', async () => {
+      const f = inp.files[0];
+      if (!f) return;
+      try {
+        const s = deserialize(await f.text());
+        if (this.mp) return;
+        this.ui.hideModal();
+        this.start(s);
+        this.ui.toast(`Loaded day ${s.day}.`, 'good');
+      } catch (e) { this.ui.toast('That file is not a Skyline Hustle save.', 'bad'); }
+    });
+    inp.click();
+  },
+
   toTitle() {
     if (this.mp) { this.mp.net.close(); this.mp = null; }
     this.s = null;
@@ -8687,6 +8731,7 @@ const app = {
     ['hud', 'nav', 'sheet', 'auction', 'camctl', 'vote', 'lobby'].forEach(id => $(id).classList.add('hidden'));
     $('modal').classList.add('hidden');
     $('btn-continue').classList.toggle('hidden', !localStorage.getItem(SAVE_KEY));
+    $('btn-export').classList.toggle('hidden', !localStorage.getItem(SAVE_KEY));
     $('title').classList.remove('hidden');
     $('net-status').classList.add('hidden');
   },
@@ -8761,7 +8806,8 @@ const app = {
     if (!this.s.over) { if (this.overShown) { this.overShown = false; this.ui.hideModal(); } return; }
     if (!this.overShown) {
       this.overShown = true;
-      if (!this.mp) localStorage.removeItem(SAVE_KEY);
+      // Keep the finished game: Continue reopens it to keep playing or export.
+      if (!this.mp) try { localStorage.setItem(SAVE_KEY, serialize(this.s)); } catch (e) { /* storage full */ }
       this.ui.gameOver();
     }
   },
@@ -9026,6 +9072,8 @@ $('btn-continue').addEventListener('click', () => {
   catch (e) { localStorage.removeItem(SAVE_KEY); app.toTitle(); }
 });
 $('btn-lan').addEventListener('click', () => { sfx.tap(); joinLan(); });
+$('btn-export').addEventListener('click', () => { sfx.tap(); app.exportSave(); });
+$('btn-import').addEventListener('click', () => { sfx.tap(); app.importSave(); });
 setSound(localStorage.getItem('skyline-sound') !== '0');
 setMusic(localStorage.getItem('skyline-music') !== '0');
 setMusicVolume(+(localStorage.getItem('skyline-music-vol') || 0.6));

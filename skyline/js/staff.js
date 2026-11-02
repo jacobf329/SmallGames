@@ -67,6 +67,11 @@ export function teamWage(b) {
 export const servers = b => (b.team ? b.team.filter(m => m.role === 'server').length : b.staff);
 export const clerks = b => (b.team ? b.team.filter(m => m.role === 'clerk').length : 0);
 export const manager = b => (b.team ? b.team.find(m => m.role === 'manager') : null);
+// Each hour needs about two people on, so the team shares opening hours on
+// a rota. Hours each person works a day, and the crew a shop needs.
+export const ROTA_HOURS = 10;
+export const hoursEach = b => (b.len || 12) / Math.max(1, (b.team ? b.team.length : b.staff) / 2);
+export const crewFor = len => Math.ceil(2 * (len || 12) / ROTA_HOURS);
 export function avgMorale(b) {
   if (!b.team || !b.team.length) return 0.7;
   return b.team.reduce((a, m) => a + m.morale, 0) / b.team.length;
@@ -93,7 +98,9 @@ export function staffNight(s, b) {
   const t = b.yesterday || b.today;
   const asked = t.cust + t.turned;
   const stress = (t.peak >= 1 ? 0.1 : 0) + (asked && t.turned / asked > 0.1 ? 0.05 : 0);
-  const longHours = 0.025 * Math.max(0, (b.len || 12) - 12);
+  // Fatigue comes from hours per person, not opening hours: a 24-hour hotel
+  // with enough staff on a rota is fine; a skeleton crew burns out.
+  const longHours = 0.03 * Math.max(0, hoursEach(b) - ROTA_HOURS);
   const mg = manager(b);
   const quit = [];
   for (const m of b.team) {

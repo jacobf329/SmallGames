@@ -480,3 +480,4 @@ body.voting #toasts { top: calc(186px + var(--safe-t)); }
 .auc-leader { display: flex; gap: 8px; align-items: center; }
 .auc-leader .face { border-width: 2px; }
 .profile h2 { text-align: center; margin-bottom: 4px; }
+a.link { color: var(--you); font-size: 13px; text-decoration: underline; cursor: pointer; }

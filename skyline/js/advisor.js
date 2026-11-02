@@ -7,7 +7,7 @@
 
 import { BIZ, DISTRICTS, SCENARIOS, QUIT_MORALE, MAX_FLOORS } from './data.js';
 import { MAP, bizLabel, money, setCount, goalProgress, goalText, netWorth, bizOpen, techOf, raceGoal } from './sim.js';
-import { avgMorale } from './staff.js';
+import { avgMorale, hoursEach, ROTA_HOURS } from './staff.js';
 import { SHOP_COMMENTS } from './citizens.js';
 import { LM, landmarkSet, landmarkState, reqProgress, rushCost, activeProjects, chainOf } from './civic.js';
 import { PROJECTS, CHAIN_MIN, SUPPLY_LINES, LINE_OF } from './data.js';
@@ -76,7 +76,7 @@ function shopAlerts(s, pid, out) {
       const m = avgMorale(b);
       if (m < QUIT_MORALE + 0.12) {
         out.push({ key: `morale:${l.id}`, cat: 'shops', sev: 'warn', icon: '😤', lot: l.id, title: `Unhappy staff: ${name}`,
-          text: `Team morale is ${pct(m)}. Someone may quit tonight. Pay, shorter hours or a manager help.`, tab: 'staff' });
+          text: `Team morale is ${pct(m)}. Someone may quit tonight. ${hoursEach(b) > ROTA_HOURS ? `They each work ~${Math.round(hoursEach(b))}h a day: hire more staff for the rota.` : 'Pay or a manager help.'}`, tab: 'staff' });
       }
     }
     if (y && y.wasteV > 150 && y.wasteV > 0.12 * y.rev) {
