@@ -33,7 +33,8 @@ const fromFields = f => Object.fromEntries(Object.entries(f || {}).map(([k, v]) 
 
 async function rest(method, path, body) {
   const url = `${base()}/${path}${keyQ(path.includes('?') ? '&' : '?')}`;
-  const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+  // keepalive lets a DELETE finish even while the page is closing.
+  const r = await fetch(url, { method, keepalive: method === 'DELETE', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
   if (r.status === 404) return null;
   if (!r.ok) { const e = new Error(`signal ${r.status}`); e.status = r.status; throw e; }
   return r.status === 204 ? {} : r.json();
@@ -179,7 +180,16 @@ export class Host {
     sendLate(pc, `gameRooms/${this.code}/joins/${id}`, 'acands');
   }
 
+  // The page is closing: no time to list joins, just remove the room.
+  stopNow() {
+    if (this.stopped || !this.code) return;
+    this.stopped = true;
+    for (const { pc } of this.peers.values()) try { pc.close(); } catch {}
+    rest('DELETE', `gameRooms/${this.code}`).catch(() => {});
+  }
+
   async stop() {
+    if (this.stopped && !this.code) return;
     this.stopped = true;
     for (const { pc } of this.peers.values()) try { pc.close(); } catch {}
     this.peers.clear();

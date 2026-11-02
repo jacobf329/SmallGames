@@ -543,6 +543,8 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'Escape' && app.ui.view) app.ui.close();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) app.save(); pauseMusic(document.hidden); });
+// Closing the tab while hosting online: take the room code down.
+window.addEventListener('pagehide', () => { app.mp?.hostSession?.stopNow(); });
 // Browsers only start audio after the first tap.
 for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => unlockMusic(), { passive: true });
 

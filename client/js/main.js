@@ -133,7 +133,7 @@ $('#btn-leave').addEventListener('click', async (e) => {
   G.wake?.release?.();
   location.href = location.pathname;
 });
-window.addEventListener('pagehide', () => { hostSession?.stop(); });
+window.addEventListener('pagehide', () => { hostSession?.stopNow(); });
 $('#in-room').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
 $('#btn-retry').addEventListener('click', () => net.connect());
 
