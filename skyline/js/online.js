@@ -44,13 +44,46 @@ export const onlineSupported = () => typeof RTCPeerConnection !== 'undefined' &&
 export const normCode = c => String(c || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
 
 // ------------------------------------------------------------- WebRTC ----
-async function gathered(pc, ms = 3000) {
-  if (pc.iceGatheringState === 'complete') return;
-  await new Promise(res => {
-    const t = setTimeout(res, ms);
-    pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); res(); } });
+// Collect this side's address candidates as they turn up.
+function collect(pc) {
+  pc._cands = [];
+  pc._types = new Set();
+  pc._t0 = performance.now();
+  pc.addEventListener('icecandidate', e => {
+    if (!e.candidate || !e.candidate.candidate) return;
+    pc._cands.push(JSON.stringify({ c: e.candidate.candidate, m: e.candidate.sdpMid, i: e.candidate.sdpMLineIndex }));
+    const ty = / typ (\w+)/.exec(e.candidate.candidate)?.[1];
+    if (ty) { pc._types.add(ty); if (ty === 'srflx' && !pc._srflxAt) pc._srflxAt = performance.now(); }
   });
 }
+// Wait for addresses: until gathering is done, or shortly after the public
+// (STUN) address turns up, or at most ms. Safari can be slow to finish.
+async function gathered(pc, ms = 6000) {
+  const t0 = performance.now();
+  while (pc.iceGatheringState !== 'complete' && performance.now() - t0 < ms) {
+    if (pc._srflxAt && performance.now() - pc._srflxAt > 600) break;
+    await sleep(100);
+  }
+  pc._sent = pc._cands?.length || 0;
+}
+// Addresses found after the handshake went out are passed along too.
+async function sendLate(pc, path, field) {
+  const t0 = performance.now();
+  while (pc.iceGatheringState !== 'complete' && performance.now() - t0 < 8000 && pc.connectionState !== 'connected') await sleep(250);
+  if ((pc._cands?.length || 0) > (pc._sent || 0) && pc.connectionState !== 'connected') {
+    await rest('PATCH', `${path}?updateMask.fieldPaths=${field}`, { fields: toFields({ [field]: JSON.stringify(pc._cands.slice(pc._sent)) }) }).catch(() => {});
+  }
+}
+async function addLate(pc, json, seen) {
+  let list = [];
+  try { list = JSON.parse(json || '[]'); } catch { return seen; }
+  for (const s of list.slice(seen)) {
+    try { const o = JSON.parse(s); await pc.addIceCandidate({ candidate: o.c, sdpMid: o.m ?? '0', sdpMLineIndex: o.i ?? 0 }); } catch { /* stale */ }
+  }
+  return list.length;
+}
+export const candTypes = pc => [...(pc?._types || [])];
+
 // Data channels have message size limits: split big messages, rejoin them.
 function framed(ch) {
   let seq = 0;
@@ -111,6 +144,8 @@ export class Host {
           const id = doc.name.split('/').pop();
           const f = fromFields(doc.fields);
           if (f.offer && !f.answer && !this.peers.has(id)) this.accept(id, f.offer).catch(() => {});
+          const peer = this.peers.get(id);
+          if (peer && f.ocands) peer.seen = await addLate(peer.pc, f.ocands, peer.seen || 0);
         }
         this.onStatus?.('online');
       } catch (e) { this.onStatus?.('offline'); }
@@ -120,7 +155,8 @@ export class Host {
 
   async accept(id, offer) {
     const pc = new RTCPeerConnection({ iceServers: ICE });
-    this.peers.set(id, { pc });
+    collect(pc);
+    this.peers.set(id, { pc, seen: 0 });
     let h = null;
     pc.ondatachannel = ev => {
       const ch = ev.channel;
@@ -140,6 +176,7 @@ export class Host {
     await pc.setLocalDescription(await pc.createAnswer());
     await gathered(pc);
     await rest('PATCH', `gameRooms/${this.code}/joins/${id}?updateMask.fieldPaths=answer`, { fields: toFields({ answer: pc.localDescription.sdp }) });
+    sendLate(pc, `gameRooms/${this.code}/joins/${id}`, 'acands');
   }
 
   async stop() {
@@ -196,12 +233,13 @@ export class RtcNet {
 
   async open() {
     if (this.closed) return;
-    this.onStatus?.('connecting');
+    this.stage('finding');
     let pc;
     try {
       const room = await rest('GET', `gameRooms/${this.code}`);
       if (!room) { this.onStatus?.('noroom'); return; }
       pc = new RTCPeerConnection({ iceServers: ICE });
+      collect(pc);
       this.pc = pc;
       const ch = pc.createDataChannel('game', { ordered: true });
       const send = framed(ch);
@@ -216,10 +254,15 @@ export class RtcNet {
       ch.onmessage = e => un(e.data);
       ch.onclose = () => this.dropped(pc);
       pc.onconnectionstatechange = () => { if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) this.dropped(pc); };
+      this.stage('gathering');
       await pc.setLocalDescription(await pc.createOffer());
       await gathered(pc);
+      this.diag = { mine: candTypes(pc) };
+      this.stage('waiting');
       const doc = await rest('POST', `gameRooms/${this.code}/joins`, { fields: toFields({ offer: pc.localDescription.sdp, name: this.hello?.name || 'Player', created: Date.now() }) });
       const id = doc.name.split('/').pop();
+      const path = `gameRooms/${this.code}/joins/${id}`;
+      sendLate(pc, path, 'ocands');
       // Wait for the host's answer.
       let answer = null;
       for (let i = 0; i < 30 && !answer && !this.closed; i++) {
@@ -229,24 +272,44 @@ export class RtcNet {
       }
       if (!answer) { pc.close(); rest('DELETE', `gameRooms/${this.code}/joins/${id}`).catch(() => {}); throw new Error('no answer'); }
       await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+      this.diag = { mine: candTypes(pc), host: [...new Set((answer.match(/ typ (\w+)/g) || []).map(x => x.slice(5)))] };
+      this.stage('linking');
+      // Pick up any addresses the host found late, until the link opens.
+      let seen = 0;
+      for (let i = 0; i < 40 && this.pc === pc && !this.send$ && !this.closed; i++) {
+        await sleep(500);
+        if (i % 2 === 0) {
+          const d = await rest('GET', path).catch(() => null);
+          const f = fromFields(d?.fields);
+          if (f.acands) { seen = await addLate(pc, f.acands, seen); this.diag.host = [...new Set([...this.diag.host, ...(f.acands.match(/typ (\w+)/g) || []).map(x => x.slice(4))])]; }
+        }
+      }
       // If the link never opens, the networks can't see each other.
-      setTimeout(() => { if (this.pc === pc && !this.send$) { this.onStatus?.('blocked'); this.dropped(pc); } }, 15000);
+      if (this.pc === pc && !this.send$ && !this.closed) { this.fails = 3; this.onStatus?.('blocked'); this.dropped(pc, true); }
     } catch (e) {
       this.fails++;
-      this.onStatus?.(this.fails > 2 ? 'blocked' : 'offline');
       if (pc) try { pc.close(); } catch {}
+      if (this.fails > 2) { this.onStatus?.('blocked'); return; }      // wait for Retry
+      this.onStatus?.('offline');
       if (!this.closed) setTimeout(() => this.open(), 3000);
     }
   }
 
-  dropped(pc) {
+  stage(s) { this.stageName = s; this.onStatus?.(s); }
+
+  // The link dropped (or never opened). Reconnect by itself unless it has
+  // failed repeatedly: then the player sees why and can tap Retry.
+  dropped(pc, failed = false) {
     if (this.pc !== pc || this.closed) return;
     this.pc = null;
     this.send$ = null;
     try { pc.close(); } catch {}
+    if (failed) return;
     this.onStatus?.('offline');
     setTimeout(() => this.open(), 2000);
   }
+
+  retry() { this.fails = 0; this.open(); }
 
   send(msg) {
     const str = JSON.stringify(msg);

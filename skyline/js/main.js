@@ -325,9 +325,34 @@ function joinOnline(code) {
       app.ui.toast(`No game with the code ${code}. Check it with the host.`, 'bad');
       return;
     }
-    netStatus(status);
+    mp.joinStatus = status;
+    if (!mp.lobby && !app.s) showJoining(mp);
+    else netStatus(status);
   });
   mp.net.connect(hello);
+}
+
+// What a joining phone shows until it's in the lobby: each step, and if the
+// link can't be made, why and what to try.
+function showJoining(mp) {
+  const st = mp.joinStatus;
+  const steps = { finding: 'Finding the room…', gathering: 'Working out how to reach the host…', waiting: "Waiting for the host's phone to answer…",
+    linking: 'Connecting to the host…', online: 'Connected! Loading the lobby…', offline: 'Trying again…' };
+  const d = mp.net?.diag;
+  const types = d ? `<p class="note dim" style="font-size:11px">Your phone: ${(d.mine || []).join(', ') || 'no addresses'}${d.host ? ` · host: ${d.host.join(', ') || 'none'}` : ''}</p>` : '';
+  const html = st === 'blocked'
+    ? `<div class="room-code"><small>Room ${esc(mp.code)}</small><b style="font-size:26px;letter-spacing:0">Couldn't connect</b>
+        <small>Your phone and the host's phone can't reach each other directly.</small></div>
+       <p class="note">Things to try: make sure the host still has the game open on screen (if they switched apps, their phone pauses the game). Join from the same wifi as the host, or switch one phone between wifi and mobile data.</p>
+       ${types}
+       <div class="row"><button class="btn go wide" id="join-retry">Try again</button></div>
+       <div class="row"><button class="btn small wide" id="join-cancel">Back to title</button></div>`
+    : `<div class="room-code"><small>Joining room</small><b>${esc(mp.code)}</b><small>${steps[st] || 'Connecting…'}</small></div>${types}
+       <div class="row"><button class="btn small wide" id="join-cancel">Cancel</button></div>`;
+  $('lobby-body').innerHTML = html;
+  $('lobby-kind').textContent = 'GAME';
+  $('join-retry')?.addEventListener('click', () => { sfx.tap(); mp.joinStatus = 'finding'; showJoining(mp); mp.net.retry(); });
+  $('join-cancel')?.addEventListener('click', () => { sfx.tap(); app.toTitle(); });
 }
 
 function onNet(m) {
