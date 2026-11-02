@@ -16,7 +16,7 @@ const RENDER_DELAY = 95;      // ms of interpolation buffer for remote runners
 const SUFFIX = ['th', 'st', 'nd', 'rd'];
 const ord = (n) => { const v = n % 100; return SUFFIX[(v - 20) % 10] || SUFFIX[v] || SUFFIX[0]; };
 
-const G = {
+const G = window.TS_G = {
   id: null, name: '', room: 'MAIN',
   lobby: null, isHost: false,
   state: 'lobby',
@@ -337,9 +337,15 @@ function reconcile(s) {
   else if (Math.abs(dz) > 1.2) { me.z += dz * 0.5; me.speed = s.sp; }
   else { me.z += dz * 0.08; me.speed += (s.sp - me.speed) * 0.25; }
 
+  // Sideways and up/down this phone leads: the server's view is always a
+  // little behind your swipes, so correcting toward it while a move is in
+  // flight drags you back into the lane you just left or cancels a jump.
+  // Only correct once the server has caught up with your last input.
+  const inFlight = performance.now() - (G.lastInput || 0) < (net.latency || 0) + 220;
+  if (inFlight || s.tl !== me.targetLane) return;
   const dx = s.x - me.x;
-  if (Math.abs(dx) > 1.6) me.x = s.x; else me.x += dx * 0.18;
-  if (Math.abs(s.y - me.y) > 1.2) { me.y = s.y; me.vy = s.vy; }
+  if (Math.abs(dx) > 1.6) me.x = s.x; else me.x += dx * 0.12;
+  if (Math.abs(s.y - me.y) > 1.6) { me.y = s.y; me.vy = s.vy; }
 }
 
 // ============================== events ===================================
@@ -451,6 +457,7 @@ function flash() {
 // ============================== controls =================================
 function sendInput(extra = {}) {
   if (!G.me) return;
+  G.lastInput = performance.now();
   net.send({ t: 'in', l: G.me.input.lane, ...extra });
 }
 input.on('left', () => {

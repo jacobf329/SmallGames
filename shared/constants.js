@@ -33,7 +33,7 @@ export const JUMP_V = 10.4;
 export const GRAVITY = 30;
 export const RAMP_V = 13.5;
 export const SLIDE_TIME = 0.62;
-export const STRAFE_SPEED = 13.0;         // lateral m/s while changing lanes
+export const STRAFE_SPEED = 16.0;         // lateral m/s while changing lanes
 export const PLAYER_W = 1.25;
 export const PLAYER_LEN = 1.1;
 

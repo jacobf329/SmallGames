@@ -202,13 +202,14 @@ export class Host {
 // The host's own phone: straight into the in-page race server.
 export class LocalTransport {
   constructor(server) { this.server = server; }
+  // (window.TS_LAG adds a delay each way, to try the game as a far-away guest.)
   open(h) {
-    const conn = { open: true, send: str => setTimeout(() => h.onmessage(str)) };
+    const conn = { open: true, send: str => setTimeout(() => h.onmessage(str), window.TS_LAG || 0) };
     this.conn = conn;
     this.h = this.server.connect(conn);
     setTimeout(() => h.onopen());
   }
-  send(str) { this.h?.message(str); }
+  send(str) { const lag = window.TS_LAG || 0; if (lag) setTimeout(() => this.h?.message(str), lag); else this.h?.message(str); }
   close() { if (this.conn) this.conn.open = false; this.h?.close(); this.h = null; }
 }
 

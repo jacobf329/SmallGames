@@ -1,7 +1,7 @@
 // Touch gestures + keyboard. Emits discrete actions; the game loop turns
 // those into the lane / jump / slide / item intents sent to the server.
 
-const SWIPE = 26;           // px before a drag counts as a swipe
+const SWIPE = 16;           // px before a drag counts as a swipe
 const TAP_MS = 260;
 const TAP_SLOP = 14;
 
@@ -26,14 +26,13 @@ export class Input extends EventTarget {
       if (!this.enabled) return;
       for (const t of e.changedTouches) {
         const s = this._touches.get(t.identifier);
-        if (!s) continue;
+        if (!s || s.moved) continue;          // one swipe = one move, however long the drag
         const dx = t.clientX - s.x;
         const dy = t.clientY - s.y;
         if (Math.abs(dx) < SWIPE && Math.abs(dy) < SWIPE) continue;
         if (Math.abs(dx) > Math.abs(dy)) emit(dx > 0 ? 'right' : 'left');
         else emit(dy > 0 ? 'slide' : 'jump');
-        // Re-anchor so a long drag can chain several swipes.
-        s.x = t.clientX; s.y = t.clientY; s.moved = true;
+        s.moved = true;
       }
       e.preventDefault();
     };
@@ -60,12 +59,12 @@ export class Input extends EventTarget {
       mouse = { x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY, t: performance.now(), moved: false };
     });
     window.addEventListener('mousemove', (e) => {
-      if (!mouse) return;
+      if (!mouse || mouse.moved) return;
       const dx = e.clientX - mouse.x, dy = e.clientY - mouse.y;
       if (Math.abs(dx) < SWIPE && Math.abs(dy) < SWIPE) return;
       if (Math.abs(dx) > Math.abs(dy)) emit(dx > 0 ? 'right' : 'left');
       else emit(dy > 0 ? 'slide' : 'jump');
-      mouse.x = e.clientX; mouse.y = e.clientY; mouse.moved = true;
+      mouse.moved = true;
     });
     window.addEventListener('mouseup', (e) => {
       if (mouse && !mouse.moved && performance.now() - mouse.t < TAP_MS) emit('item');

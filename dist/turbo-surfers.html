@@ -503,7 +503,7 @@ const JUMP_V = 10.4;
 const GRAVITY = 30;
 const RAMP_V = 13.5;
 const SLIDE_TIME = 0.62;
-const STRAFE_SPEED = 13.0;         // lateral m/s while changing lanes
+const STRAFE_SPEED = 16.0;         // lateral m/s while changing lanes
 const PLAYER_W = 1.25;
 const PLAYER_LEN = 1.1;
 
@@ -2058,13 +2058,14 @@ class Host {
 // The host's own phone: straight into the in-page race server.
 class LocalTransport {
   constructor(server) { this.server = server; }
+  // (window.TS_LAG adds a delay each way, to try the game as a far-away guest.)
   open(h) {
-    const conn = { open: true, send: str => setTimeout(() => h.onmessage(str)) };
+    const conn = { open: true, send: str => setTimeout(() => h.onmessage(str), window.TS_LAG || 0) };
     this.conn = conn;
     this.h = this.server.connect(conn);
     setTimeout(() => h.onopen());
   }
-  send(str) { this.h?.message(str); }
+  send(str) { const lag = window.TS_LAG || 0; if (lag) setTimeout(() => this.h?.message(str), lag); else this.h?.message(str); }
   close() { if (this.conn) this.conn.open = false; this.h?.close(); this.h = null; }
 }
 
@@ -2255,7 +2256,7 @@ class Net extends EventTarget {
 // Touch gestures + keyboard. Emits discrete actions; the game loop turns
 // those into the lane / jump / slide / item intents sent to the server.
 
-const SWIPE = 26;           // px before a drag counts as a swipe
+const SWIPE = 16;           // px before a drag counts as a swipe
 const TAP_MS = 260;
 const TAP_SLOP = 14;
 
@@ -2280,14 +2281,13 @@ class Input extends EventTarget {
       if (!this.enabled) return;
       for (const t of e.changedTouches) {
         const s = this._touches.get(t.identifier);
-        if (!s) continue;
+        if (!s || s.moved) continue;          // one swipe = one move, however long the drag
         const dx = t.clientX - s.x;
         const dy = t.clientY - s.y;
         if (Math.abs(dx) < SWIPE && Math.abs(dy) < SWIPE) continue;
         if (Math.abs(dx) > Math.abs(dy)) emit(dx > 0 ? 'right' : 'left');
         else emit(dy > 0 ? 'slide' : 'jump');
-        // Re-anchor so a long drag can chain several swipes.
-        s.x = t.clientX; s.y = t.clientY; s.moved = true;
+        s.moved = true;
       }
       e.preventDefault();
     };
@@ -2314,12 +2314,12 @@ class Input extends EventTarget {
       mouse = { x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY, t: performance.now(), moved: false };
     });
     window.addEventListener('mousemove', (e) => {
-      if (!mouse) return;
+      if (!mouse || mouse.moved) return;
       const dx = e.clientX - mouse.x, dy = e.clientY - mouse.y;
       if (Math.abs(dx) < SWIPE && Math.abs(dy) < SWIPE) return;
       if (Math.abs(dx) > Math.abs(dy)) emit(dx > 0 ? 'right' : 'left');
       else emit(dy > 0 ? 'slide' : 'jump');
-      mouse.x = e.clientX; mouse.y = e.clientY; mouse.moved = true;
+      mouse.moved = true;
     });
     window.addEventListener('mouseup', (e) => {
       if (mouse && !mouse.moved && performance.now() - mouse.t < TAP_MS) emit('item');
@@ -3221,7 +3221,7 @@ const RENDER_DELAY = 95;      // ms of interpolation buffer for remote runners
 const SUFFIX = ['th', 'st', 'nd', 'rd'];
 const ord = (n) => { const v = n % 100; return SUFFIX[(v - 20) % 10] || SUFFIX[v] || SUFFIX[0]; };
 
-const G = {
+const G = window.TS_G = {
   id: null, name: '', room: 'MAIN',
   lobby: null, isHost: false,
   state: 'lobby',
@@ -3542,9 +3542,15 @@ function reconcile(s) {
   else if (Math.abs(dz) > 1.2) { me.z += dz * 0.5; me.speed = s.sp; }
   else { me.z += dz * 0.08; me.speed += (s.sp - me.speed) * 0.25; }
 
+  // Sideways and up/down this phone leads: the server's view is always a
+  // little behind your swipes, so correcting toward it while a move is in
+  // flight drags you back into the lane you just left or cancels a jump.
+  // Only correct once the server has caught up with your last input.
+  const inFlight = performance.now() - (G.lastInput || 0) < (net.latency || 0) + 220;
+  if (inFlight || s.tl !== me.targetLane) return;
   const dx = s.x - me.x;
-  if (Math.abs(dx) > 1.6) me.x = s.x; else me.x += dx * 0.18;
-  if (Math.abs(s.y - me.y) > 1.2) { me.y = s.y; me.vy = s.vy; }
+  if (Math.abs(dx) > 1.6) me.x = s.x; else me.x += dx * 0.12;
+  if (Math.abs(s.y - me.y) > 1.6) { me.y = s.y; me.vy = s.vy; }
 }
 
 // ============================== events ===================================
@@ -3656,6 +3662,7 @@ function flash() {
 // ============================== controls =================================
 function sendInput(extra = {}) {
   if (!G.me) return;
+  G.lastInput = performance.now();
   net.send({ t: 'in', l: G.me.input.lane, ...extra });
 }
 input.on('left', () => {
