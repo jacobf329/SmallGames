@@ -8,6 +8,12 @@
 
 const STICK_R = 56;               // px of thumb travel for full speed
 
+// How far the screen is turned from the phone's natural (portrait) way up.
+function screenAngle() {
+  const a = screen.orientation?.angle ?? window.orientation ?? 0;
+  return ((+a % 360) + 360) % 360;
+}
+
 export class Controls {
   constructor(root, ui) {
     this.enabled = false;
@@ -23,7 +29,7 @@ export class Controls {
     this.mouseFire = false;
 
     root.addEventListener('touchstart', (e) => {
-      if (!this.enabled || e.target.closest?.('a, .menu')) return;
+      if (!this.enabled || e.target.closest?.('a, .menu, #rotate')) return;
       for (const t of e.changedTouches) {
         const el = t.target.closest?.('[data-ctl]');
         const ctl = el?.dataset.ctl;
@@ -92,6 +98,40 @@ export class Controls {
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => { this.keys.clear(); this.mouseFire = false; });
+
+    // ---- gyro: turning the phone turns the view, on top of the drag ----
+    // rotationRate is the spin around the phone's own axes (deg/s). We turn it
+    // into spin around the screen's up axis (yaw) and right axis (pitch), so
+    // it works whichever way round the phone is held.
+    this.gyro = false;            // the player's setting
+    this.gyroSens = 1.6;          // view turn per real turn
+    this.gyroSeen = false;        // the phone actually reports rotation
+    let lastT = 0;
+    window.addEventListener('devicemotion', (e) => {
+      const rr = e.rotationRate;
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - lastT) / 1000);
+      lastT = now;
+      if (!rr || rr.alpha == null || rr.beta == null || rr.gamma == null) return;
+      this.gyroSeen = true;
+      if (!this.enabled || !this.gyro || !(dt > 0)) return;
+      const a = screenAngle() * Math.PI / 180;
+      const wx = rr.beta, wy = rr.gamma;     // spin around the phone's x and y axes
+      const up = wx * Math.sin(a) + wy * Math.cos(a);
+      const right = wx * Math.cos(a) - wy * Math.sin(a);
+      const dead = 0.8;                       // ignore sensor drift and hand tremor
+      const k = Math.PI / 180 * dt * this.gyroSens;
+      if (Math.abs(up) > dead) this.look.yaw += (up - Math.sign(up) * dead) * k;
+      if (Math.abs(right) > dead) this.look.pitch += (right - Math.sign(right) * dead) * k;
+    });
+  }
+
+  // iPhones ask permission for motion; this has to run straight from a tap.
+  static askGyro() {
+    const D = window.DeviceMotionEvent;
+    if (!D) return Promise.resolve(false);
+    if (typeof D.requestPermission === 'function') return D.requestPermission().then(r => r === 'granted').catch(() => false);
+    return Promise.resolve(true);
   }
 
   // The move stick, folded together with the keyboard.

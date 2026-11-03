@@ -52,6 +52,16 @@ input[type=text], .field input, .join-row input { background: rgba(0,0,0,0.35); 
 .howto ul { padding-left: 18px; margin: 8px 0 0; }
 .share { background: rgba(46,230,255,0.08); border: 1px solid rgba(46,230,255,0.3); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
 .share p { margin: 0 0 8px; }
+.cols, .col { display: flex; flex-direction: column; gap: 12px; }
+/* Phone on its side: players on the left, settings on the right. */
+@media (orientation: landscape) and (max-height: 520px) {
+  #lobby .panel, #results .panel { width: min(100%, 820px); }
+  .screen.active { padding-top: 10px; }
+  .cols { flex-direction: row; align-items: flex-start; gap: 18px; }
+  .col { flex: 1; min-width: 0; }
+  .pl { padding: 6px 10px; }
+  .players { gap: 4px; }
+}
 .players { display: flex; flex-direction: column; gap: 6px; }
 .pl { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; }
 .pl.me { border-color: var(--neon); }
@@ -126,11 +136,16 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--neon); }
 #dead p { text-align: center; font: 900 22px system-ui, sans-serif; text-shadow: 0 2px 6px #000; }
 #dead small { color: var(--dim); font-size: 15px; }
 #net { position: absolute; top: 40%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 8px 14px; border-radius: 10px; font-weight: 800; }
+#rotate { display: none; position: absolute; inset: 0; z-index: 20; pointer-events: auto; background: #070a16; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; font-weight: 800; }
+#rotate b { font-size: 64px; color: var(--accent, #2ee6ff); animation: ba-rot 1.6s ease-in-out infinite; }
+@keyframes ba-rot { 0%, 30% { transform: rotate(0); } 70%, 100% { transform: rotate(-90deg); } }
+@media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
 @media (orientation: portrait) {
   #b-fire { bottom: calc(110px + var(--sa-b)); }
   #b-jump { bottom: calc(40px + var(--sa-b)); right: calc(30px + var(--sa-r)); }
   #b-reload { bottom: calc(220px + var(--sa-b)); }
 }
+#gyro-note:empty { display: none; }
 
 </style>
 </head>
@@ -157,6 +172,7 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--neon); }
         <li><b>Right thumb</b>: drag to aim. Hold <b>FIRE</b> and drag it to aim while shooting.</li>
         <li><b>JUMP</b> gets you onto crates; walk up half-crates to the centre platform.</li>
         <li>Headshots do double damage. Health comes back if you stay out of trouble.</li>
+        <li><b>Gyro aim</b> (on by default, in the lobby): turn and tilt the phone to fine-tune your aim on top of the drag. Play with the phone sideways.</li>
         <li>Auto-fire (on by default, in the lobby) shoots when an enemy is under your crosshair.</li>
         <li>Computer: click the view, then WASD, mouse, click to fire, Space, R.</li>
       </ul>
@@ -168,11 +184,13 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--neon); }
 <section id="lobby" class="screen menu">
   <div class="panel">
     <div class="head"><h2 id="lobby-title">MATCH</h2><span id="lobby-count" class="pill"></span></div>
+    <div class="cols"><div class="col">
     <div id="lobby-share" class="share hidden">
       <p>Friends open this page and enter the code under JOIN. Your phone runs the match: keep this screen on.</p>
       <button id="btn-share" class="btn small">SHARE INVITE LINK</button>
     </div>
     <div id="lobby-players" class="players"></div>
+    </div><div class="col">
     <div id="host-ctl" class="hidden">
       <div class="row"><span>Bots</span><div class="stepper"><button id="bots-minus">−</button><b id="bots-n">0</b><button id="bots-plus">+</button></div></div>
       <div class="row"><span>Bot skill</span><div class="seg" id="seg-skill"><button data-v="0.35">Easy</button><button data-v="0.6">Normal</button><button data-v="0.9">Sharp</button></div></div>
@@ -180,10 +198,14 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--neon); }
       <div class="row"><span>Time limit</span><div class="seg" id="seg-time"><button data-v="4">4 min</button><button data-v="6">6 min</button><button data-v="10">10 min</button></div></div>
     </div>
     <div class="row"><span>Look speed</span><input id="sens" type="range" min="0.4" max="2.2" step="0.1"></div>
-    <div class="row"><span>Auto-fire on target</span><input id="auto" type="checkbox"></div>
+    <div class="row phone-only"><span>Gyro aim (tilt and turn the phone)</span><input id="gyro" type="checkbox"></div>
+    <div class="row phone-only" id="gyro-sens-row"><span>Gyro speed</span><input id="gyro-sens" type="range" min="0.6" max="3.5" step="0.1"></div>
+    <p id="gyro-note" class="status phone-only"></p>
+    <div class="row phone-only"><span>Auto-fire on target</span><input id="auto" type="checkbox"></div>
     <button id="btn-start" class="btn big go hidden">START MATCH</button>
     <p id="lobby-wait" class="status">Waiting for the host to start…</p>
     <p class="status"><a href="#" data-leave>Leave</a></p>
+    </div></div>
   </div>
 </section>
 
@@ -220,6 +242,7 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--neon); }
   <div id="stick" class="hidden"><i></i></div>
   <div id="dead" class="hidden"><p id="dead-text"></p></div>
   <div id="net" class="hidden">Connection lost: reconnecting…</div>
+  <div id="rotate"><b>⟲</b><p>Turn your phone sideways to play</p></div>
 </div>
 
 <script>
@@ -1283,6 +1306,12 @@ __mods.controls = (() => {
 
 const STICK_R = 56;               // px of thumb travel for full speed
 
+// How far the screen is turned from the phone's natural (portrait) way up.
+function screenAngle() {
+  const a = screen.orientation?.angle ?? window.orientation ?? 0;
+  return ((+a % 360) + 360) % 360;
+}
+
 class Controls {
   constructor(root, ui) {
     this.enabled = false;
@@ -1298,7 +1327,7 @@ class Controls {
     this.mouseFire = false;
 
     root.addEventListener('touchstart', (e) => {
-      if (!this.enabled || e.target.closest?.('a, .menu')) return;
+      if (!this.enabled || e.target.closest?.('a, .menu, #rotate')) return;
       for (const t of e.changedTouches) {
         const el = t.target.closest?.('[data-ctl]');
         const ctl = el?.dataset.ctl;
@@ -1367,6 +1396,40 @@ class Controls {
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => { this.keys.clear(); this.mouseFire = false; });
+
+    // ---- gyro: turning the phone turns the view, on top of the drag ----
+    // rotationRate is the spin around the phone's own axes (deg/s). We turn it
+    // into spin around the screen's up axis (yaw) and right axis (pitch), so
+    // it works whichever way round the phone is held.
+    this.gyro = false;            // the player's setting
+    this.gyroSens = 1.6;          // view turn per real turn
+    this.gyroSeen = false;        // the phone actually reports rotation
+    let lastT = 0;
+    window.addEventListener('devicemotion', (e) => {
+      const rr = e.rotationRate;
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - lastT) / 1000);
+      lastT = now;
+      if (!rr || rr.alpha == null || rr.beta == null || rr.gamma == null) return;
+      this.gyroSeen = true;
+      if (!this.enabled || !this.gyro || !(dt > 0)) return;
+      const a = screenAngle() * Math.PI / 180;
+      const wx = rr.beta, wy = rr.gamma;     // spin around the phone's x and y axes
+      const up = wx * Math.sin(a) + wy * Math.cos(a);
+      const right = wx * Math.cos(a) - wy * Math.sin(a);
+      const dead = 0.8;                       // ignore sensor drift and hand tremor
+      const k = Math.PI / 180 * dt * this.gyroSens;
+      if (Math.abs(up) > dead) this.look.yaw += (up - Math.sign(up) * dead) * k;
+      if (Math.abs(right) > dead) this.look.pitch += (right - Math.sign(right) * dead) * k;
+    });
+  }
+
+  // iPhones ask permission for motion; this has to run straight from a tap.
+  static askGyro() {
+    const D = window.DeviceMotionEvent;
+    if (!D) return Promise.resolve(false);
+    if (typeof D.requestPermission === 'function') return D.requestPermission().then(r => r === 'granted').catch(() => false);
+    return Promise.resolve(true);
   }
 
   // The move stick, folded together with the keyboard.
@@ -1768,9 +1831,21 @@ function joinOnline() {
   net.useTransport(t);
   net.connect();
 }
-$('#btn-host').addEventListener('click', () => hostMatch(false));
-$('#btn-practice').addEventListener('click', () => hostMatch(true));
-$('#btn-join').addEventListener('click', joinOnline);
+// On phones: ask for the gyro, go full screen and hold landscape. These need
+// a tap, so they run from the HOST / JOIN / PRACTICE buttons.
+const isPhone = matchMedia('(pointer: coarse)').matches;
+function prepPhone() {
+  if (!isPhone) return;
+  if (controls.gyro) Controls.askGyro().then(ok => { if (!ok) gyroRefused(); });
+  try {
+    const el = document.documentElement;
+    const fs = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : null;
+    Promise.resolve(fs).then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+  } catch { /* not allowed here (iPhone): the rotate prompt covers it */ }
+}
+$('#btn-host').addEventListener('click', () => { prepPhone(); hostMatch(false); });
+$('#btn-practice').addEventListener('click', () => { prepPhone(); hostMatch(true); });
+$('#btn-join').addEventListener('click', () => { prepPhone(); joinOnline(); });
 $('#btn-retry').addEventListener('click', () => { $('#btn-retry').classList.add('hidden'); joinOnline(); });
 $('#in-code').addEventListener('input', (e) => { e.target.value = normCode(e.target.value); });
 const joinParam = new URLSearchParams(location.search).get('join');
@@ -1818,6 +1893,27 @@ $('#btn-share').addEventListener('click', async () => {
     else { await navigator.clipboard.writeText(url); $('#btn-share').textContent = 'LINK COPIED'; }
   } catch { /* cancelled */ }
 });
+// Motion access was turned down: aim by drag only this time, and say why.
+function gyroRefused() {
+  controls.gyro = false; $('#gyro').checked = false;
+  $('#gyro-note').textContent = 'The browser turned down motion access, so gyro aim is off. Allow motion in its settings, then tick Gyro aim again.';
+}
+function setGyro(on) {
+  controls.gyro = on; store.set('ba.gyro', on ? '1' : '0');
+  $('#gyro').checked = on;
+  $('#gyro-sens-row').classList.toggle('hidden', !on);
+}
+setGyro(isPhone && store.get('ba.gyro', '1') === '1');
+controls.gyroSens = +store.get('ba.gsens', '1.6');
+$('#gyro-sens').value = controls.gyroSens;
+$('#gyro-sens').addEventListener('input', (e) => { controls.gyroSens = +e.target.value; store.set('ba.gsens', e.target.value); });
+$('#gyro').addEventListener('change', (e) => {
+  if (!e.target.checked) return setGyro(false);
+  setGyro(true); $('#gyro-note').textContent = '';
+  Controls.askGyro().then(ok => { if (!ok) gyroRefused(); });
+});
+for (const r of document.querySelectorAll('.phone-only')) r.classList.toggle('hidden', !isPhone);
+setGyro(controls.gyro);
 $('#sens').value = controls.sens;
 $('#sens').addEventListener('input', (e) => { controls.sens = +e.target.value; store.set('ba.sens', e.target.value); });
 $('#auto').checked = G.autoFire;
@@ -1853,7 +1949,6 @@ function enterGame() {
   G.others.clear();
   G.hist = []; G.killfeed = []; G.deadBy = null;
   show('game');
-  try { if (matchMedia('(pointer: coarse)').matches) document.documentElement.requestFullscreen?.().catch(() => {}); } catch { /* not allowed */ }
 }
 
 const nameOf = (id) => G.lobby?.players.find(p => p.id === id)?.name || (id === G.id ? G.name : '?');

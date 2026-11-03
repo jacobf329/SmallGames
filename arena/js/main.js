@@ -95,9 +95,21 @@ function joinOnline() {
   net.useTransport(t);
   net.connect();
 }
-$('#btn-host').addEventListener('click', () => hostMatch(false));
-$('#btn-practice').addEventListener('click', () => hostMatch(true));
-$('#btn-join').addEventListener('click', joinOnline);
+// On phones: ask for the gyro, go full screen and hold landscape. These need
+// a tap, so they run from the HOST / JOIN / PRACTICE buttons.
+const isPhone = matchMedia('(pointer: coarse)').matches;
+function prepPhone() {
+  if (!isPhone) return;
+  if (controls.gyro) Controls.askGyro().then(ok => { if (!ok) gyroRefused(); });
+  try {
+    const el = document.documentElement;
+    const fs = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : null;
+    Promise.resolve(fs).then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+  } catch { /* not allowed here (iPhone): the rotate prompt covers it */ }
+}
+$('#btn-host').addEventListener('click', () => { prepPhone(); hostMatch(false); });
+$('#btn-practice').addEventListener('click', () => { prepPhone(); hostMatch(true); });
+$('#btn-join').addEventListener('click', () => { prepPhone(); joinOnline(); });
 $('#btn-retry').addEventListener('click', () => { $('#btn-retry').classList.add('hidden'); joinOnline(); });
 $('#in-code').addEventListener('input', (e) => { e.target.value = normCode(e.target.value); });
 const joinParam = new URLSearchParams(location.search).get('join');
@@ -145,6 +157,27 @@ $('#btn-share').addEventListener('click', async () => {
     else { await navigator.clipboard.writeText(url); $('#btn-share').textContent = 'LINK COPIED'; }
   } catch { /* cancelled */ }
 });
+// Motion access was turned down: aim by drag only this time, and say why.
+function gyroRefused() {
+  controls.gyro = false; $('#gyro').checked = false;
+  $('#gyro-note').textContent = 'The browser turned down motion access, so gyro aim is off. Allow motion in its settings, then tick Gyro aim again.';
+}
+function setGyro(on) {
+  controls.gyro = on; store.set('ba.gyro', on ? '1' : '0');
+  $('#gyro').checked = on;
+  $('#gyro-sens-row').classList.toggle('hidden', !on);
+}
+setGyro(isPhone && store.get('ba.gyro', '1') === '1');
+controls.gyroSens = +store.get('ba.gsens', '1.6');
+$('#gyro-sens').value = controls.gyroSens;
+$('#gyro-sens').addEventListener('input', (e) => { controls.gyroSens = +e.target.value; store.set('ba.gsens', e.target.value); });
+$('#gyro').addEventListener('change', (e) => {
+  if (!e.target.checked) return setGyro(false);
+  setGyro(true); $('#gyro-note').textContent = '';
+  Controls.askGyro().then(ok => { if (!ok) gyroRefused(); });
+});
+for (const r of document.querySelectorAll('.phone-only')) r.classList.toggle('hidden', !isPhone);
+setGyro(controls.gyro);
 $('#sens').value = controls.sens;
 $('#sens').addEventListener('input', (e) => { controls.sens = +e.target.value; store.set('ba.sens', e.target.value); });
 $('#auto').checked = G.autoFire;
@@ -180,7 +213,6 @@ function enterGame() {
   G.others.clear();
   G.hist = []; G.killfeed = []; G.deadBy = null;
   show('game');
-  try { if (matchMedia('(pointer: coarse)').matches) document.documentElement.requestFullscreen?.().catch(() => {}); } catch { /* not allowed */ }
 }
 
 const nameOf = (id) => G.lobby?.players.find(p => p.id === id)?.name || (id === G.id ? G.name : '?');

@@ -40,6 +40,16 @@ input[type=text], .field input, .join-row input { background: rgba(0,0,0,0.35); 
 .howto ul { padding-left: 18px; margin: 8px 0 0; }
 .share { background: rgba(46,230,255,0.08); border: 1px solid rgba(46,230,255,0.3); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
 .share p { margin: 0 0 8px; }
+.cols, .col { display: flex; flex-direction: column; gap: 12px; }
+/* Phone on its side: players on the left, settings on the right. */
+@media (orientation: landscape) and (max-height: 520px) {
+  #lobby .panel, #results .panel { width: min(100%, 820px); }
+  .screen.active { padding-top: 10px; }
+  .cols { flex-direction: row; align-items: flex-start; gap: 18px; }
+  .col { flex: 1; min-width: 0; }
+  .pl { padding: 6px 10px; }
+  .players { gap: 4px; }
+}
 .players { display: flex; flex-direction: column; gap: 6px; }
 .pl { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; }
 .pl.me { border-color: var(--neon); }
@@ -114,8 +124,13 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--neon); }
 #dead p { text-align: center; font: 900 22px system-ui, sans-serif; text-shadow: 0 2px 6px #000; }
 #dead small { color: var(--dim); font-size: 15px; }
 #net { position: absolute; top: 40%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 8px 14px; border-radius: 10px; font-weight: 800; }
+#rotate { display: none; position: absolute; inset: 0; z-index: 20; pointer-events: auto; background: #070a16; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; font-weight: 800; }
+#rotate b { font-size: 64px; color: var(--accent, #2ee6ff); animation: ba-rot 1.6s ease-in-out infinite; }
+@keyframes ba-rot { 0%, 30% { transform: rotate(0); } 70%, 100% { transform: rotate(-90deg); } }
+@media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
 @media (orientation: portrait) {
   #b-fire { bottom: calc(110px + var(--sa-b)); }
   #b-jump { bottom: calc(40px + var(--sa-b)); right: calc(30px + var(--sa-r)); }
   #b-reload { bottom: calc(220px + var(--sa-b)); }
 }
+#gyro-note:empty { display: none; }

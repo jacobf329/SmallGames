@@ -34,6 +34,7 @@
         <li><b>Right thumb</b>: drag to aim. Hold <b>FIRE</b> and drag it to aim while shooting.</li>
         <li><b>JUMP</b> gets you onto crates; walk up half-crates to the centre platform.</li>
         <li>Headshots do double damage. Health comes back if you stay out of trouble.</li>
+        <li><b>Gyro aim</b> (on by default, in the lobby): turn and tilt the phone to fine-tune your aim on top of the drag. Play with the phone sideways.</li>
         <li>Auto-fire (on by default, in the lobby) shoots when an enemy is under your crosshair.</li>
         <li>Computer: click the view, then WASD, mouse, click to fire, Space, R.</li>
       </ul>
@@ -45,11 +46,13 @@
 <section id="lobby" class="screen menu">
   <div class="panel">
     <div class="head"><h2 id="lobby-title">MATCH</h2><span id="lobby-count" class="pill"></span></div>
+    <div class="cols"><div class="col">
     <div id="lobby-share" class="share hidden">
       <p>Friends open this page and enter the code under JOIN. Your phone runs the match: keep this screen on.</p>
       <button id="btn-share" class="btn small">SHARE INVITE LINK</button>
     </div>
     <div id="lobby-players" class="players"></div>
+    </div><div class="col">
     <div id="host-ctl" class="hidden">
       <div class="row"><span>Bots</span><div class="stepper"><button id="bots-minus">−</button><b id="bots-n">0</b><button id="bots-plus">+</button></div></div>
       <div class="row"><span>Bot skill</span><div class="seg" id="seg-skill"><button data-v="0.35">Easy</button><button data-v="0.6">Normal</button><button data-v="0.9">Sharp</button></div></div>
@@ -57,10 +60,14 @@
       <div class="row"><span>Time limit</span><div class="seg" id="seg-time"><button data-v="4">4 min</button><button data-v="6">6 min</button><button data-v="10">10 min</button></div></div>
     </div>
     <div class="row"><span>Look speed</span><input id="sens" type="range" min="0.4" max="2.2" step="0.1"></div>
-    <div class="row"><span>Auto-fire on target</span><input id="auto" type="checkbox"></div>
+    <div class="row phone-only"><span>Gyro aim (tilt and turn the phone)</span><input id="gyro" type="checkbox"></div>
+    <div class="row phone-only" id="gyro-sens-row"><span>Gyro speed</span><input id="gyro-sens" type="range" min="0.6" max="3.5" step="0.1"></div>
+    <p id="gyro-note" class="status phone-only"></p>
+    <div class="row phone-only"><span>Auto-fire on target</span><input id="auto" type="checkbox"></div>
     <button id="btn-start" class="btn big go hidden">START MATCH</button>
     <p id="lobby-wait" class="status">Waiting for the host to start…</p>
     <p class="status"><a href="#" data-leave>Leave</a></p>
+    </div></div>
   </div>
 </section>
 
@@ -97,6 +104,7 @@
   <div id="stick" class="hidden"><i></i></div>
   <div id="dead" class="hidden"><p id="dead-text"></p></div>
   <div id="net" class="hidden">Connection lost: reconnecting…</div>
+  <div id="rotate"><b>⟲</b><p>Turn your phone sideways to play</p></div>
 </div>
 
 <script type="module" src="js/main.js"></script>
