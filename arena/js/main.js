@@ -100,7 +100,7 @@ function joinOnline() {
 const isPhone = matchMedia('(pointer: coarse)').matches;
 function prepPhone() {
   if (!isPhone) return;
-  if (controls.gyro) Controls.askGyro().then(ok => { if (!ok) gyroRefused(); });
+  startGyro();
   try {
     const el = document.documentElement;
     const fs = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : null;
@@ -157,25 +157,46 @@ $('#btn-share').addEventListener('click', async () => {
     else { await navigator.clipboard.writeText(url); $('#btn-share').textContent = 'LINK COPIED'; }
   } catch { /* cancelled */ }
 });
-// Motion access was turned down: aim by drag only this time, and say why.
-function gyroRefused() {
-  controls.gyro = false; $('#gyro').checked = false;
-  $('#gyro-note').textContent = 'The browser turned down motion access, so gyro aim is off. Allow motion in its settings, then tick Gyro aim again.';
+// Gyro aim. The box stays as the player set it; the note under it says
+// whether motion is actually coming through, and if not, why.
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function gyroNote(text, ok) {
+  const n = $('#gyro-note');
+  n.textContent = text; n.classList.toggle('ok', !!ok);
+}
+// Ask (this must run straight from a tap), then watch for motion data.
+function startGyro() {
+  if (!controls.gyro) return;
+  if (!window.isSecureContext) {
+    gyroNote('Gyro only works when the game is opened from jteef.com/play/arena (phones only share motion with secure web pages).');
+    return;
+  }
+  if (!window.DeviceMotionEvent) { gyroNote("This browser doesn't support motion sensors, so aim with your thumb."); return; }
+  gyroNote('Checking the gyro…');
+  Controls.askGyro().then((granted) => {
+    const seenBefore = controls.gyroSeen;
+    setTimeout(() => {
+      if (!controls.gyro) return;
+      if (controls.gyroSeen || seenBefore) gyroNote('Gyro is working: turn and tilt the phone to aim.', true);
+      else if (!granted) gyroNote(IOS
+        ? 'Safari said no to motion for this page. Close this tab, open jteef.com/play/arena again and tap Allow when it asks about motion.'
+        : 'The browser blocked motion sensors. Tap the icon next to the web address, allow Motion sensors, then reload.');
+      else gyroNote("Your phone isn't sending gyro data to the browser, so aim with your thumb.");
+    }, 1200);
+  });
 }
 function setGyro(on) {
   controls.gyro = on; store.set('ba.gyro', on ? '1' : '0');
   $('#gyro').checked = on;
   $('#gyro-sens-row').classList.toggle('hidden', !on);
+  if (!on) gyroNote('');
 }
 setGyro(isPhone && store.get('ba.gyro', '1') === '1');
 controls.gyroSens = +store.get('ba.gsens', '1.6');
 $('#gyro-sens').value = controls.gyroSens;
 $('#gyro-sens').addEventListener('input', (e) => { controls.gyroSens = +e.target.value; store.set('ba.gsens', e.target.value); });
-$('#gyro').addEventListener('change', (e) => {
-  if (!e.target.checked) return setGyro(false);
-  setGyro(true); $('#gyro-note').textContent = '';
-  Controls.askGyro().then(ok => { if (!ok) gyroRefused(); });
-});
+// 'click' rather than 'change' so the permission ask counts as part of the tap.
+$('#gyro').addEventListener('click', (e) => { setGyro(e.target.checked); startGyro(); });
 for (const r of document.querySelectorAll('.phone-only')) r.classList.toggle('hidden', !isPhone);
 setGyro(controls.gyro);
 $('#sens').value = controls.sens;

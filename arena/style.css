@@ -134,3 +134,5 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--neon); }
   #b-reload { bottom: calc(220px + var(--sa-b)); }
 }
 #gyro-note:empty { display: none; }
+#gyro-note { font-size: 13px; text-align: left; margin: -4px 0 0; }
+#gyro-note.ok { color: #6dffa8; }

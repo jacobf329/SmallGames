@@ -130,7 +130,9 @@ export class Controls {
   static askGyro() {
     const D = window.DeviceMotionEvent;
     if (!D) return Promise.resolve(false);
-    if (typeof D.requestPermission === 'function') return D.requestPermission().then(r => r === 'granted').catch(() => false);
+    if (typeof D.requestPermission === 'function') {
+      try { return D.requestPermission().then(r => r === 'granted').catch(() => false); } catch { return Promise.resolve(false); }
+    }
     return Promise.resolve(true);
   }
 
