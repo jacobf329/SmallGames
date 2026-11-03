@@ -106,6 +106,7 @@ export class Controls {
     this.gyro = false;            // the player's setting
     this.gyroSens = 1.6;          // view turn per real turn
     this.gyroSeen = false;        // the phone actually reports rotation
+    this.gyroFlip = false;        // turn both gyro directions round
     let lastT = 0;
     window.addEventListener('devicemotion', (e) => {
       const rr = e.rotationRate;
@@ -121,8 +122,11 @@ export class Controls {
       const right = wx * Math.cos(a) - wy * Math.sin(a);
       const dead = 0.8;                       // ignore sensor drift and hand tremor
       const k = Math.PI / 180 * dt * this.gyroSens;
-      if (Math.abs(up) > dead) this.look.yaw += (up - Math.sign(up) * dead) * k;
-      if (Math.abs(right) > dead) this.look.pitch += (right - Math.sign(right) * dead) * k;
+      // Players reported both axes backwards with the textbook signs, so the
+      // view follows the opposite way; the lobby's flip box turns it back.
+      const s = this.gyroFlip ? 1 : -1;
+      if (Math.abs(up) > dead) this.look.yaw += s * (up - Math.sign(up) * dead) * k;
+      if (Math.abs(right) > dead) this.look.pitch += s * (right - Math.sign(right) * dead) * k;
     });
   }
 

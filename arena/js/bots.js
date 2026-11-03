@@ -33,7 +33,7 @@ export function thinkBot(bot, players, dt, skill) {
   b.errT -= dt;
   if (b.errT <= 0) {
     b.errT = 0.3 + Math.random() * 0.4;
-    const e = 0.04 + 0.06 * (1 - skill);
+    const e = 0.07 + 0.08 * (1 - skill);
     b.errYaw = (Math.random() * 2 - 1) * e;
     b.errPitch = (Math.random() * 2 - 1) * e * 0.6;
   }
@@ -75,12 +75,12 @@ export function thinkBot(bot, players, dt, skill) {
 
   // Fire once on target for a moment (reaction time), in short bursts with
   // a breather between them.
-  const onAim = t && Math.abs(wrap(lookYaw - inp.yaw)) < 0.05 + 0.04 * (1 - skill) && b.seeT > 0.85 - 0.45 * skill;
+  const onAim = t && Math.abs(wrap(lookYaw - inp.yaw)) < 0.05 + 0.04 * (1 - skill) && b.seeT > 1.1 - 0.5 * skill;
   if (b.restT > 0) b.restT -= dt;
   else if (onAim) {
     inp.fire = true;
     b.burstT += dt;
-    if (b.burstT > 0.4 + 0.1 * skill) { b.burstT = 0; b.restT = 0.35 + 0.6 * (1 - skill) + Math.random() * 0.3; }
+    if (b.burstT > 0.4 + 0.1 * skill) { b.burstT = 0; b.restT = 0.6 + 0.8 * (1 - skill) + Math.random() * 0.4; }
   } else b.burstT = 0;
   if (bot.ammo <= 0) inp.reload = true;
 

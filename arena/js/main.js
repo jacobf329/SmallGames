@@ -189,11 +189,15 @@ function setGyro(on) {
   controls.gyro = on; store.set('ba.gyro', on ? '1' : '0');
   $('#gyro').checked = on;
   $('#gyro-sens-row').classList.toggle('hidden', !on);
+  $('#gyro-flip-row').classList.toggle('hidden', !on);
   if (!on) gyroNote('');
 }
 setGyro(isPhone && store.get('ba.gyro', '1') === '1');
 controls.gyroSens = +store.get('ba.gsens', '1.6');
 $('#gyro-sens').value = controls.gyroSens;
+controls.gyroFlip = store.get('ba.gflip2', '0') === '1';
+$('#gyro-flip').checked = controls.gyroFlip;
+$('#gyro-flip').addEventListener('change', (e) => { controls.gyroFlip = e.target.checked; store.set('ba.gflip2', controls.gyroFlip ? '1' : '0'); });
 $('#gyro-sens').addEventListener('input', (e) => { controls.gyroSens = +e.target.value; store.set('ba.gsens', e.target.value); });
 // 'click' rather than 'change' so the permission ask counts as part of the tap.
 $('#gyro').addEventListener('click', (e) => { setGyro(e.target.checked); startGyro(); });
