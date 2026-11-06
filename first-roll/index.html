@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>First Roll</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#15111d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎲</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================================================================ home -->
+<section id="scr-home" class="screen active">
+  <div class="panel narrow">
+    <div class="logo">🎲</div>
+    <h1>First Roll</h1>
+    <p class="tag">Learn the 2024 fifth-edition rules by playing them with friends.</p>
+
+    <label class="fld">Your name
+      <input id="in-name" maxlength="20" autocomplete="nickname" placeholder="Name">
+    </label>
+
+    <div id="join-box" class="card hidden">
+      <p>Joining party <b id="join-code-show"></b></p>
+      <button id="btn-join-link" class="btn primary wide">Join the party</button>
+    </div>
+
+    <div class="stack">
+      <button id="btn-continue" class="btn primary wide hidden">Continue your party</button>
+      <button id="btn-host" class="btn primary wide">Host a party</button>
+      <button id="btn-solo" class="btn wide">Play solo</button>
+    </div>
+
+    <div class="row join-row">
+      <input id="in-code" maxlength="4" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false">
+      <button id="btn-join" class="btn">Join</button>
+    </div>
+    <p id="home-msg" class="msg"></p>
+    <p class="fine">Phase 0 prototype: one fight, Fighter and Rogue against three goblins.
+      Rules from the SRD 5.2.1 (CC-BY-4.0). <a href="#" id="lnk-credits">Credits</a></p>
+  </div>
+</section>
+
+<!-- =============================================================== lobby -->
+<section id="scr-lobby" class="screen">
+  <div class="panel">
+    <div class="lobby-head">
+      <div>
+        <div class="kicker">Party code</div>
+        <div id="lobby-code" class="code">----</div>
+      </div>
+      <div class="share">
+        <button id="btn-share" class="btn small">Share link</button>
+        <span id="net-status" class="status"></span>
+      </div>
+    </div>
+    <h2>Who's here</h2>
+    <ul id="seat-list" class="seats"></ul>
+    <h2>Pick your hero</h2>
+    <div id="hero-cards" class="heroes"></div>
+    <p class="note">Nobody on a hero? An AI companion plays it.</p>
+    <button id="btn-start" class="btn primary wide">Start the fight</button>
+    <p id="lobby-wait" class="msg hidden">Waiting for the host to start…</p>
+    <button id="btn-leave" class="btn ghost small">Leave</button>
+  </div>
+</section>
+
+<!-- ============================================================== battle -->
+<section id="scr-battle" class="screen">
+  <header class="bar">
+    <span id="b-round" class="pill">Round 1</span>
+    <span id="b-turn" class="turn"></span>
+    <span id="b-code" class="pill dim"></span>
+  </header>
+  <div id="b-order" class="order"></div>
+  <div class="board-wrap">
+    <svg id="board" class="board" aria-label="Battle grid"></svg>
+    <div id="banner" class="banner hidden"></div>
+  </div>
+  <div class="toast-slot"><div id="toast" class="toast hidden"></div></div>
+  <div id="panel" class="actions"></div>
+  <div class="log-wrap">
+    <div class="log-head">Combat log <span class="dim">· tap a line for the full breakdown</span></div>
+    <ol id="log" class="log"></ol>
+  </div>
+</section>
+
+<!-- ============================================================ overlays -->
+<div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+  <div class="sheet-card">
+    <button class="x" id="sheet-x" aria-label="Close">✕</button>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+<div id="react" class="react hidden"></div>
+<div id="over" class="over hidden"></div>
+<div id="err" class="err hidden"></div>
+
+<script type="module" src="src/ui/main.js"></script>
+</body>
+</html>

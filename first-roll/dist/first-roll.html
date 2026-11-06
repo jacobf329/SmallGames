@@ -1,0 +1,2941 @@
+<!doctype html>
+<html lang="en">
+<!-- First Roll (github.com/jacobf329/SmallGames, first-roll/). Built by tools/bundle.mjs: edit the sources, not this file.
+This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast LLC,
+available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0
+International License, available at https://creativecommons.org/licenses/by/4.0/legalcode. -->
+<head>
+<meta charset="utf-8">
+<title>First Roll</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#15111d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎲</text></svg>">
+<style>
+/* First Roll - phone-first, portrait. One dark theme, like the other games. */
+
+:root {
+  --bg: #15111d;
+  --bg2: #1d1828;
+  --panel: #221c2f;
+  --panel2: #2b2439;
+  --line: rgba(232, 214, 255, 0.12);
+  --ink: #f4eee4;
+  --dim: #b4a9c0;
+  --mute: #857a93;
+  --gold: #f0b54a;
+  --good: #5cd18a;
+  --bad: #ff6b6b;
+  --you: #4fc3f7;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; min-height: 100%; }
+html { background: var(--bg); }
+body {
+  background: radial-gradient(900px 500px at 50% -10%, #2a2140, var(--bg)) no-repeat, var(--bg);
+  color: var(--ink);
+  font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+a { color: var(--gold); }
+.hidden { display: none !important; }
+.dim { color: var(--dim); font-weight: 400; }
+.good { color: var(--good); }
+.bad { color: var(--bad); }
+
+/* ------------------------------------------------------------ screens -- */
+.screen { display: none; min-height: 100%; }
+.screen.active { display: block; }
+.panel { max-width: 520px; margin: 0 auto; padding: calc(24px + var(--safe-t)) 16px calc(24px + var(--safe-b)); }
+.panel.narrow { max-width: 420px; text-align: center; }
+.logo { font-size: 56px; margin-top: 12px; }
+h1 { font-size: 40px; margin: 0; letter-spacing: -0.02em;
+  background: linear-gradient(100deg, var(--gold), #ff8a65); -webkit-background-clip: text; background-clip: text; color: transparent; }
+h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--mute); margin: 22px 0 8px; }
+.tag { color: var(--dim); margin: 6px 0 22px; }
+.fld { display: block; text-align: left; color: var(--dim); font-size: 13px; margin-bottom: 14px; }
+input {
+  width: 100%; margin-top: 4px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); font: inherit; font-size: 17px;
+}
+input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+.stack { display: grid; gap: 10px; margin: 8px 0 14px; }
+.row { display: flex; gap: 8px; }
+.join-row input { flex: 1; margin: 0; text-align: center; letter-spacing: 0.3em; font-weight: 800; text-transform: uppercase; }
+.msg { color: var(--gold); min-height: 1.4em; }
+.fine { color: var(--mute); font-size: 12px; margin-top: 26px; }
+.note { color: var(--mute); font-size: 13px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; margin-bottom: 14px; }
+
+.btn {
+  appearance: none; border: 1px solid var(--line); background: var(--panel2); color: var(--ink);
+  font: 700 15px/1 inherit; font-family: inherit; padding: 13px 16px; border-radius: 12px; cursor: pointer;
+  transition: transform .08s ease, background .15s ease;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.4; pointer-events: none; }
+.btn.primary { background: linear-gradient(100deg, #e8a33c, #f07a4f); border-color: transparent; color: #1b1205; }
+.btn.ghost { background: transparent; color: var(--dim); }
+.btn.small { padding: 8px 12px; font-size: 13px; }
+.btn.wide { width: 100%; }
+
+/* -------------------------------------------------------------- lobby -- */
+.lobby-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.kicker { color: var(--mute); font-size: 12px; text-transform: uppercase; letter-spacing: .12em; }
+.code { font-size: 42px; font-weight: 900; letter-spacing: 0.22em; color: var(--gold); }
+.share { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.status { font-size: 12px; color: var(--mute); }
+.seats { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.seats li { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.seats .who { flex: 1; font-weight: 700; }
+.seats .off { opacity: .5; }
+.heroes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hero { background: var(--panel); border: 2px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.hero.mine { border-color: var(--gold); }
+.hero .em { font-size: 34px; }
+.hero h3 { margin: 0; font-size: 18px; }
+.hero .sub { color: var(--dim); font-size: 12px; }
+.hero .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; font-size: 12px; text-align: center; }
+.hero .stats div { background: var(--bg2); border-radius: 8px; padding: 4px 2px; }
+.hero .stats b { display: block; font-size: 15px; }
+.hero p { margin: 0; font-size: 13px; color: var(--dim); }
+.hero .btn { margin-top: auto; }
+#btn-start { margin-top: 16px; }
+#btn-leave { margin-top: 18px; }
+
+/* ------------------------------------------------------------- battle -- */
+#scr-battle.active { display: flex; flex-direction: column; height: 100dvh; padding-top: var(--safe-t); }
+.bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px 4px; }
+.pill { font-size: 12px; font-weight: 800; background: var(--panel2); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+.turn { flex: 1; text-align: center; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.turn.me { color: var(--gold); }
+.order { display: flex; gap: 6px; padding: 2px 10px 6px; overflow-x: auto; scrollbar-width: none; }
+.order span { flex: none; font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
+.order span.cur { border-color: var(--gold); color: var(--gold); font-weight: 800; }
+.order span.out { opacity: .35; text-decoration: line-through; }
+
+.board-wrap { position: relative; display: flex; justify-content: center; padding: 0 8px; }
+.board { width: min(100%, calc((100dvh - 380px) * 0.8), 460px); aspect-ratio: 8 / 10; display: block; border-radius: 12px; touch-action: manipulation; user-select: none; }
+.board .c1 { fill: #2a2a22; }
+.board .c2 { fill: #30302a; }
+.board rect.c1, .board rect.c2 { stroke: rgba(0,0,0,.25); stroke-width: .02; }
+.board .wall { fill: #44403a; }
+.board .wallmoji { font-size: .55px; text-anchor: middle; }
+.board .reach { fill: rgba(79, 195, 247, .16); stroke: rgba(79, 195, 247, .35); stroke-width: .03; }
+.board .suggest { fill: none; stroke: var(--gold); stroke-width: .06; stroke-dasharray: .14 .1; }
+.board .path { fill: none; stroke: var(--gold); stroke-width: .08; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: .05 .15; }
+.board .dest { fill: rgba(240, 181, 74, .25); stroke: var(--gold); stroke-width: .05; }
+.board .feet { font-size: .26px; font-weight: 800; fill: var(--gold); text-anchor: middle; }
+.board .threat { fill: rgba(255, 107, 107, .12); stroke: var(--bad); stroke-width: .05; stroke-dasharray: .12 .08; }
+.board .aim { fill: none; stroke: var(--bad); stroke-width: .07; }
+.tok { transition: transform .32s ease; }
+.tok .ring { fill: none; stroke: #c25b45; stroke-width: .06; }
+.tok .disc { fill: #3b2723; }
+.tok.hero .disc { fill: #1b3140; }
+.tok .emo { font-size: .5px; text-anchor: middle; }
+.tok .hpbg { fill: rgba(0,0,0,.55); }
+.tok .hp { fill: var(--good); }
+.tok .hp.low { fill: var(--bad); }
+.tok .fxi { font-size: .24px; text-anchor: middle; }
+.tok .lbl { font-size: .2px; font-weight: 800; fill: #ffd2c6; text-anchor: middle; }
+.tok.down .disc { fill: #333; }
+.tok.dead { opacity: .55; }
+.tok.cur .ring { stroke-width: .1; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { stroke-opacity: .35; } }
+.board .ping { fill: none; stroke-width: .08; animation: ping 1.5s ease-out forwards; }
+@keyframes ping { to { r: .9px; stroke-opacity: 0; } }
+
+.toast-slot { min-height: 50px; padding: 6px 10px 0; }
+.toast { margin: 0 auto; max-width: 460px;
+  background: rgba(21, 17, 29, .94); border: 1px solid var(--line); border-radius: 14px; padding: 9px 12px;
+  font-size: 14px; display: flex; gap: 10px; align-items: center; box-shadow: 0 8px 30px rgba(0,0,0,.4); animation: rise .25s ease; }
+.toast .t { flex: 1; }
+.toast .who { color: var(--dim); font-size: 12px; display: block; }
+.toast .btn { padding: 7px 10px; font-size: 12px; }
+@keyframes rise { from { transform: translateY(8px); opacity: 0; } }
+.banner { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); background: var(--gold); color: #1b1205;
+  font-weight: 900; font-size: 22px; padding: 10px 22px; border-radius: 14px; pointer-events: none; animation: pop 1.6s ease forwards; }
+@keyframes pop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.8); } 15%, 75% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; } }
+
+.actions { padding: 8px 10px 4px; display: grid; gap: 6px; }
+.budget { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: 12px; font-weight: 800; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); }
+.chip.used { opacity: .35; text-decoration: line-through; }
+.chip a { color: inherit; text-decoration: none; }
+.coachline { display: flex; gap: 8px; align-items: center; background: rgba(240, 181, 74, .1); border: 1px solid rgba(240, 181, 74, .35); border-radius: 12px; padding: 7px 10px; font-size: 13px; }
+.coachline span { flex: 1; }
+.coachline .btn { padding: 7px 10px; font-size: 12px; }
+.btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.btns .btn { padding: 10px 4px; font-size: 13px; }
+.btns .btn.end { background: #3a3150; }
+.waiting { color: var(--dim); font-size: 13px; text-align: center; padding: 6px; }
+.target { background: var(--panel); border: 1px solid var(--bad); border-radius: 14px; padding: 10px; display: grid; gap: 6px; }
+.target .th { display: flex; justify-content: space-between; align-items: baseline; }
+.target .opt { display: flex; align-items: center; gap: 8px; text-align: left; }
+.target .opt .btn { flex: none; min-width: 74px; }
+.target .opt .why { font-size: 12px; color: var(--dim); flex: 1; }
+.preview { display: flex; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--gold); border-radius: 12px; padding: 8px 10px; font-size: 13px; }
+.preview span { flex: 1; }
+
+.log-wrap { flex: 1; min-height: 70px; display: flex; flex-direction: column; padding: 0 10px calc(6px + var(--safe-b)); }
+.log-head { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--mute); padding: 4px 2px; }
+.log { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; font-size: 13px; }
+.log li { padding: 5px 6px; border-bottom: 1px solid var(--line); cursor: pointer; color: var(--dim); }
+.log li.k-attack, .log li.k-save, .log li.k-check, .log li.k-heal { color: var(--ink); }
+.log li.k-turn { color: var(--gold); font-weight: 700; border-bottom: 0; padding-top: 9px; }
+.log li.k-end { color: var(--gold); font-weight: 800; }
+
+/* ----------------------------------------------------------- overlays -- */
+.sheet { position: fixed; inset: 0; background: rgba(8, 6, 12, .6); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
+.sheet-card { position: relative; background: var(--bg2); width: 100%; max-width: 520px; max-height: 82dvh; overflow-y: auto;
+  border-radius: 20px 20px 0 0; padding: 18px 16px calc(18px + var(--safe-b)); border: 1px solid var(--line); animation: rise .2s ease; }
+.x { position: absolute; top: 10px; right: 10px; background: var(--panel2); border: 0; color: var(--ink); border-radius: 50%; width: 34px; height: 34px; font-size: 16px; cursor: pointer; }
+.sheet h3 { margin: 0 40px 8px 0; }
+.sheet h4 { margin: 14px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--gold); }
+.sheet .lead { margin: 0 36px 6px 0; font-weight: 700; }
+.ln { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+.ln b { white-space: nowrap; }
+.ln.sum { border-bottom: 1px solid var(--dim); font-weight: 800; }
+.ln.good span { color: var(--good); font-weight: 700; }
+.ln.bad span { color: var(--bad); font-weight: 700; }
+.rl { color: var(--gold); text-decoration: underline dotted; cursor: pointer; }
+.rulebox { background: var(--panel); border-left: 3px solid var(--gold); padding: 8px 10px; border-radius: 8px; font-size: 13px; color: var(--dim); margin-top: 14px; }
+.sheet .grid6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; text-align: center; font-size: 11px; }
+.sheet .grid6 div { background: var(--panel); border-radius: 8px; padding: 6px 0; }
+.sheet .grid6 b { display: block; font-size: 16px; }
+.sheet .feat { margin: 8px 0; font-size: 13px; }
+.sheet .feat b { color: var(--ink); }
+
+.react { position: fixed; left: 12px; right: 12px; bottom: calc(14px + var(--safe-b)); max-width: 500px; margin: 0 auto; z-index: 25;
+  background: #2a1d24; border: 2px solid var(--bad); border-radius: 18px; padding: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.6); animation: rise .2s ease; }
+.react h3 { margin: 0 0 4px; color: var(--bad); }
+.react p { margin: 0 0 10px; font-size: 14px; }
+.react .row .btn { flex: 1; }
+.react .timer { height: 4px; background: var(--bad); border-radius: 2px; margin-top: 10px; transform-origin: left; }
+
+.over { position: fixed; inset: 0; z-index: 30; background: rgba(8, 6, 12, .78); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.over .card { max-width: 440px; width: 100%; text-align: center; padding: 22px 18px; }
+.over h2 { font-size: 30px; margin: 4px 0; text-transform: none; letter-spacing: 0; color: var(--gold); }
+.over .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 12px 0 18px; }
+
+.err { position: fixed; top: calc(10px + var(--safe-t)); left: 50%; transform: translateX(-50%); z-index: 40; background: #4a1f25; color: #ffd9d9;
+  border: 1px solid var(--bad); padding: 8px 14px; border-radius: 12px; font-size: 14px; max-width: 92vw; }
+</style>
+</head>
+<body>
+
+<!-- ================================================================ home -->
+<section id="scr-home" class="screen active">
+  <div class="panel narrow">
+    <div class="logo">🎲</div>
+    <h1>First Roll</h1>
+    <p class="tag">Learn the 2024 fifth-edition rules by playing them with friends.</p>
+
+    <label class="fld">Your name
+      <input id="in-name" maxlength="20" autocomplete="nickname" placeholder="Name">
+    </label>
+
+    <div id="join-box" class="card hidden">
+      <p>Joining party <b id="join-code-show"></b></p>
+      <button id="btn-join-link" class="btn primary wide">Join the party</button>
+    </div>
+
+    <div class="stack">
+      <button id="btn-continue" class="btn primary wide hidden">Continue your party</button>
+      <button id="btn-host" class="btn primary wide">Host a party</button>
+      <button id="btn-solo" class="btn wide">Play solo</button>
+    </div>
+
+    <div class="row join-row">
+      <input id="in-code" maxlength="4" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false">
+      <button id="btn-join" class="btn">Join</button>
+    </div>
+    <p id="home-msg" class="msg"></p>
+    <p class="fine">Phase 0 prototype: one fight, Fighter and Rogue against three goblins.
+      Rules from the SRD 5.2.1 (CC-BY-4.0). <a href="#" id="lnk-credits">Credits</a></p>
+  </div>
+</section>
+
+<!-- =============================================================== lobby -->
+<section id="scr-lobby" class="screen">
+  <div class="panel">
+    <div class="lobby-head">
+      <div>
+        <div class="kicker">Party code</div>
+        <div id="lobby-code" class="code">----</div>
+      </div>
+      <div class="share">
+        <button id="btn-share" class="btn small">Share link</button>
+        <span id="net-status" class="status"></span>
+      </div>
+    </div>
+    <h2>Who's here</h2>
+    <ul id="seat-list" class="seats"></ul>
+    <h2>Pick your hero</h2>
+    <div id="hero-cards" class="heroes"></div>
+    <p class="note">Nobody on a hero? An AI companion plays it.</p>
+    <button id="btn-start" class="btn primary wide">Start the fight</button>
+    <p id="lobby-wait" class="msg hidden">Waiting for the host to start…</p>
+    <button id="btn-leave" class="btn ghost small">Leave</button>
+  </div>
+</section>
+
+<!-- ============================================================== battle -->
+<section id="scr-battle" class="screen">
+  <header class="bar">
+    <span id="b-round" class="pill">Round 1</span>
+    <span id="b-turn" class="turn"></span>
+    <span id="b-code" class="pill dim"></span>
+  </header>
+  <div id="b-order" class="order"></div>
+  <div class="board-wrap">
+    <svg id="board" class="board" aria-label="Battle grid"></svg>
+    <div id="banner" class="banner hidden"></div>
+  </div>
+  <div class="toast-slot"><div id="toast" class="toast hidden"></div></div>
+  <div id="panel" class="actions"></div>
+  <div class="log-wrap">
+    <div class="log-head">Combat log <span class="dim">· tap a line for the full breakdown</span></div>
+    <ol id="log" class="log"></ol>
+  </div>
+</section>
+
+<!-- ============================================================ overlays -->
+<div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+  <div class="sheet-card">
+    <button class="x" id="sheet-x" aria-label="Close">✕</button>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+<div id="react" class="react hidden"></div>
+<div id="over" class="over hidden"></div>
+<div id="err" class="err hidden"></div>
+
+<script type="module">
+"use strict";
+const __mods = {};
+/* ===== src/rules/data.js ===== */
+__mods["src/rules/data.js"] = (() => {
+// Game data: a small subset of the SRD 5.2.1 (CC-BY-4.0), enough for Phase 0.
+// Heroes are built from their choices (class, species, background, ability
+// scores) so the derived numbers can show where they came from.
+
+const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+const ABILITY_NAMES = {
+  str: 'Strength', dex: 'Dexterity', con: 'Constitution',
+  int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma',
+};
+const abilityMod = (score) => Math.floor((score - 10) / 2);
+const signed = (n) => (n >= 0 ? `+${n}` : `${n}`);
+
+const SKILLS = {
+  athletics: 'str', acrobatics: 'dex', sleightOfHand: 'dex', stealth: 'dex',
+  arcana: 'int', history: 'int', investigation: 'int', nature: 'int', religion: 'int',
+  animalHandling: 'wis', insight: 'wis', medicine: 'wis', perception: 'wis', survival: 'wis',
+  deception: 'cha', intimidation: 'cha', performance: 'cha', persuasion: 'cha',
+};
+const SKILL_NAMES = {
+  athletics: 'Athletics', acrobatics: 'Acrobatics', sleightOfHand: 'Sleight of Hand', stealth: 'Stealth',
+  arcana: 'Arcana', history: 'History', investigation: 'Investigation', nature: 'Nature', religion: 'Religion',
+  animalHandling: 'Animal Handling', insight: 'Insight', medicine: 'Medicine', perception: 'Perception',
+  survival: 'Survival', deception: 'Deception', intimidation: 'Intimidation', performance: 'Performance',
+  persuasion: 'Persuasion',
+};
+
+// range is in feet: [normal, long]. reach is 5 ft for every weapon here.
+const WEAPONS = {
+  longsword: { name: 'Longsword', kind: 'melee', dice: '1d8', type: 'Slashing', props: ['Versatile (1d10)'], mastery: 'sap' },
+  shortsword: { name: 'Shortsword', kind: 'melee', dice: '1d6', type: 'Piercing', props: ['Finesse', 'Light'], finesse: true, mastery: 'vex' },
+  shortbow: { name: 'Shortbow', kind: 'ranged', dice: '1d6', type: 'Piercing', props: ['Ammunition', 'Two-Handed'], range: [80, 320], mastery: 'vex' },
+};
+
+const MASTERIES = {
+  sap: { name: 'Sap', rule: 'mastery-sap', text: 'On a hit, the target has Disadvantage on its next attack roll before the start of your next turn.' },
+  vex: { name: 'Vex', rule: 'mastery-vex', text: 'On a hit, you have Advantage on your next attack roll against that creature before the end of your next turn.' },
+};
+
+const ARMOR = {
+  chain: { name: 'Chain Mail', base: 16, dex: false },
+  leather: { name: 'Leather Armor', base: 11, dex: true },
+};
+
+const SPECIES = {
+  human: { name: 'Human', traits: [
+    { name: 'Resourceful', rule: 'heroic-inspiration', text: 'You gain Heroic Inspiration whenever you finish a Long Rest.' },
+    { name: 'Skillful', text: 'Proficiency in one extra skill.' },
+    { name: 'Versatile', text: 'An extra Origin feat.' },
+  ] },
+  halfling: { name: 'Halfling', traits: [
+    { name: 'Luck', rule: 'luck', text: 'When you roll a 1 on the d20 of a D20 Test, you can reroll it and must use the new roll.' },
+    { name: 'Brave', text: 'Advantage on saving throws to avoid or end the Frightened condition.' },
+    { name: 'Naturally Stealthy', text: 'You can take the Hide action while behind a creature larger than you.' },
+  ] },
+};
+
+const BACKGROUNDS = {
+  soldier: { name: 'Soldier', abilities: ['str', 'dex', 'con'], feat: 'savage-attacker', skills: ['athletics', 'intimidation'] },
+  criminal: { name: 'Criminal', abilities: ['dex', 'con', 'int'], feat: 'alert', skills: ['sleightOfHand', 'stealth'] },
+};
+
+const FEATS = {
+  'savage-attacker': { name: 'Savage Attacker', rule: 'savage-attacker', text: 'Once per turn when you hit with a weapon, roll its damage dice twice and use either roll.' },
+  'alert': { name: 'Alert', rule: 'alert', text: 'Add your Proficiency Bonus to your Initiative.' },
+};
+
+// Pre-made heroes for Phase 0. Standard array: 15, 14, 13, 12, 10, 8.
+const PREMADES = {
+  fighter: {
+    cls: 'fighter', className: 'Fighter', emoji: '🛡️', hitDie: 10,
+    species: 'human', background: 'soldier',
+    base: { str: 15, dex: 13, con: 14, int: 8, wis: 12, cha: 10 },
+    boosts: { str: 2, con: 1 },
+    saves: ['str', 'con'],
+    skills: ['athletics', 'intimidation', 'perception', 'survival'],
+    armor: 'chain', shield: true,
+    weapons: ['longsword'],
+    masteries: ['longsword'],
+    style: 'dueling',
+    blurb: 'Armored front-liner. Stands between the goblins and everyone else.',
+  },
+  rogue: {
+    cls: 'rogue', className: 'Rogue', emoji: '🗡️', hitDie: 8,
+    species: 'halfling', background: 'criminal',
+    base: { str: 8, dex: 15, con: 14, int: 12, wis: 13, cha: 10 },
+    boosts: { dex: 2, int: 1 },
+    saves: ['dex', 'int'],
+    skills: ['sleightOfHand', 'stealth', 'acrobatics', 'perception', 'investigation', 'insight'],
+    expertise: ['stealth', 'perception'],
+    armor: 'leather', shield: false,
+    weapons: ['shortsword', 'shortbow'],
+    masteries: ['shortsword', 'shortbow'],
+    blurb: 'Quick and precise. Hits hardest when a friend is next to the target.',
+  },
+};
+
+// SRD 5.2.1 Goblin Warrior (CR 1/4, 50 XP).
+const GOBLIN_WARRIOR = {
+  kind: 'goblin', name: 'Goblin Warrior', emoji: '👺',
+  ac: 15, hp: 10, hpFormula: '3d6', speed: 30,
+  abilities: { str: 8, dex: 15, con: 10, int: 10, wis: 8, cha: 8 },
+  attacks: [
+    { id: 'scimitar', name: 'Scimitar', kind: 'melee', bonus: 4, dice: '1d6', flat: 2, type: 'Slashing', advDice: '1d4' },
+    { id: 'shortbow', name: 'Shortbow', kind: 'ranged', bonus: 4, dice: '1d6', flat: 2, type: 'Piercing', advDice: '1d4', range: [80, 320] },
+  ],
+  xp: 50,
+};
+
+// Phase 0 battlefield: 8 x 10 squares. Walls are rocks and trees.
+const SKIRMISH = {
+  walls: ['1,5', '2,5', '5,4', '6,4', '6,5', '3,1'],
+  heroStarts: { fighter: { x: 3, y: 8 }, rogue: { x: 4, y: 9 } },
+  foes: [
+    { id: 'g1', label: 'Goblin 1', x: 2, y: 2, ai: 'melee' },
+    { id: 'g2', label: 'Goblin 2', x: 5, y: 2, ai: 'melee' },
+    { id: 'g3', label: 'Goblin 3', x: 4, y: 0, ai: 'archer' },
+  ],
+};
+
+return { ABILITIES, ABILITY_NAMES, abilityMod, signed, SKILLS, SKILL_NAMES, WEAPONS, MASTERIES, ARMOR, SPECIES, BACKGROUNDS, FEATS, PREMADES, GOBLIN_WARRIOR, SKIRMISH };
+})();
+
+/* ===== src/rules/character.js ===== */
+__mods["src/rules/character.js"] = (() => {
+// Turns choices into a combat-ready creature. Every derived number keeps its
+// parts ({ label, value, rule }) so the UI can show where it came from.
+
+const { ABILITIES, ABILITY_NAMES, abilityMod, WEAPONS, MASTERIES, ARMOR, SPECIES, BACKGROUNDS, FEATS, PREMADES, GOBLIN_WARRIOR, SKILLS } = __mods["src/rules/data.js"];
+
+const PB_BY_LEVEL = [0, 2, 2, 2, 2, 3];
+
+function buildHero(cls, { id = cls, name, level = 1 } = {}) {
+  const p = PREMADES[cls];
+  if (!p) throw new Error(`Unknown class ${cls}`);
+  const pb = PB_BY_LEVEL[level];
+  const scores = {};
+  for (const a of ABILITIES) scores[a] = p.base[a] + (p.boosts[a] || 0);
+  const m = Object.fromEntries(ABILITIES.map((a) => [a, abilityMod(scores[a])]));
+  const bg = BACKGROUNDS[p.background];
+  const feat = FEATS[bg.feat];
+
+  // Armor Class
+  const armor = ARMOR[p.armor];
+  const acParts = [{ label: armor.name, value: armor.base, rule: 'armor-class' }];
+  if (armor.dex) acParts.push({ label: 'DEX modifier', value: m.dex, rule: 'ability-modifier' });
+  if (p.shield) acParts.push({ label: 'Shield', value: 2, rule: 'armor-class' });
+  const ac = acParts.reduce((s, x) => s + x.value, 0);
+
+  // Hit Points at level 1: hit die maximum + CON modifier.
+  const hpMax = p.hitDie + m.con;
+
+  // Initiative: a Dexterity check, plus PB with the Alert feat.
+  const initParts = [{ label: 'DEX modifier', value: m.dex, rule: 'ability-modifier' }];
+  if (bg.feat === 'alert') initParts.push({ label: 'Alert feat (PB)', value: pb, rule: 'alert' });
+
+  const attacks = p.weapons.map((wid) => {
+    const w = WEAPONS[wid];
+    const ability = w.kind === 'ranged' ? 'dex' : (w.finesse && m.dex > m.str ? 'dex' : 'str');
+    const hit = [
+      { label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'ability-modifier' },
+      { label: 'Proficiency Bonus', value: pb, rule: 'proficiency' },
+    ];
+    const dmgFlat = [{ label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'damage' }];
+    if (p.style === 'dueling' && w.kind === 'melee') dmgFlat.push({ label: 'Dueling fighting style', value: 2, rule: 'dueling' });
+    const mastery = p.masteries.includes(wid) ? w.mastery : null;
+    return {
+      id: wid, name: w.name, kind: w.kind, dice: w.dice, type: w.type,
+      finesse: !!w.finesse, range: w.range || null, props: w.props,
+      hit, dmgFlat, mastery,
+    };
+  });
+
+  const skills = {};
+  for (const [s, ab] of Object.entries(SKILLS)) {
+    const prof = p.skills.includes(s) ? (p.expertise?.includes(s) ? 2 : 1) : 0;
+    skills[s] = m[ab] + prof * pb;
+  }
+
+  const features = [];
+  for (const t of SPECIES[p.species].traits) features.push({ ...t, source: SPECIES[p.species].name });
+  features.push({ ...feat, source: `${bg.name} background` });
+  if (cls === 'fighter') {
+    features.push({ name: 'Fighting Style: Dueling', rule: 'dueling', text: '+2 damage with a melee weapon held in one hand, with no other weapon.', source: 'Fighter 1' });
+    features.push({ name: 'Second Wind', rule: 'second-wind', text: 'Bonus Action: regain 1d10 + Fighter level Hit Points. 2 uses, back on a Long Rest (one on a Short Rest).', source: 'Fighter 1' });
+    features.push({ name: 'Weapon Mastery', rule: 'weapon-mastery', text: 'Use the mastery property of 3 kinds of weapons. Longsword: Sap.', source: 'Fighter 1' });
+  }
+  if (cls === 'rogue') {
+    features.push({ name: 'Sneak Attack', rule: 'sneak-attack', text: 'Once per turn, +1d6 damage with a Finesse or Ranged weapon if you have Advantage, or an ally is next to the target.', source: 'Rogue 1' });
+    features.push({ name: 'Expertise', rule: 'expertise', text: 'Double Proficiency Bonus in Stealth and Perception.', source: 'Rogue 1' });
+    features.push({ name: 'Weapon Mastery', rule: 'weapon-mastery', text: 'Use the mastery property of 2 kinds of weapons. Shortsword and Shortbow: Vex.', source: 'Rogue 1' });
+  }
+  for (const a of attacks) {
+    if (a.mastery) a.masteryText = MASTERIES[a.mastery].text;
+  }
+
+  return {
+    id, side: 'hero', cls, kind: cls, className: p.className, emoji: p.emoji,
+    name: name || p.className, level, pb,
+    species: SPECIES[p.species].name, background: bg.name,
+    scores, mods: m, saves: p.saves,
+    ac, acParts, hp: hpMax, hpMax,
+    hpParts: [{ label: `d${p.hitDie} maximum`, value: p.hitDie }, { label: 'CON modifier', value: m.con }],
+    speed: 30, initParts, attacks, skills, features,
+    luck: p.species === 'halfling',
+    savage: bg.feat === 'savage-attacker',
+    sneak: cls === 'rogue' ? '1d6' : null,
+    secondWind: cls === 'fighter' ? { uses: 2, max: 2 } : null,
+    reaction: true, deathSaves: { s: 0, f: 0 }, stable: false, dead: false,
+    x: 0, y: 0, ai: cls === 'rogue' ? 'skirmisher' : 'melee',
+  };
+}
+
+function buildGoblin({ id, label, x, y, ai }) {
+  const g = GOBLIN_WARRIOR;
+  const m = Object.fromEntries(ABILITIES.map((a) => [a, abilityMod(g.abilities[a])]));
+  return {
+    id, side: 'foe', kind: g.kind, name: label, statName: g.name, emoji: g.emoji,
+    scores: { ...g.abilities }, mods: m, pb: 2,
+    ac: g.ac, acParts: [{ label: 'Leather Armor, Shield, DEX', value: g.ac, rule: 'stat-block' }],
+    hp: g.hp, hpMax: g.hp, speed: g.speed,
+    initParts: [{ label: 'DEX modifier', value: m.dex, rule: 'ability-modifier' }],
+    attacks: g.attacks.map((a) => ({
+      id: a.id, name: a.name, kind: a.kind, dice: a.dice, type: a.type, range: a.range || null,
+      finesse: false, mastery: null, advDice: a.advDice,
+      hit: [{ label: 'Stat block attack bonus', value: a.bonus, rule: 'stat-block' }],
+      dmgFlat: [{ label: 'Stat block damage bonus', value: a.flat, rule: 'stat-block' }],
+    })),
+    features: [
+      { name: 'Nimble Escape', rule: 'nimble-escape', text: 'The goblin can take the Disengage or Hide action as a Bonus Action.' },
+    ],
+    nimble: true,
+    reaction: true, dead: false, x, y, ai, xp: g.xp,
+  };
+}
+
+const abilityName = (a) => ABILITY_NAMES[a];
+
+return { PB_BY_LEVEL, buildHero, buildGoblin, abilityName };
+})();
+
+/* ===== src/rules/rng.js ===== */
+__mods["src/rules/rng.js"] = (() => {
+// Seeded RNG (mulberry32). The state is a plain object so a battle, rng
+// included, can be saved as JSON and resumed exactly.
+
+function makeRng(seed) {
+  return { s: (seed >>> 0) || 1 };
+}
+
+function next(r) {
+  let t = (r.s = (r.s + 0x6D2B79F5) >>> 0);
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+// r.script, when set, supplies the next die results in order: tests use it to
+// force exact rolls (and it is the hook for "use my own dice").
+function die(r, sides) {
+  if (r.script?.length) return r.script.shift();
+  return 1 + Math.floor(next(r) * sides);
+}
+
+function rollDice(r, n, sides) {
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(die(r, sides));
+  return out;
+}
+
+const sum = (a) => a.reduce((s, v) => s + v, 0);
+
+// "1d8" / "2d6" -> { n, sides }
+function parseDice(expr) {
+  const m = /^(\d+)d(\d+)$/.exec(String(expr).trim());
+  if (!m) throw new Error(`Bad dice: ${expr}`);
+  return { n: +m[1], sides: +m[2] };
+}
+
+const avgDice = (expr) => {
+  const { n, sides } = parseDice(expr);
+  return n * (sides + 1) / 2;
+};
+
+return { makeRng, next, die, rollDice, sum, parseDice, avgDice };
+})();
+
+/* ===== src/rules/grid.js ===== */
+__mods["src/rules/grid.js"] = (() => {
+// The battle grid: 5-foot squares, every square (diagonals too) costs 5 feet,
+// and another creature's space counts as Difficult Terrain (double cost).
+
+const W = 8;
+const H = 10;
+const FT = 5;
+
+const key = (x, y) => `${x},${y}`;
+const cheb = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+const feetBetween = (a, b) => cheb(a, b) * FT;
+const inBounds = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
+
+const incap = (c) => c.hp <= 0;                 // Unconscious or dead
+const hostile = (a, b) => a.side !== b.side;
+// Dead monsters leave the board; fallen heroes stay where they dropped.
+const onBoard = (c) => !(c.side === 'foe' && c.hp <= 0);
+
+function isWall(b, x, y) {
+  return b.walls.includes(key(x, y));
+}
+
+function occupantAt(b, x, y) {
+  for (const id in b.creatures) {
+    const c = b.creatures[id];
+    if (onBoard(c) && c.x === x && c.y === y) return c;
+  }
+  return null;
+}
+
+const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+
+// Cheapest cost (in feet) to every square the mover can reach within budget.
+// Hostile creatures block, unless they are Incapacitated; any other
+// creature's space is Difficult Terrain.
+function reachMap(b, mover, budget) {
+  const dist = new Map(), prev = new Map();
+  const start = key(mover.x, mover.y);
+  dist.set(start, 0);
+  const open = [[0, mover.x, mover.y]];
+  while (open.length) {
+    open.sort((p, q) => p[0] - q[0]);
+    const [d, x, y] = open.shift();
+    if (d > dist.get(key(x, y))) continue;
+    for (const [dx, dy] of DIRS) {
+      const nx = x + dx, ny = y + dy;
+      if (!inBounds(nx, ny) || isWall(b, nx, ny)) continue;
+      const occ = occupantAt(b, nx, ny);
+      if (occ && occ !== mover && hostile(occ, mover) && !incap(occ)) continue;
+      const nd = d + (occ && occ !== mover ? 2 * FT : FT);
+      if (nd > budget) continue;
+      const k = key(nx, ny);
+      if (!dist.has(k) || nd < dist.get(k)) {
+        dist.set(k, nd);
+        prev.set(k, key(x, y));
+        open.push([nd, nx, ny]);
+      }
+    }
+  }
+  return { dist, prev };
+}
+
+function canEndAt(b, mover, x, y) {
+  if (!inBounds(x, y) || isWall(b, x, y)) return false;
+  const o = occupantAt(b, x, y);
+  return !o || o === mover;
+}
+
+function pathFrom(map, mover, x, y) {
+  const k0 = key(mover.x, mover.y);
+  let k = key(x, y);
+  if (!map.dist.has(k) || k === k0) return null;
+  const path = [];
+  while (k !== k0) {
+    const [px, py] = k.split(',').map(Number);
+    path.unshift({ x: px, y: py });
+    k = map.prev.get(k);
+  }
+  return path;
+}
+
+function neighbours(x, y) {
+  return DIRS.map(([dx, dy]) => ({ x: x + dx, y: y + dy })).filter((p) => inBounds(p.x, p.y));
+}
+
+return { W, H, FT, key, cheb, feetBetween, inBounds, incap, hostile, onBoard, isWall, occupantAt, reachMap, canEndAt, pathFrom, neighbours };
+})();
+
+/* ===== src/rules/combat.js ===== */
+__mods["src/rules/combat.js"] = (() => {
+// The combat rules engine. Pure: no DOM, no network, no clock. All state is
+// one JSON-able battle object; every resolution is appended to battle.log as
+// a record that says what was rolled, what was added and which rule applied.
+// Those records are what the UI explains and what the room broadcasts.
+
+const { makeRng, die, rollDice, sum, parseDice, avgDice } = __mods["src/rules/rng.js"];
+const { key, cheb, feetBetween, incap, hostile, onBoard, reachMap, canEndAt, pathFrom, FT } = __mods["src/rules/grid.js"];
+const { MASTERIES, signed } = __mods["src/rules/data.js"];
+
+// ------------------------------------------------------------- set-up ----
+
+function createBattle({ heroes, foes, walls = [], seed = 1 }) {
+  const creatures = {};
+  for (const c of [...heroes, ...foes]) creatures[c.id] = c;
+  return {
+    creatures, walls: [...walls], rng: makeRng(seed),
+    order: [], idx: -1, round: 0, turn: null,
+    effects: [], log: [], seq: 0,
+    pending: null, moveCtx: null, over: null,
+  };
+}
+
+function emit(b, r) {
+  r.seq = ++b.seq;
+  r.round = b.round;
+  b.log.push(r);
+  if (b.log.length > 400) b.log.splice(0, b.log.length - 400);
+  return r;
+}
+
+const C = (b, id) => b.creatures[id];
+const current = (b) => (b.idx >= 0 ? b.creatures[b.order[b.idx]] : null);
+const turnKey = (b) => `${b.round}:${b.idx}`;
+const living = (b, side) => Object.values(b.creatures).filter((c) => c.side === side && c.hp > 0);
+const enemiesOf = (b, c) => Object.values(b.creatures).filter((o) => hostile(o, c) && onBoard(o) && !o.dead);
+const alliesOf = (b, c) => Object.values(b.creatures).filter((o) => o !== c && o.side === c.side && onBoard(o) && !o.dead);
+
+// ----------------------------------------------------------- D20 Tests ----
+
+function modeFrom(adv, dis) {
+  if (adv.length && dis.length) return 'normal';
+  if (adv.length) return 'advantage';
+  if (dis.length) return 'disadvantage';
+  return 'normal';
+}
+
+// Roll the d20 for a D20 Test. Halfling Luck rerolls a 1.
+function rollD20(b, who, mode) {
+  const one = () => {
+    const first = die(b.rng, 20);
+    if (first === 1 && who.luck) return { v: die(b.rng, 20), luck: true };
+    return { v: first, luck: false };
+  };
+  const a = one();
+  const rolls = [a.v];
+  const luck = a.luck ? 1 : 0;
+  if (mode === 'normal') return { rolls, kept: a.v, mode, luck };
+  const c = one();
+  rolls.push(c.v);
+  const kept = mode === 'advantage' ? Math.max(a.v, c.v) : Math.min(a.v, c.v);
+  return { rolls, kept, mode, luck: luck + (c.luck ? 1 : 0) };
+}
+
+// ------------------------------------------------------------- attacks ----
+
+function attackRangeFeet(atk) {
+  return atk.kind === 'ranged' ? atk.range : [5, 5];
+}
+
+function inRange(A, T, atk) {
+  const d = feetBetween(A, T);
+  return d <= attackRangeFeet(atk)[1];
+}
+
+// Which effects give Advantage or Disadvantage on A attacking T with atk.
+// Returns reasons and which one-shot effects the roll would use up.
+function attackFactors(b, A, T, atk) {
+  const adv = [], dis = [], uses = [];
+  let helpUsed = false;
+  for (const e of b.effects) {
+    if (e.type === 'vex' && e.by === A.id && e.target === T.id) {
+      adv.push({ text: `Vex: ${A.name} hit ${T.name} with a Vex weapon`, rule: 'mastery-vex' });
+      uses.push(e);
+    } else if (e.type === 'helped' && e.target === T.id && !helpUsed && e.by !== A.id && C(b, e.by)?.side === A.side) {
+      adv.push({ text: `${C(b, e.by).name} took the Help action`, rule: 'help' });
+      uses.push(e);
+      helpUsed = true;
+    } else if (e.type === 'sap' && e.target === A.id) {
+      dis.push({ text: `Sap: ${C(b, e.by).name} hit ${A.name} with a Sap weapon`, rule: 'mastery-sap' });
+      uses.push(e);
+    } else if (e.type === 'dodge' && e.by === T.id && !incap(T)) {
+      dis.push({ text: `${T.name} is Dodging`, rule: 'dodge' });
+    }
+  }
+  if (incap(T)) adv.push({ text: `${T.name} is Unconscious`, rule: 'unconscious' });
+  if (atk.kind === 'ranged') {
+    const near = enemiesOf(b, A).filter((e) => !incap(e) && cheb(e, A) <= 1);
+    if (near.length) dis.push({ text: `Ranged attack with ${near[0].name} next to ${A.name}`, rule: 'ranged-in-melee' });
+    if (feetBetween(A, T) > atk.range[0]) dis.push({ text: 'Target is beyond normal range', rule: 'long-range' });
+  }
+  return { adv, dis, uses, mode: modeFrom(adv, dis) };
+}
+
+// Chance an attack roll hits (nat 1 always misses, nat 20 always hits).
+function hitChance(bonus, ac, mode = 'normal', luck = false) {
+  let p = Math.min(19, Math.max(1, 21 - (ac - bonus))) / 20;
+  if (luck) p = p + p / 20;               // a 1 is rerolled
+  if (mode === 'advantage') return 1 - (1 - p) ** 2;
+  if (mode === 'disadvantage') return p * p;
+  return p;
+}
+
+const hitBonus = (atk) => sum(atk.hit.map((h) => h.value));
+
+function sneakAllowed(b, A, T, atk, mode) {
+  if (!A.sneak || A.sneakKey === turnKey(b)) return null;
+  if (!(atk.finesse || atk.kind === 'ranged')) return null;
+  if (mode === 'advantage') return 'You had Advantage';
+  if (mode === 'disadvantage') return null;
+  const buddy = alliesOf(b, A).find((o) => !incap(o) && cheb(o, T) <= 1);
+  return buddy ? `${buddy.name} is next to ${T.name}` : null;
+}
+
+// Options for the UI and the AI: every attack A could make against T now.
+function attackOptions(b, A, T) {
+  return A.attacks.map((atk) => {
+    const f = attackFactors(b, A, T, atk);
+    const ok = inRange(A, T, atk);
+    const bonus = hitBonus(atk);
+    const p = hitChance(bonus, T.ac, f.mode, A.luck);
+    const sneak = sneakAllowed(b, A, T, atk, f.mode);
+    let avg = avgDice(atk.dice) + sum(atk.dmgFlat.map((d) => d.value));
+    if (sneak) avg += avgDice(A.sneak);
+    if (atk.advDice && f.mode === 'advantage') avg += avgDice(atk.advDice);
+    return { atk, ok, bonus, p, mode: f.mode, adv: f.adv, dis: f.dis, sneak, avg, expected: ok ? p * avg : 0 };
+  });
+}
+
+function rollDamage(b, A, T, atk, crit, mode) {
+  const { n, sides } = parseDice(atk.dice);
+  const nd = crit ? n * 2 : n;
+  const parts = [];
+  let rolls = rollDice(b.rng, nd, sides);
+  let savage = null;
+  if (A.savage && A.savageKey !== turnKey(b)) {
+    const again = rollDice(b.rng, nd, sides);
+    savage = { first: rolls, second: again };
+    if (sum(again) > sum(rolls)) rolls = again;
+    A.savageKey = turnKey(b);
+  }
+  parts.push({
+    label: `${atk.name} ${nd}d${sides}${crit ? ' (dice doubled: Critical Hit)' : ''}`,
+    rolls, value: sum(rolls), rule: crit ? 'critical-hit' : 'damage',
+    savage: savage ? `Savage Attacker: rolled ${savage.first.join('+')} and ${savage.second.join('+')}, kept the higher` : null,
+  });
+  for (const f of atk.dmgFlat) parts.push({ label: f.label, value: f.value, rule: f.rule });
+  const sneakWhy = sneakAllowed(b, A, T, atk, mode);
+  if (sneakWhy) {
+    const s = parseDice(A.sneak);
+    const sr = rollDice(b.rng, crit ? s.n * 2 : s.n, s.sides);
+    parts.push({ label: `Sneak Attack ${crit ? s.n * 2 : s.n}d${s.sides} (${sneakWhy})`, rolls: sr, value: sum(sr), rule: 'sneak-attack' });
+    A.sneakKey = turnKey(b);
+  }
+  if (atk.advDice && mode === 'advantage') {
+    const s = parseDice(atk.advDice);
+    const sr = rollDice(b.rng, crit ? s.n * 2 : s.n, s.sides);
+    parts.push({ label: `Extra ${crit ? s.n * 2 : s.n}d${s.sides} (attacked with Advantage)`, rolls: sr, value: sum(sr), rule: 'stat-block' });
+  }
+  return { parts, total: Math.max(0, sum(parts.map((p) => p.value))), type: atk.type };
+}
+
+// Apply damage, handling 0 HP, death saves and instant death.
+function applyDamage(b, T, amount, crit) {
+  const before = T.hp;
+  const out = { before, after: before, downed: false, dead: false, deathFail: 0 };
+  if (amount <= 0) return out;
+  if (T.hp > 0) {
+    const left = T.hp - amount;
+    if (left > 0) { T.hp = left; out.after = left; return out; }
+    T.hp = 0;
+    out.after = 0;
+    if (T.side === 'foe') { T.dead = true; out.dead = true; return out; }
+    if (-left >= T.hpMax) { T.dead = true; out.dead = true; out.massive = true; return out; }
+    out.downed = true;
+    T.deathSaves = { s: 0, f: 0 };
+    T.stable = false;
+    return out;
+  }
+  // Already at 0 HP: damage is a failed death save (two on a Critical Hit).
+  if (T.side === 'hero' && !T.dead) {
+    if (amount >= T.hpMax) { T.dead = true; out.dead = true; out.massive = true; return out; }
+    T.stable = false;
+    out.deathFail = crit ? 2 : 1;
+    T.deathSaves.f += out.deathFail;
+    if (T.deathSaves.f >= 3) { T.dead = true; out.dead = true; }
+  }
+  return out;
+}
+
+function attack(b, A, T, atk, { reaction = false } = {}) {
+  const f = attackFactors(b, A, T, atk);
+  b.effects = b.effects.filter((e) => !f.uses.includes(e));
+  const d20 = rollD20(b, A, f.mode);
+  const total = d20.kept + hitBonus(atk);
+  let outcome;
+  if (d20.kept === 20) outcome = 'crit';
+  else if (d20.kept === 1) outcome = 'fumble';
+  else outcome = total >= T.ac ? 'hit' : 'miss';
+  const notes = [];
+  if (outcome === 'hit' && incap(T) && cheb(A, T) <= 1) {
+    outcome = 'crit';
+    notes.push({ text: 'Any hit from within 5 feet on an Unconscious creature is a Critical Hit', rule: 'unconscious' });
+  }
+  const hit = outcome === 'hit' || outcome === 'crit';
+  let damage = null, after = null, mastery = null;
+  if (hit) {
+    damage = rollDamage(b, A, T, atk, outcome === 'crit', f.mode);
+    after = applyDamage(b, T, damage.total, outcome === 'crit');
+    if (atk.mastery && !T.dead && T.hp > 0) {
+      const ms = MASTERIES[atk.mastery];
+      mastery = { name: ms.name, text: ms.text, rule: ms.rule };
+      if (atk.mastery === 'vex') {
+        b.effects = b.effects.filter((e) => !(e.type === 'vex' && e.by === A.id && e.target === T.id));
+        const skip = current(b)?.id === A.id ? 1 : 0;
+        b.effects.push({ type: 'vex', by: A.id, target: T.id, expires: { when: 'end', who: A.id, skip } });
+      } else if (atk.mastery === 'sap') {
+        b.effects = b.effects.filter((e) => !(e.type === 'sap' && e.target === T.id));
+        b.effects.push({ type: 'sap', by: A.id, target: T.id, expires: { when: 'start', who: A.id } });
+      }
+    }
+  }
+  const verb = { crit: 'lands a Critical Hit on', hit: 'hits', miss: 'misses', fumble: 'misses' }[outcome];
+  let text = `${A.name} ${verb} ${T.name} with ${atk.name}`;
+  if (damage) text += ` for ${damage.total} ${damage.type} damage`;
+  text += reaction ? ' (Opportunity Attack).' : '.';
+  if (after?.dead) text += T.side === 'foe' ? ` ${T.name} is defeated.` : ` ${T.name} dies.`;
+  else if (after?.downed) text += ` ${T.name} drops to 0 HP and falls Unconscious.`;
+  else if (after?.deathFail) text += ` ${T.name} suffers ${after.deathFail} failed death save${after.deathFail > 1 ? 's' : ''}.`;
+  emit(b, {
+    kind: 'attack', by: A.id, target: T.id, weapon: atk.name, attackKind: atk.kind, reaction,
+    d20: { ...d20, adv: f.adv, dis: f.dis }, mods: atk.hit, total, ac: T.ac, acParts: T.acParts,
+    outcome, notes, damage, after, mastery, text,
+    rule: reaction ? 'opportunity-attack' : 'attack-roll',
+  });
+  checkOver(b);
+}
+
+// ---------------------------------------------------------- the turn ----
+
+function expire(b, when, who) {
+  b.effects = b.effects.filter((e) => {
+    if (e.expires.when !== when || e.expires.who !== who) return true;
+    if (e.expires.skip > 0) { e.expires.skip--; return true; }
+    return false;
+  });
+}
+
+function rollInitiative(b) {
+  const entries = Object.values(b.creatures).map((c) => {
+    const d20 = rollD20(b, c, 'normal');
+    const mod = sum(c.initParts.map((p) => p.value));
+    return { id: c.id, d20, parts: c.initParts, total: d20.kept + mod, dex: c.mods.dex };
+  });
+  entries.sort((p, q) => q.total - p.total || q.dex - p.dex
+    || (C(b, p.id).side === 'hero' ? -1 : 1) - (C(b, q.id).side === 'hero' ? -1 : 1) || (p.id < q.id ? -1 : 1));
+  b.order = entries.map((e) => e.id);
+  b.round = 1;
+  emit(b, { kind: 'initiative', entries, text: 'Everyone rolls Initiative.', rule: 'initiative' });
+  b.idx = -1;
+  nextTurn(b);
+}
+
+function startTurn(b, c) {
+  expire(b, 'start', c.id);
+  c.reaction = true;
+  b.turn = { who: c.id, action: 1, bonus: 1, moveLeft: c.speed, moves: 0, steps: 0 };
+  emit(b, { kind: 'turn', who: c.id, text: `${c.name}'s turn.`, rule: 'your-turn' });
+}
+
+function deathSave(b, c) {
+  const d20 = rollD20(b, c, 'normal');
+  const v = d20.kept;
+  let outcome, text;
+  if (v === 20) {
+    c.hp = 1; c.deathSaves = { s: 0, f: 0 };
+    outcome = 'revive'; text = `${c.name} rolls a 20 on a death save, regains 1 HP and gets back up.`;
+  } else if (v === 1) {
+    c.deathSaves.f += 2; outcome = 'fail2'; text = `${c.name} rolls a 1 on a death save: two failures.`;
+  } else if (v >= 10) {
+    c.deathSaves.s += 1; outcome = 'success'; text = `${c.name} succeeds on a death save.`;
+  } else {
+    c.deathSaves.f += 1; outcome = 'fail'; text = `${c.name} fails a death save.`;
+  }
+  if (c.deathSaves.f >= 3) { c.dead = true; text += ` That's three failures: ${c.name} dies.`; }
+  else if (c.deathSaves.s >= 3) { c.stable = true; c.deathSaves = { s: 0, f: 0 }; text += ` Three successes: ${c.name} is Stable.`; }
+  emit(b, { kind: 'save', save: 'death', by: c.id, d20, dc: 10, outcome, tally: { ...c.deathSaves }, text, rule: 'death-saves' });
+  checkOver(b);
+}
+
+function nextTurn(b) {
+  for (let guard = 0; guard < 50 && !b.over; guard++) {
+    if (b.turn) expire(b, 'end', b.turn.who);
+    b.idx = (b.idx + 1) % b.order.length;
+    if (b.idx === 0) { if (b.begun) b.round++; b.begun = true; }
+    const c = current(b);
+    b.turn = null;
+    if (c.dead) continue;
+    startTurn(b, c);
+    if (c.side === 'hero' && c.hp <= 0) {
+      if (c.stable) {
+        emit(b, { kind: 'note', by: c.id, text: `${c.name} is Stable but still Unconscious.`, rule: 'stable' });
+        continue;
+      }
+      deathSave(b, c);
+      if (c.hp > 0 || b.over) return;  // a 20 gets them back up, mid-turn
+      continue;
+    }
+    return;
+  }
+}
+
+function checkOver(b) {
+  if (b.over) return;
+  if (!living(b, 'foe').length) b.over = 'victory';
+  else if (!living(b, 'hero').length) b.over = 'defeat';
+  if (b.over) {
+    b.pending = null;
+    b.moveCtx = null;
+    emit(b, {
+      kind: 'end', outcome: b.over, rule: 'combat',
+      text: b.over === 'victory' ? 'Victory! The goblins are defeated.' : 'Defeat. Every hero is down.',
+    });
+  }
+}
+
+// ----------------------------------------------------------- movement ----
+
+// Hostile creatures whose reach the mover leaves by stepping from -> to.
+function provokers(b, M, from, to) {
+  if (b.effects.some((e) => e.type === 'disengage' && e.by === M.id)) return [];
+  return enemiesOf(b, M).filter((h) => !incap(h) && h.reaction
+    && h.attacks.some((a) => a.kind === 'melee')
+    && cheb(h, from) <= 1 && cheb(h, to) > 1);
+}
+
+// Path preview for the UI: route, cost and who would get an Opportunity Attack.
+function previewMove(b, id, x, y) {
+  const M = C(b, id);
+  if (!b.turn || b.turn.who !== id) return null;
+  if (!canEndAt(b, M, x, y)) return null;
+  const map = reachMap(b, M, b.turn.moveLeft);
+  const path = pathFrom(map, M, x, y);
+  if (!path) return null;
+  const oas = [];
+  let from = { x: M.x, y: M.y };
+  for (const to of path) {
+    for (const h of provokers(b, M, from, to)) if (!oas.includes(h.id)) oas.push(h.id);
+    from = to;
+  }
+  return { path, feet: map.dist.get(key(x, y)), oas };
+}
+
+function reachableSquares(b, id) {
+  const M = C(b, id);
+  if (!b.turn || b.turn.who !== id || b.turn.moveLeft < FT) return [];
+  const map = reachMap(b, M, b.turn.moveLeft);
+  const out = [];
+  for (const [k, d] of map.dist) {
+    const [x, y] = k.split(',').map(Number);
+    if (d > 0 && canEndAt(b, M, x, y)) out.push({ x, y, feet: d });
+  }
+  return out;
+}
+
+function continueMove(b) {
+  const ctx = b.moveCtx;
+  const M = C(b, ctx.who);
+  while (ctx.i < ctx.path.length && !b.over) {
+    const to = ctx.path[ctx.i];
+    const from = { x: M.x, y: M.y };
+    const trig = provokers(b, M, from, to).filter((h) => !ctx.skip.includes(h.id));
+    if (trig.length) {
+      flushMove(b);
+      b.pending = { kind: 'oa', reactor: trig[0].id, mover: M.id };
+      emit(b, { kind: 'prompt', by: trig[0].id, target: M.id, text: `${M.name} is leaving ${trig[0].name}'s reach.`, rule: 'opportunity-attack' });
+      return;
+    }
+    const occ = Object.values(b.creatures).some((o) => o !== M && onBoard(o) && o.x === to.x && o.y === to.y);
+    const cost = occ ? 2 * FT : FT;
+    M.x = to.x; M.y = to.y;
+    b.turn.moveLeft -= cost;
+    ctx.walked.push({ x: to.x, y: to.y });
+    ctx.feet += cost;
+    ctx.i++;
+  }
+  flushMove(b);
+  b.moveCtx = null;
+}
+
+function flushMove(b) {
+  const ctx = b.moveCtx;
+  if (!ctx || !ctx.walked.length) return;
+  const M = C(b, ctx.who);
+  emit(b, { kind: 'move', by: M.id, path: ctx.walked, feet: ctx.feet, left: b.turn.moveLeft,
+    text: `${M.name} moves ${ctx.feet} ft (${b.turn.moveLeft} ft left).`, rule: 'movement' });
+  ctx.walked = [];
+  ctx.feet = 0;
+}
+
+// The reactor's answer to a pending Opportunity Attack.
+function resolveReaction(b, accept) {
+  const p = b.pending;
+  if (!p) return [];
+  const before = b.seq;
+  b.pending = null;
+  const R = C(b, p.reactor), M = C(b, p.mover);
+  if (accept && !incap(R) && R.reaction) {
+    const atk = bestMelee(b, R, M);
+    R.reaction = false;
+    attack(b, R, M, atk, { reaction: true });
+  } else if (b.moveCtx) {
+    b.moveCtx.skip.push(R.id);
+    emit(b, { kind: 'note', by: R.id, text: `${R.name} lets ${M.name} go.`, rule: 'opportunity-attack' });
+  }
+  if (b.moveCtx && !b.over) {
+    if (incap(M)) b.moveCtx = null;
+    else continueMove(b);
+  }
+  return b.log.filter((r) => r.seq > before);
+}
+
+function bestMelee(b, A, T) {
+  const opts = attackOptions(b, A, T).filter((o) => o.atk.kind === 'melee');
+  opts.sort((p, q) => q.expected - p.expected);
+  return opts[0].atk;
+}
+
+// -------------------------------------------------------------- intents ----
+
+const fail = (error) => ({ ok: false, error });
+
+function perform(b, id, intent) {
+  if (b.over) return fail('The fight is over.');
+  if (b.pending) return fail('Waiting for a reaction.');
+  const A = current(b);
+  if (!A || A.id !== id) return fail("It isn't your turn.");
+  const t = b.turn;
+  const before = b.seq;
+  const T = intent.target ? C(b, intent.target) : null;
+  switch (intent.a) {
+    case 'move': {
+      const pv = previewMove(b, id, intent.x, intent.y);
+      if (!pv) return fail("You can't move there.");
+      t.moves++;
+      b.moveCtx = { who: id, path: pv.path, i: 0, skip: [], walked: [], feet: 0 };
+      continueMove(b);
+      break;
+    }
+    case 'attack': {
+      if (!t.action) return fail('You have already used your action.');
+      if (!T || !onBoard(T) || T.dead || !hostile(A, T)) return fail('Pick an enemy to attack.');
+      const atk = A.attacks.find((a) => a.id === intent.attack);
+      if (!atk) return fail('Unknown attack.');
+      if (!inRange(A, T, atk)) return fail(`${T.name} is out of range.`);
+      t.action = 0;
+      attack(b, A, T, atk);
+      break;
+    }
+    case 'dash': {
+      if (!t.action) return fail('You have already used your action.');
+      t.action = 0;
+      t.moveLeft += A.speed;
+      emit(b, { kind: 'action', by: id, what: 'Dash', text: `${A.name} takes the Dash action: +${A.speed} ft of movement this turn.`, rule: 'dash' });
+      break;
+    }
+    case 'disengage':
+    case 'nimble': {
+      const bonus = intent.a === 'nimble';
+      if (bonus && (!A.nimble || !t.bonus)) return fail('No bonus action for that.');
+      if (!bonus && !t.action) return fail('You have already used your action.');
+      if (bonus) t.bonus = 0; else t.action = 0;
+      b.effects.push({ type: 'disengage', by: id, expires: { when: 'end', who: id, skip: 0 } });
+      emit(b, { kind: 'action', by: id, what: 'Disengage',
+        text: `${A.name} takes the Disengage action${bonus ? ' as a Bonus Action (Nimble Escape)' : ''}: moving won't provoke Opportunity Attacks this turn.`,
+        rule: bonus ? 'nimble-escape' : 'disengage' });
+      break;
+    }
+    case 'dodge': {
+      if (!t.action) return fail('You have already used your action.');
+      t.action = 0;
+      b.effects = b.effects.filter((e) => !(e.type === 'dodge' && e.by === id));
+      b.effects.push({ type: 'dodge', by: id, expires: { when: 'start', who: id } });
+      emit(b, { kind: 'action', by: id, what: 'Dodge', text: `${A.name} takes the Dodge action: attacks against them have Disadvantage until their next turn.`, rule: 'dodge' });
+      break;
+    }
+    case 'help': {
+      if (!t.action) return fail('You have already used your action.');
+      if (!T || !hostile(A, T) || incap(T) || cheb(A, T) > 1) return fail('Help needs an enemy within 5 feet of you.');
+      t.action = 0;
+      b.effects.push({ type: 'helped', by: id, target: T.id, expires: { when: 'start', who: id } });
+      emit(b, { kind: 'action', by: id, what: 'Help', target: T.id,
+        text: `${A.name} takes the Help action: the next ally to attack ${T.name} has Advantage.`, rule: 'help' });
+      break;
+    }
+    case 'stabilize': {
+      if (!t.action) return fail('You have already used your action.');
+      if (!T || T.side !== A.side || T.hp > 0 || T.dead || T.stable || cheb(A, T) > 1) return fail('Pick a dying ally next to you.');
+      t.action = 0;
+      const d20 = rollD20(b, A, 'normal');
+      const mods = [{ label: 'Medicine (WIS)', value: A.skills.medicine, rule: 'skills' }];
+      const total = d20.kept + A.skills.medicine;
+      const ok = total >= 10;
+      if (ok) { T.stable = true; T.deathSaves = { s: 0, f: 0 }; }
+      emit(b, { kind: 'check', by: id, target: T.id, skill: 'Medicine', d20, mods, total, dc: 10, outcome: ok ? 'success' : 'fail',
+        text: ok ? `${A.name} stabilizes ${T.name}.` : `${A.name} fails to stabilize ${T.name}.`, rule: 'stabilize' });
+      break;
+    }
+    case 'second-wind': {
+      if (!A.secondWind || A.secondWind.uses < 1) return fail('No uses of Second Wind left.');
+      if (!t.bonus) return fail('You have already used your bonus action.');
+      t.bonus = 0;
+      A.secondWind.uses--;
+      const r = die(b.rng, 10);
+      const heal = r + A.level;
+      const before = A.hp;
+      A.hp = Math.min(A.hpMax, A.hp + heal);
+      emit(b, { kind: 'heal', by: id, what: 'Second Wind',
+        roll: { label: '1d10', rolls: [r] }, mods: [{ label: 'Fighter level', value: A.level }], total: heal, before, after: A.hp,
+        text: `${A.name} uses Second Wind and regains ${A.hp - before} HP (${A.secondWind.uses} use${A.secondWind.uses === 1 ? '' : 's'} left).`, rule: 'second-wind' });
+      break;
+    }
+    case 'end': {
+      emit(b, { kind: 'end-turn', by: id, text: `${A.name} ends their turn.`, rule: 'your-turn' });
+      nextTurn(b);
+      break;
+    }
+    default:
+      return fail('Unknown action.');
+  }
+  t.steps++;
+  return { ok: true, records: b.log.filter((r) => r.seq > before) };
+}
+
+
+
+return { signed, enemiesOf, alliesOf, createBattle, current, modeFrom, attackRangeFeet, inRange, attackFactors, hitChance, hitBonus, attackOptions, rollInitiative, provokers, previewMove, reachableSquares, resolveReaction, perform };
+})();
+
+/* ===== src/rules/ai.js ===== */
+__mods["src/rules/ai.js"] = (() => {
+// Decision-making for monsters, AI companions and the Coach. aiNext returns
+// one intent at a time; it plays by exactly the same rules as a person
+// because its intents go through combat.perform like anyone else's.
+//
+// Styles:  melee       close in and hit the nearest enemy
+//          skirmisher  (Rogue) set up Sneak Attack: stab what an ally is
+//                      next to, otherwise shoot from where you are
+//          archer      keep away, Nimble Escape out of melee, shoot
+
+const { cheb, incap, reachMap, canEndAt, pathFrom, key, onBoard } = __mods["src/rules/grid.js"];
+const { attackOptions, enemiesOf, alliesOf, previewMove } = __mods["src/rules/combat.js"];
+
+const targetsOf = (b, me) => {
+  const all = enemiesOf(b, me);
+  const up = all.filter((e) => !incap(e));
+  return up.length ? up : all;           // only beat on the fallen when nobody else is left
+};
+
+function bestAttackHere(b, me, { kind = null } = {}) {
+  let best = null;
+  for (const T of targetsOf(b, me)) {
+    for (const o of attackOptions(b, me, T)) {
+      if (!o.ok || (kind && o.atk.kind !== kind)) continue;
+      const score = o.expected + (T.hp <= o.avg ? 2 : 0) - (incap(T) ? 3 : 0);
+      if (!best || score > best.score) best = { T, o, score };
+    }
+  }
+  return best;
+}
+
+const threatened = (b, me) => enemiesOf(b, me).some((e) => !incap(e) && cheb(e, me) <= 1);
+
+function squaresWithin(b, me) {
+  const map = reachMap(b, me, b.turn.moveLeft);
+  const out = [];
+  for (const [k, feet] of map.dist) {
+    const [x, y] = k.split(',').map(Number);
+    if (feet > 0 && canEndAt(b, me, x, y)) out.push({ x, y, feet });
+  }
+  return out;
+}
+
+// Move toward a target: adjacent if reachable this turn, else as close as possible.
+function approach(b, me, T, { avoidOA = false } = {}) {
+  let best = null;
+  for (const s of squaresWithin(b, me)) {
+    const d = cheb(s, T);
+    const pv = avoidOA ? previewMove(b, me.id, s.x, s.y) : null;
+    const risk = pv ? pv.oas.length : 0;
+    const score = d * 100 + s.feet + risk * 1000;
+    if (!best || score < best.score) best = { ...s, score, d };
+  }
+  if (!best || best.d >= cheb(me, T)) return null;
+  return best;
+}
+
+function nearestTarget(b, me) {
+  let best = null;
+  for (const T of targetsOf(b, me)) {
+    const d = cheb(me, T) * 10 + T.hp;
+    if (!best || d < best.d) best = { T, d };
+  }
+  return best?.T || null;
+}
+
+function aiNext(b, id) {
+  const me = b.creatures[id];
+  const t = b.turn;
+  if (!t || t.who !== id || b.over || b.pending) return null;
+  if (incap(me) || t.steps > 8) return { a: 'end' };
+  const foes = targetsOf(b, me);
+  if (!foes.length) return { a: 'end' };
+
+  // Second Wind when badly hurt.
+  if (me.secondWind?.uses > 0 && t.bonus && me.hp <= me.hpMax / 2) return { a: 'second-wind' };
+
+  // Heroes look after a dying friend first if they can reach them.
+  if (me.side === 'hero' && t.action) {
+    const dying = alliesOf(b, me).find((a) => a.hp <= 0 && !a.dead && !a.stable);
+    if (dying) {
+      if (cheb(me, dying) <= 1) return { a: 'stabilize', target: dying.id };
+      if (!t.moves) {
+        const s = approach(b, me, dying, { avoidOA: true });
+        if (s && s.d <= 1) return { a: 'move', x: s.x, y: s.y };
+      }
+    }
+  }
+
+  if (me.ai === 'archer') {
+    if (threatened(b, me) && t.moveLeft >= 5 && !t.moves) {
+      const free = b.effects.some((e) => e.type === 'disengage' && e.by === id);
+      if (!free && me.nimble && t.bonus) return { a: 'nimble' };
+      if (free) {
+        let best = null;
+        for (const s of squaresWithin(b, me)) {
+          const near = Math.min(...enemiesOf(b, me).filter((e) => !incap(e)).map((e) => cheb(e, s)));
+          const score = Math.min(near, 4) * 100 - s.feet;
+          if (!best || score > best.score) best = { ...s, score };
+        }
+        if (best) return { a: 'move', x: best.x, y: best.y };
+      }
+    }
+    if (t.action) {
+      const shot = bestAttackHere(b, me, { kind: threatened(b, me) ? 'melee' : 'ranged' }) || bestAttackHere(b, me);
+      if (shot) return { a: 'attack', target: shot.T.id, attack: shot.o.atk.id };
+    }
+    return { a: 'end' };
+  }
+
+  if (me.ai === 'skirmisher' && t.action) {
+    // Already next to someone: stab them.
+    const stab = bestAttackHere(b, me, { kind: 'melee' });
+    if (stab) return { a: 'attack', target: stab.T.id, attack: stab.o.atk.id };
+    // An enemy a friend is next to: get in for Sneak Attack, if it's safe.
+    if (!t.moves) {
+      for (const T of foes) {
+        if (incap(T)) continue;
+        if (!alliesOf(b, me).some((a) => !incap(a) && cheb(a, T) <= 1)) continue;
+        const s = approach(b, me, T, { avoidOA: true });
+        if (s && s.d <= 1) {
+          const pv = previewMove(b, id, s.x, s.y);
+          if (pv && !pv.oas.length) return { a: 'move', x: s.x, y: s.y };
+        }
+      }
+    }
+    const shot = bestAttackHere(b, me, { kind: 'ranged' });
+    if (shot) return { a: 'attack', target: shot.T.id, attack: shot.o.atk.id };
+    return { a: 'end' };
+  }
+
+  // melee
+  if (t.action) {
+    const hit = bestAttackHere(b, me, { kind: 'melee' });
+    if (hit) return { a: 'attack', target: hit.T.id, attack: hit.o.atk.id };
+  }
+  if (!t.moves && t.moveLeft >= 5 && !threatened(b, me)) {
+    const T = nearestTarget(b, me);
+    const s = T && approach(b, me, T);
+    if (s) return { a: 'move', x: s.x, y: s.y };
+  }
+  if (t.action) {
+    const any = bestAttackHere(b, me);
+    if (any) return { a: 'attack', target: any.T.id, attack: any.o.atk.id };
+    if (me.side === 'foe' && !t.moves) return { a: 'dash' };
+  }
+  return { a: 'end' };
+}
+
+// The Coach: the same choice, explained in plain words for a player.
+function coach(b, id) {
+  const intent = aiNext(b, id);
+  if (!intent) return null;
+  const me = b.creatures[id];
+  const T = intent.target ? b.creatures[intent.target] : null;
+  let text;
+  switch (intent.a) {
+    case 'attack': {
+      const o = attackOptions(b, me, T).find((x) => x.atk.id === intent.attack);
+      const pct = Math.round(o.p * 100);
+      text = `Attack ${T.name} with your ${o.atk.name}: ${pct}% to hit`;
+      if (o.mode === 'advantage') text += ', with Advantage';
+      if (o.mode === 'disadvantage') text += ', but with Disadvantage';
+      if (o.sneak) text += ', and Sneak Attack applies';
+      text += '.';
+      break;
+    }
+    case 'move': {
+      const near = enemiesOf(b, me).filter((e) => !incap(e)).sort((p, q) => cheb(p, intent) - cheb(q, intent))[0];
+      const pv = previewMove(b, id, intent.x, intent.y);
+      text = near && cheb(near, intent) <= 1 ? `Move next to ${near.name} (${pv?.feet ?? '?'} ft).` : `Move to the marked square (${pv?.feet ?? '?'} ft).`;
+      if (me.ai === 'skirmisher' && near) text += ' A friend is next to it, so Sneak Attack will work.';
+      break;
+    }
+    case 'second-wind': text = "You're badly hurt: use Second Wind (Bonus Action) to heal."; break;
+    case 'stabilize': text = `${T.name} is dying! Use your action to stabilize them (DC 10 Medicine).`; break;
+    case 'nimble': text = 'Disengage, then move away.'; break;
+    case 'dash': text = 'Dash to cover more ground.'; break;
+    case 'end': text = "You've done what you can: end your turn."; break;
+    default: text = '';
+  }
+  return { intent, text };
+}
+
+
+
+return { onBoard, key, pathFrom, aiNext, coach };
+})();
+
+/* ===== src/game/room.js ===== */
+__mods["src/game/room.js"] = (() => {
+// First Roll - the party room. It runs on the host's phone (or in a test) and
+// is the single authority: seats, lobby, the battle, turn control, AI turns,
+// reactions and saves. Transport-free, like Skyline Hustle's room: a
+// connection is anything with send(string) and close().
+//
+//   const room = createRoom({ store, now });
+//   const h = room.connect(conn);  h.message(text);  h.close();
+//   setInterval(room.tick, 100);
+//
+// Protocol (JSON):
+//   in   hello {name, token}   pick {hero}   start   act {intent}
+//        react {yes}           ping {x, y}   again
+//   out  welcome {pid, token}  state {...}   ping {pid, x, y}   error {text}
+
+const { buildHero, buildGoblin } = __mods["src/rules/character.js"];
+const { SKIRMISH, PREMADES } = __mods["src/rules/data.js"];
+const { createBattle, rollInitiative, perform, current, resolveReaction } = __mods["src/rules/combat.js"];
+const { aiNext } = __mods["src/rules/ai.js"];
+
+const HERO_CLASSES = ['fighter', 'rogue'];
+const MAX_SEATS = 6;            // 2 heroes in Phase 0; extra people watch
+const COLORS = ['#4fc3f7', '#ffb74d', '#81c784', '#ba68c8', '#f06292', '#90a4ae'];
+const REACTION_MS = 15000;      // time to answer an Opportunity Attack prompt
+const TAKEOVER_MS = 8000;       // an absent player's hero waits this long before the AI plays it
+const AI_STEP_MS = 900;
+
+const makeToken = () => {
+  const a = new Uint8Array(12);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(a);
+  else for (let i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256);
+  return [...a].map((x) => x.toString(16).padStart(2, '0')).join('');
+};
+
+// store: { load() -> string|null, save(string), remove() }
+function createRoom({ store = null, now = () => Date.now(), seed = null, log = () => {} } = {}) {
+  let seats = [];          // [{ pid, token, name, hero, color }]
+  let phase = 'lobby';     // lobby | battle
+  let battle = null;
+  let deadline = 0;        // pending reaction deadline
+  let aiAt = 0;            // next AI step
+  let takeoverAt = 0;      // when an absent player's turn passes to the AI
+  let lastTurnKey = '';
+  let nextPid = 1;
+  let aiForPlayers = 0;      // AI steps taken for a hero that has a player (diagnostics)
+  const online = new Map();  // pid -> set of handles
+  const handles = new Set();
+
+  // ------------------------------------------------------------ saves ----
+  if (store) {
+    try {
+      const raw = store.load();
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s.v === 1) ({ seats, phase, battle, nextPid } = s);
+        if (phase === 'battle' && !battle) phase = 'lobby';
+      }
+    } catch (e) { log('bad save', e); }
+  }
+  const save = () => {
+    if (!store) return;
+    try { store.save(JSON.stringify({ v: 1, seats, phase, battle, nextPid })); } catch (e) { log('save failed', e); }
+  };
+
+  // --------------------------------------------------------- helpers ----
+  const seatOf = (pid) => seats.find((s) => s.pid === pid);
+  const isOnline = (pid) => (online.get(pid)?.size || 0) > 0;
+  const hostPid = () => seats[0]?.pid;
+  const controllerOf = (c) => (c?.side === 'hero' ? seats.find((s) => s.hero === c.cls) : null);
+
+  // Who acts for this creature right now: a pid, or 'ai'.
+  function actorFor(c, t) {
+    if (!c || c.side === 'foe') return 'ai';
+    const s = controllerOf(c);
+    if (!s) return 'ai';
+    if (isOnline(s.pid)) return s.pid;
+    return t >= takeoverAt ? 'ai' : s.pid;
+  }
+
+  function publicState() {
+    const t = now();
+    let b = null;
+    if (battle) {
+      const { rng, ...rest } = battle;          // nobody needs to see future dice
+      b = { ...rest, log: battle.log.slice(-60) };
+    }
+    const cur = battle && current(battle);
+    return {
+      t: 'state', phase,
+      seats: seats.map((s) => ({ pid: s.pid, name: s.name, hero: s.hero, color: s.color, online: isOnline(s.pid), host: s.pid === hostPid() })),
+      battle: b,
+      control: cur ? actorFor(cur, t) : null,
+      reactor: battle?.pending ? actorFor(battle.creatures[battle.pending.reactor], t) : null,
+      reactIn: battle?.pending ? Math.max(0, deadline - t) : 0,
+    };
+  }
+
+  function broadcast() {
+    const s = JSON.stringify(publicState());
+    for (const h of handles) h.conn.send(s);
+  }
+  const changed = () => { save(); broadcast(); };
+
+  const sendTo = (h, msg) => h.conn.send(JSON.stringify(msg));
+
+  // ---------------------------------------------------------- battle ----
+  function startBattle() {
+    const heroes = HERO_CLASSES.map((cls) => {
+      const s = seats.find((x) => x.hero === cls);
+      const h = buildHero(cls, { id: cls, name: s ? s.name : `${PREMADES[cls].className} (AI)` });
+      Object.assign(h, SKIRMISH.heroStarts[cls]);
+      return h;
+    });
+    const foes = SKIRMISH.foes.map(buildGoblin);
+    battle = createBattle({ heroes, foes, walls: SKIRMISH.walls, seed: seed ?? (now() >>> 0) });
+    phase = 'battle';
+    rollInitiative(battle);
+    onTurnChange(true);
+  }
+
+  // Called after anything that might have moved the turn on.
+  function onTurnChange(force = false) {
+    if (!battle) return;
+    const c = current(battle);
+    const k = `${battle.round}:${battle.idx}`;
+    if (force || k !== lastTurnKey) {
+      lastTurnKey = k;
+      aiAt = now() + AI_STEP_MS;
+      takeoverAt = now() + TAKEOVER_MS;
+    }
+    if (battle.pending && !deadline) deadline = now() + REACTION_MS;
+    void c;
+  }
+
+  function act(pid, intent) {
+    const c = current(battle);
+    const r = perform(battle, c.id, intent);
+    if (r.ok) onTurnChange();
+    return r;
+  }
+
+  function react(yes) {
+    resolveReaction(battle, yes);
+    deadline = 0;
+    onTurnChange();
+  }
+
+  // ---------------------------------------------------------- messages ----
+  function handle(h, m) {
+    if (m.t === 'hello') {
+      let s = m.token && seats.find((x) => x.token === m.token);
+      if (!s) {
+        if (seats.length >= MAX_SEATS) return sendTo(h, { t: 'error', text: 'This party is full.' });
+        s = { pid: `p${nextPid++}`, token: makeToken(), name: '', hero: null, color: COLORS[seats.length % COLORS.length] };
+        seats.push(s);
+      }
+      const nm = String(m.name || '').trim().slice(0, 20);
+      if (nm) s.name = nm;
+      if (!s.name) s.name = `Player ${s.pid.slice(1)}`;
+      if (h.pid) online.get(h.pid)?.delete(h);
+      h.pid = s.pid;
+      if (!online.has(s.pid)) online.set(s.pid, new Set());
+      online.get(s.pid).add(h);
+      sendTo(h, { t: 'welcome', pid: s.pid, token: s.token });
+      // A returning player gets their hero back on their next turn.
+      if (battle) {
+        const c = current(battle);
+        if (controllerOf(c)?.pid === s.pid) takeoverAt = now() + TAKEOVER_MS;
+        const hero = battle.creatures[s.hero];
+        if (hero) hero.name = s.name;
+      }
+      return changed();
+    }
+    const s = seatOf(h.pid);
+    if (!s) return sendTo(h, { t: 'error', text: 'Say hello first.' });
+    const isHost = s.pid === hostPid();
+
+    switch (m.t) {
+      case 'pick': {
+        if (phase !== 'lobby') return;
+        const hero = m.hero == null ? null : String(m.hero);
+        if (hero && !HERO_CLASSES.includes(hero)) return;
+        if (hero && seats.some((x) => x !== s && x.hero === hero)) return sendTo(h, { t: 'error', text: 'Someone already picked that hero.' });
+        s.hero = hero;
+        return changed();
+      }
+      case 'start': {
+        if (!isHost) return sendTo(h, { t: 'error', text: 'Only the host can start.' });
+        if (phase !== 'lobby') return;
+        startBattle();
+        return changed();
+      }
+      case 'again': {
+        if (!isHost) return;
+        battle = null;
+        phase = 'lobby';
+        return changed();
+      }
+      case 'act': {
+        if (phase !== 'battle' || !battle) return;
+        const c = current(battle);
+        if (actorFor(c, now()) !== s.pid) return sendTo(h, { t: 'error', text: "It isn't your turn." });
+        const r = act(s.pid, m.intent || {});
+        if (!r.ok) return sendTo(h, { t: 'error', text: r.error });
+        return changed();
+      }
+      case 'react': {
+        if (!battle?.pending) return;
+        const R = battle.creatures[battle.pending.reactor];
+        if (actorFor(R, now()) !== s.pid) return;
+        react(!!m.yes);
+        return changed();
+      }
+      case 'ping': {
+        const msg = JSON.stringify({ t: 'ping', pid: s.pid, x: m.x | 0, y: m.y | 0 });
+        for (const o of handles) o.conn.send(msg);
+        return;
+      }
+      default:
+    }
+  }
+
+  function connect(conn) {
+    const h = { conn, pid: null };
+    handles.add(h);
+    return {
+      message(text) {
+        let m;
+        try { m = JSON.parse(text); } catch { return; }
+        if (m && typeof m === 'object') handle(h, m);
+      },
+      close() {
+        handles.delete(h);
+        if (h.pid) online.get(h.pid)?.delete(h);
+        if (battle && h.pid) {
+          const c = current(battle);
+          if (controllerOf(c)?.pid === h.pid && !isOnline(h.pid)) takeoverAt = now() + TAKEOVER_MS;
+        }
+        broadcast();
+      },
+    };
+  }
+
+  // ---------------------------------------------------------- the clock ----
+  function tick() {
+    if (phase !== 'battle' || !battle || battle.over) return;
+    const t = now();
+    if (battle.pending) {
+      if (!deadline) deadline = t + REACTION_MS;
+      const R = battle.creatures[battle.pending.reactor];
+      const who = actorFor(R, t);
+      // AI always takes the attack; a person who doesn't answer in time takes it too.
+      if (who === 'ai' || t >= deadline) { react(true); changed(); }
+      return;
+    }
+    const c = current(battle);
+    if (actorFor(c, t) !== 'ai' || t < aiAt) return;
+    if (controllerOf(c)) aiForPlayers++;
+    const intent = aiNext(battle, c.id) || { a: 'end' };
+    let r = act('ai', intent);
+    if (!r.ok) r = act('ai', { a: 'end' });
+    aiAt = t + (intent.a === 'end' ? AI_STEP_MS / 2 : AI_STEP_MS);
+    changed();
+  }
+
+  return {
+    connect, tick,
+    get phase() { return phase; },
+    get battle() { return battle; },
+    get seats() { return seats; },
+    get aiForPlayers() { return aiForPlayers; },
+    hasSave: () => phase === 'battle',
+    reset() { seats = []; phase = 'lobby'; battle = null; nextPid = 1; store?.remove?.(); },
+  };
+}
+
+return { HERO_CLASSES, MAX_SEATS, COLORS, REACTION_MS, TAKEOVER_MS, createRoom };
+})();
+
+/* ===== src/net/online.js ===== */
+__mods["src/net/online.js"] = (() => {
+// First Roll - online co-op with the host's phone as the server. Ported from
+// Skyline Hustle's online.js (jteef/public/play/skyline), unchanged apart from
+// the room's game id.
+//
+// The host's browser runs the room (src/game/room.js: seats, the battle,
+// saves). Friends' phones connect to it directly over WebRTC data channels.
+// The only thing in the cloud is a tiny "mailbox" in Firestore used to swap
+// connection details:
+//
+//   gameRooms/{CODE}                     the host's room (created when hosting)
+//   gameRooms/{CODE}/joins/{id}          a friend's offer; the host writes back an answer
+//
+// The Firestore rules for gameRooms (jteef/dnd/firestore.rules) must list
+// 'firstroll' as an allowed game. Google's public STUN servers help phones on
+// different networks find each other; there is no relay server, so a few
+// strict networks can't connect directly. Tests point signalling at a local
+// stand-in with ?signal=http://localhost:PORT/signal (see tools/serve.mjs).
+
+const FIRESTORE = {
+  project: 'campaign-e0a68',
+  apiKey: 'AIzaSyAJMmGnR-izbXyriN6iWdip4cgXhWmi-fQ',
+};
+const GAME_ID = 'firstroll';
+const ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';        // no I or O
+const CHUNK = 15000;
+
+// Tests can point signalling at a local stand-in: ?signal=http://localhost:9099
+function base() {
+  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('signal') : null;
+  return `${q || 'https://firestore.googleapis.com'}/v1/projects/${FIRESTORE.project}/databases/(default)/documents`;
+}
+const keyQ = (sep = '?') => `${sep}key=${FIRESTORE.apiKey}`;
+const toFields = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'number' ? { integerValue: String(Math.round(v)) } : { stringValue: String(v) }]));
+const fromFields = f => Object.fromEntries(Object.entries(f || {}).map(([k, v]) => [k, v.stringValue ?? (v.integerValue != null ? +v.integerValue : v.timestampValue)]));
+
+async function rest(method, path, body) {
+  const url = `${base()}/${path}${keyQ(path.includes('?') ? '&' : '?')}`;
+  // keepalive lets a DELETE finish even while the page is closing.
+  const r = await fetch(url, { method, keepalive: method === 'DELETE', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 404) return null;
+  if (!r.ok) { const e = new Error(`signal ${r.status}`); e.status = r.status; throw e; }
+  return r.status === 204 ? {} : r.json();
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const onlineSupported = () => typeof RTCPeerConnection !== 'undefined' && typeof fetch !== 'undefined';
+const normCode = c => String(c || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+
+// ------------------------------------------------------------- WebRTC ----
+// Collect this side's address candidates as they turn up.
+function collect(pc) {
+  pc._cands = [];
+  pc._types = new Set();
+  pc._t0 = performance.now();
+  pc.addEventListener('icecandidate', e => {
+    if (!e.candidate || !e.candidate.candidate) return;
+    pc._cands.push(JSON.stringify({ c: e.candidate.candidate, m: e.candidate.sdpMid, i: e.candidate.sdpMLineIndex }));
+    const ty = / typ (\w+)/.exec(e.candidate.candidate)?.[1];
+    if (ty) { pc._types.add(ty); if (ty === 'srflx' && !pc._srflxAt) pc._srflxAt = performance.now(); }
+  });
+}
+// Wait for addresses: until gathering is done, or shortly after the public
+// (STUN) address turns up, or at most ms. Safari can be slow to finish.
+async function gathered(pc, ms = 6000) {
+  const t0 = performance.now();
+  while (pc.iceGatheringState !== 'complete' && performance.now() - t0 < ms) {
+    if (pc._srflxAt && performance.now() - pc._srflxAt > 600) break;
+    await sleep(100);
+  }
+  pc._sent = pc._cands?.length || 0;
+}
+// Addresses found after the handshake went out are passed along too.
+async function sendLate(pc, path, field) {
+  const t0 = performance.now();
+  while (pc.iceGatheringState !== 'complete' && performance.now() - t0 < 8000 && pc.connectionState !== 'connected') await sleep(250);
+  if ((pc._cands?.length || 0) > (pc._sent || 0) && pc.connectionState !== 'connected') {
+    await rest('PATCH', `${path}?updateMask.fieldPaths=${field}`, { fields: toFields({ [field]: JSON.stringify(pc._cands.slice(pc._sent)) }) }).catch(() => {});
+  }
+}
+async function addLate(pc, json, seen) {
+  let list = [];
+  try { list = JSON.parse(json || '[]'); } catch { return seen; }
+  for (const s of list.slice(seen)) {
+    try { const o = JSON.parse(s); await pc.addIceCandidate({ candidate: o.c, sdpMid: o.m ?? '0', sdpMLineIndex: o.i ?? 0 }); } catch { /* stale */ }
+  }
+  return list.length;
+}
+const candTypes = pc => [...(pc?._types || [])];
+
+// Data channels have message size limits: split big messages, rejoin them.
+function framed(ch) {
+  let seq = 0;
+  return str => {
+    if (ch.readyState !== 'open') return;
+    if (str.length <= CHUNK) return ch.send(str);
+    const id = ++seq, n = Math.ceil(str.length / CHUNK);
+    for (let i = 0; i < n; i++) ch.send(`\u0001${id}|${i}|${n}|${str.slice(i * CHUNK, (i + 1) * CHUNK)}`);
+  };
+}
+function unframer(onText) {
+  const parts = new Map();
+  return data => {
+    if (typeof data !== 'string') return;
+    if (data[0] !== '\u0001') return onText(data);
+    const a = data.indexOf('|'), b = data.indexOf('|', a + 1), c = data.indexOf('|', b + 1);
+    const id = data.slice(1, a), i = +data.slice(a + 1, b), n = +data.slice(b + 1, c);
+    const arr = parts.get(id) || [];
+    arr[i] = data.slice(c + 1);
+    parts.set(id, arr);
+    if (arr.filter(x => x != null).length === n) { parts.delete(id); onText(arr.join('')); }
+  };
+}
+
+// -------------------------------------------------------------- host ----
+// Runs on the host's phone: creates a room code, answers friends' offers and
+// plugs each data channel into the room.
+class Host {
+  constructor(room, { name = 'Host', onStatus } = {}) {
+    this.room = room;
+    this.name = name;
+    this.onStatus = onStatus;
+    this.code = null;
+    this.peers = new Map();          // join id -> { pc }
+    this.stopped = false;
+  }
+
+  async start() {
+    for (let tries = 0; tries < 8; tries++) {
+      const code = Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
+      try {
+        await rest('POST', `gameRooms?documentId=${code}`, { fields: toFields({ game: GAME_ID, host: this.name, created: Date.now() }) });
+        this.code = code;
+        this.poll();
+        return code;
+      } catch (e) {
+        if (e.status !== 409) throw e;   // code taken: try another
+      }
+    }
+    throw new Error('No free room code');
+  }
+
+  async poll() {
+    while (!this.stopped) {
+      try {
+        const list = await rest('GET', `gameRooms/${this.code}/joins`);
+        for (const doc of list?.documents || []) {
+          const id = doc.name.split('/').pop();
+          const f = fromFields(doc.fields);
+          if (f.offer && !f.answer && !this.peers.has(id)) this.accept(id, f.offer).catch(() => {});
+          const peer = this.peers.get(id);
+          if (peer && f.ocands) peer.seen = await addLate(peer.pc, f.ocands, peer.seen || 0);
+        }
+        this.onStatus?.('online');
+      } catch (e) { this.onStatus?.('offline'); }
+      await sleep(2500);
+    }
+  }
+
+  async accept(id, offer) {
+    const pc = new RTCPeerConnection({ iceServers: ICE });
+    collect(pc);
+    this.peers.set(id, { pc, seen: 0 });
+    let h = null;
+    pc.ondatachannel = ev => {
+      const ch = ev.channel;
+      const send = framed(ch);
+      ch.onopen = () => {
+        h = this.room.connect({ send, close: () => pc.close() });
+        rest('DELETE', `gameRooms/${this.code}/joins/${id}`).catch(() => {});
+      };
+      const un = unframer(text => h?.message(text));
+      ch.onmessage = e => un(e.data);
+      ch.onclose = () => { h?.close(); h = null; this.peers.delete(id); };
+    };
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'closed'].includes(pc.connectionState)) { h?.close(); h = null; this.peers.delete(id); }
+    };
+    await pc.setRemoteDescription({ type: 'offer', sdp: offer });
+    await pc.setLocalDescription(await pc.createAnswer());
+    await gathered(pc);
+    await rest('PATCH', `gameRooms/${this.code}/joins/${id}?updateMask.fieldPaths=answer`, { fields: toFields({ answer: pc.localDescription.sdp }) });
+    sendLate(pc, `gameRooms/${this.code}/joins/${id}`, 'acands');
+  }
+
+  // The page is closing: no time to list joins, just remove the room.
+  stopNow() {
+    if (this.stopped || !this.code) return;
+    this.stopped = true;
+    for (const { pc } of this.peers.values()) try { pc.close(); } catch {}
+    rest('DELETE', `gameRooms/${this.code}`).catch(() => {});
+  }
+
+  async stop() {
+    if (this.stopped && !this.code) return;
+    this.stopped = true;
+    for (const { pc } of this.peers.values()) try { pc.close(); } catch {}
+    this.peers.clear();
+    if (this.code) {
+      try {
+        const list = await rest('GET', `gameRooms/${this.code}/joins`);
+        for (const doc of list?.documents || []) await rest('DELETE', `gameRooms/${this.code}/joins/${doc.name.split('/').pop()}`).catch(() => {});
+        await rest('DELETE', `gameRooms/${this.code}`);
+      } catch {}
+    }
+  }
+}
+
+// The host's own phone talks to its room directly, no network involved.
+class LocalNet {
+  constructor(room, onMessage, onStatus) {
+    this.room = room;
+    this.onMessage = onMessage;
+    this.onStatus = onStatus;
+    this.h = null;
+  }
+  connect(hello) {
+    this.h = this.room.connect({ send: str => setTimeout(() => this.onMessage(JSON.parse(str))), close: () => {} });
+    this.h.message(JSON.stringify({ t: 'hello', ...hello }));
+    this.onStatus?.('online');
+  }
+  send(msg) { this.h?.message(JSON.stringify(msg)); }
+  close() { this.h?.close(); this.h = null; }
+}
+
+// ------------------------------------------------------------- guest ----
+// A friend's phone: same interface as the LAN Net (connect / send / close),
+// reconnecting by itself if the link drops.
+class RtcNet {
+  constructor(code, onMessage, onStatus) {
+    this.code = normCode(code);
+    this.onMessage = onMessage;
+    this.onStatus = onStatus;
+    this.hello = null;
+    this.closed = false;
+    this.queue = [];
+    this.send$ = null;
+    this.fails = 0;
+  }
+
+  connect(hello) {
+    this.hello = hello;
+    this.closed = false;
+    this.open();
+  }
+
+  async open() {
+    if (this.closed) return;
+    this.stage('finding');
+    let pc;
+    try {
+      const room = await rest('GET', `gameRooms/${this.code}`);
+      if (!room) { this.onStatus?.('noroom'); return; }
+      pc = new RTCPeerConnection({ iceServers: ICE });
+      collect(pc);
+      this.pc = pc;
+      const ch = pc.createDataChannel('game', { ordered: true });
+      const send = framed(ch);
+      ch.onopen = () => {
+        this.fails = 0;
+        this.send$ = send;
+        this.onStatus?.('online');
+        send(JSON.stringify({ t: 'hello', ...this.hello }));
+        for (const m of this.queue.splice(0)) send(m);
+      };
+      const un = unframer(text => { let m; try { m = JSON.parse(text); } catch { return; } this.onMessage(m); });
+      ch.onmessage = e => un(e.data);
+      ch.onclose = () => this.dropped(pc);
+      pc.onconnectionstatechange = () => { if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) this.dropped(pc); };
+      this.stage('gathering');
+      await pc.setLocalDescription(await pc.createOffer());
+      await gathered(pc);
+      this.diag = { mine: candTypes(pc) };
+      this.stage('waiting');
+      const doc = await rest('POST', `gameRooms/${this.code}/joins`, { fields: toFields({ offer: pc.localDescription.sdp, name: this.hello?.name || 'Player', created: Date.now() }) });
+      const id = doc.name.split('/').pop();
+      const path = `gameRooms/${this.code}/joins/${id}`;
+      sendLate(pc, path, 'ocands');
+      // Wait for the host's answer.
+      let answer = null;
+      for (let i = 0; i < 30 && !answer && !this.closed; i++) {
+        await sleep(1000);
+        const d = await rest('GET', `gameRooms/${this.code}/joins/${id}`);
+        answer = fromFields(d?.fields).answer;
+      }
+      if (!answer) { pc.close(); rest('DELETE', `gameRooms/${this.code}/joins/${id}`).catch(() => {}); throw new Error('no answer'); }
+      await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+      this.diag = { mine: candTypes(pc), host: [...new Set((answer.match(/ typ (\w+)/g) || []).map(x => x.slice(5)))] };
+      this.stage('linking');
+      // Pick up any addresses the host found late, until the link opens.
+      let seen = 0;
+      for (let i = 0; i < 40 && this.pc === pc && !this.send$ && !this.closed; i++) {
+        await sleep(500);
+        if (i % 2 === 0) {
+          const d = await rest('GET', path).catch(() => null);
+          const f = fromFields(d?.fields);
+          if (f.acands) { seen = await addLate(pc, f.acands, seen); this.diag.host = [...new Set([...this.diag.host, ...(f.acands.match(/typ (\w+)/g) || []).map(x => x.slice(4))])]; }
+        }
+      }
+      // If the link never opens, the networks can't see each other.
+      if (this.pc === pc && !this.send$ && !this.closed) { this.fails = 3; this.onStatus?.('blocked'); this.dropped(pc, true); }
+    } catch (e) {
+      this.fails++;
+      if (pc) try { pc.close(); } catch {}
+      if (this.fails > 2) { this.onStatus?.('blocked'); return; }      // wait for Retry
+      this.onStatus?.('offline');
+      if (!this.closed) setTimeout(() => this.open(), 3000);
+    }
+  }
+
+  stage(s) { this.stageName = s; this.onStatus?.(s); }
+
+  // The link dropped (or never opened). Reconnect by itself unless it has
+  // failed repeatedly: then the player sees why and can tap Retry.
+  dropped(pc, failed = false) {
+    if (this.pc !== pc || this.closed) return;
+    this.pc = null;
+    this.send$ = null;
+    try { pc.close(); } catch {}
+    if (failed) return;
+    this.onStatus?.('offline');
+    setTimeout(() => this.open(), 2000);
+  }
+
+  retry() { this.fails = 0; this.open(); }
+
+  send(msg) {
+    const str = JSON.stringify(msg);
+    if (this.send$) this.send$(str);
+    else if (this.queue.length < 50) this.queue.push(str);
+  }
+
+  close() {
+    this.closed = true;
+    try { this.pc?.close(); } catch {}
+  }
+}
+
+return { GAME_ID, onlineSupported, normCode, candTypes, Host, LocalNet, RtcNet };
+})();
+
+/* ===== src/ui/board.js ===== */
+__mods["src/ui/board.js"] = (() => {
+// The battle board: an SVG grid in square units (viewBox 0 0 8 10). Terrain
+// is drawn once; overlays are redrawn on every state; tokens are persistent
+// nodes so moves slide with a CSS transition.
+
+const { W, H, onBoard } = __mods["src/rules/grid.js"];
+
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs = {}, text) => {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (text != null) n.textContent = text;
+  return n;
+};
+
+const EFFECT_ICONS = { dodge: '🛡', sap: '💫', vex: '🎯', helped: '🤝', disengage: '💨' };
+
+function createBoard(svg, onTap) {
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = '';
+  const terrain = el('g'), over = el('g'), toks = el('g', { class: 'toks' }), fx = el('g');
+  svg.append(terrain, over, toks, fx);
+  const nodes = new Map();
+  let wallsKey = '';
+
+  svg.addEventListener('click', (e) => {
+    const r = svg.getBoundingClientRect();
+    const x = Math.floor(((e.clientX - r.left) / r.width) * W);
+    const y = Math.floor(((e.clientY - r.top) / r.height) * H);
+    if (x >= 0 && y >= 0 && x < W && y < H) onTap(x, y);
+  });
+
+  function drawTerrain(walls) {
+    terrain.innerHTML = '';
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        terrain.append(el('rect', { x, y, width: 1, height: 1, class: (x + y) % 2 ? 'c1' : 'c2' }));
+      }
+    }
+    walls.forEach((k, i) => {
+      const [x, y] = k.split(',').map(Number);
+      terrain.append(el('rect', { x: x + 0.04, y: y + 0.04, width: 0.92, height: 0.92, rx: 0.18, class: 'wall' }));
+      terrain.append(el('text', { x: x + 0.5, y: y + 0.68, class: 'wallmoji' }, i % 2 ? '🌲' : '🪨'));
+    });
+  }
+
+  function tokenNode(c) {
+    let n = nodes.get(c.id);
+    if (!n) {
+      n = el('g', { class: 'tok' });
+      n.append(
+        el('circle', { cx: 0.5, cy: 0.5, r: 0.44, class: 'ring' }),
+        el('circle', { cx: 0.5, cy: 0.5, r: 0.38, class: 'disc' }),
+        el('text', { x: 0.5, y: 0.66, class: 'emo' }),
+        el('rect', { x: 0.12, y: 0.86, width: 0.76, height: 0.09, rx: 0.04, class: 'hpbg' }),
+        el('rect', { x: 0.12, y: 0.86, width: 0.76, height: 0.09, rx: 0.04, class: 'hp' }),
+        el('text', { x: 0.88, y: 0.24, class: 'fxi' }),
+        el('text', { x: 0.5, y: 0.13, class: 'lbl' }),
+      );
+      toks.append(n);
+      nodes.set(c.id, n);
+    }
+    return n;
+  }
+
+  // view: { b, colors{id:color}, curId, reach[], preview{path,oas}, suggest{x,y}, mine }
+  function render(view) {
+    const { b } = view;
+    const wk = b.walls.join(';');
+    if (wk !== wallsKey) { drawTerrain(b.walls); wallsKey = wk; }
+
+    over.innerHTML = '';
+    for (const s of view.reach || []) over.append(el('rect', { x: s.x + 0.03, y: s.y + 0.03, width: 0.94, height: 0.94, rx: 0.12, class: 'reach' }));
+    if (view.suggest) over.append(el('rect', { x: view.suggest.x + 0.08, y: view.suggest.y + 0.08, width: 0.84, height: 0.84, rx: 0.2, class: 'suggest' }));
+    if (view.preview) {
+      const me = b.creatures[view.mine];
+      const pts = [{ x: me.x, y: me.y }, ...view.preview.path].map((p) => `${p.x + 0.5},${p.y + 0.5}`).join(' ');
+      over.append(el('polyline', { points: pts, class: 'path' }));
+      const end = view.preview.path[view.preview.path.length - 1];
+      over.append(el('rect', { x: end.x + 0.06, y: end.y + 0.06, width: 0.88, height: 0.88, rx: 0.16, class: 'dest' }));
+      over.append(el('text', { x: end.x + 0.5, y: end.y + 0.62, class: 'feet' }, `${view.preview.feet} ft`));
+      for (const id of view.preview.oas) {
+        const h = b.creatures[id];
+        over.append(el('rect', { x: h.x - 0.97, y: h.y - 0.97, width: 2.94, height: 2.94, rx: 0.3, class: 'threat' }));
+      }
+    }
+    if (view.target) {
+      const t = b.creatures[view.target];
+      over.append(el('circle', { cx: t.x + 0.5, cy: t.y + 0.5, r: 0.49, class: 'aim' }));
+    }
+
+    const fxBy = {};
+    for (const e of b.effects) {
+      const who = e.type === 'dodge' || e.type === 'disengage' ? e.by : e.target;
+      if (who) (fxBy[who] ||= []).push(EFFECT_ICONS[e.type]);
+    }
+    const seen = new Set();
+    for (const c of Object.values(b.creatures)) {
+      const n = tokenNode(c);
+      seen.add(c.id);
+      const gone = !onBoard(c);
+      n.style.display = gone ? 'none' : '';
+      if (gone) continue;
+      n.style.transform = `translate(${c.x}px, ${c.y}px)`;
+      const down = c.hp <= 0;
+      n.setAttribute('class', `tok ${c.side} ${down ? 'down' : ''} ${c.dead ? 'dead' : ''} ${c.id === view.curId ? 'cur' : ''} ${c.id === view.mine ? 'mine' : ''}`);
+      const [ring, disc, emo, , hp, fxi, lbl] = n.children;
+      ring.style.stroke = view.colors[c.id] || '';
+      disc.style.fill = c.side === 'hero' ? (view.colors[c.id] || '#4fc3f7') + '33' : '';
+      emo.textContent = c.dead ? '💀' : down ? '💤' : c.emoji;
+      const frac = Math.max(0, c.hp / c.hpMax);
+      hp.setAttribute('width', (0.76 * frac).toFixed(3));
+      hp.setAttribute('class', `hp ${frac <= 0.5 ? 'low' : ''}`);
+      fxi.textContent = (fxBy[c.id] || []).join('');
+      lbl.textContent = c.side === 'foe' ? c.name.replace('Goblin ', 'G') : '';
+    }
+    for (const [id, n] of nodes) if (!seen.has(id)) { n.remove(); nodes.delete(id); }
+  }
+
+  function ping(x, y, color) {
+    const c = el('circle', { cx: x + 0.5, cy: y + 0.5, r: 0.2, class: 'ping' });
+    c.style.stroke = color;
+    fx.append(c);
+    setTimeout(() => c.remove(), 1600);
+  }
+
+  return { render, ping };
+}
+
+return { createBoard };
+})();
+
+/* ===== src/rules/glossary.js ===== */
+__mods["src/rules/glossary.js"] = (() => {
+// Plain-language rules, one entry per rule key used in battle records.
+// Paraphrased from the SRD 5.2.1 (CC-BY-4.0) for new players.
+
+const GLOSSARY = {
+  'd20-test': { title: 'D20 Tests', text: 'Attack rolls, ability checks and saving throws are all D20 Tests: roll a d20, add your modifiers, and compare the total to a target number (Armor Class or a Difficulty Class). Meet or beat it and you succeed.' },
+  'attack-roll': { title: 'Attack Rolls', text: "To attack, roll a d20 and add your attack bonus (usually an ability modifier plus your Proficiency Bonus). If the total equals or beats the target's Armor Class, you hit and roll damage." },
+  'armor-class': { title: 'Armor Class (AC)', text: 'How hard you are to hit. Armor sets a base number, some armor adds your Dexterity modifier, and a Shield adds 2.' },
+  'ability-modifier': { title: 'Ability Modifiers', text: 'Each ability score gives a modifier: subtract 10 and halve, rounding down. A 17 Strength gives +3. Modifiers are what you actually add to rolls.' },
+  'proficiency': { title: 'Proficiency Bonus', text: "You add your Proficiency Bonus to rolls for things you're trained in: your weapons, your saving throws, your skills. It is +2 at levels 1 to 4." },
+  'advantage': { title: 'Advantage and Disadvantage', text: "With Advantage, roll two d20s and keep the higher. With Disadvantage, keep the lower. If you have both, they cancel out and you roll one die, no matter how many reasons there are for each." },
+  'critical-hit': { title: 'Critical Hits', text: 'A natural 20 on an attack roll always hits and is a Critical Hit: roll all of the attack\'s damage dice twice as many times. A natural 1 always misses.' },
+  'damage': { title: 'Damage', text: "Roll the weapon's damage dice and add the same ability modifier you used for the attack roll. Damage comes off Hit Points." },
+  'initiative': { title: 'Initiative', text: 'At the start of a fight everyone rolls Initiative, a Dexterity check (d20 + DEX modifier). Turns go from highest to lowest, and the order repeats each round.' },
+  'your-turn': { title: 'Your Turn', text: 'On your turn you can move up to your Speed and take one action. You may also get one Bonus Action if a feature gives you one, and you have one Reaction per round, which you can use even on other creatures\' turns.' },
+  'movement': { title: 'Movement', text: 'On a grid each square is 5 feet, diagonals included. You can split your movement before and after your action. Another creature\'s space counts as Difficult Terrain (each square costs 10 feet), and you can\'t end your move there or move through an enemy that can still fight.' },
+  'opportunity-attack': { title: 'Opportunity Attacks', text: "When an enemy you can see leaves your reach, you can use your Reaction to make one melee attack against it. Moving away from an enemy without taking the Disengage action gives it that chance." },
+  'disengage': { title: 'Disengage', text: "Take the Disengage action and your movement doesn't provoke Opportunity Attacks for the rest of the turn." },
+  'dash': { title: 'Dash', text: 'Take the Dash action and you get extra movement equal to your Speed this turn.' },
+  'dodge': { title: 'Dodge', text: 'Take the Dodge action and, until the start of your next turn, attack rolls against you have Disadvantage (if you can see the attacker) and you have Advantage on Dexterity saving throws.' },
+  'help': { title: 'Help', text: 'Take the Help action to distract an enemy within 5 feet of you. The next attack roll one of your allies makes against it, before the start of your next turn, has Advantage.' },
+  'stabilize': { title: 'Stabilizing a Dying Ally', text: 'Use the Help action next to a creature at 0 Hit Points and make a DC 10 Wisdom (Medicine) check. On a success the creature is Stable: it stops making death saving throws, though it is still Unconscious.' },
+  'stable': { title: 'Stable', text: "A Stable creature at 0 Hit Points doesn't make death saving throws. It is still Unconscious until it regains Hit Points. Taking damage makes it start dying again." },
+  'unconscious': { title: 'Unconscious', text: "At 0 Hit Points a hero falls Unconscious: they drop prone and can't act or move. Attacks against them have Advantage, and any hit from within 5 feet is a Critical Hit." },
+  'death-saves': { title: 'Death Saving Throws', text: 'At the start of each of your turns at 0 Hit Points, roll a d20. 10 or higher is a success, below 10 a failure. Three successes and you are Stable; three failures and you die. A 1 counts as two failures; a 20 brings you back with 1 Hit Point. Taking damage at 0 HP is a failure (two on a Critical Hit).' },
+  'ranged-in-melee': { title: 'Ranged Attacks in Close Combat', text: "Making a ranged attack while an enemy that can see you is within 5 feet of you gives you Disadvantage." },
+  'long-range': { title: 'Range', text: 'Ranged weapons have two ranges, like 80/320. Beyond the first number you attack with Disadvantage, and you can\'t attack beyond the second.' },
+  'weapon-mastery': { title: 'Weapon Mastery', text: "Some classes learn the mastery property of certain weapons. Each weapon has one, and it gives that weapon an extra effect when you use it." },
+  'mastery-vex': { title: 'Mastery: Vex', text: 'If you hit a creature with a Vex weapon, you have Advantage on your next attack roll against that creature before the end of your next turn.' },
+  'mastery-sap': { title: 'Mastery: Sap', text: 'If you hit a creature with a Sap weapon, it has Disadvantage on its next attack roll before the start of your next turn.' },
+  'sneak-attack': { title: 'Sneak Attack (Rogue)', text: "Once per turn, a Rogue deals extra damage (1d6 at level 1) with a Finesse or Ranged weapon if the attack has Advantage, or if an ally who isn't Incapacitated is within 5 feet of the target and the attack doesn't have Disadvantage." },
+  'second-wind': { title: 'Second Wind (Fighter)', text: 'As a Bonus Action, regain Hit Points equal to 1d10 + your Fighter level. A level 1 Fighter has two uses, regains one on a Short Rest and all on a Long Rest.' },
+  'savage-attacker': { title: 'Savage Attacker (feat)', text: "Once per turn when you hit with a weapon, you roll the weapon's damage dice twice and use either roll. The Soldier background gives this Origin feat." },
+  'dueling': { title: 'Dueling (Fighting Style)', text: "When you hold a melee weapon in one hand and no other weapon, you get +2 to that weapon's damage rolls. A Shield doesn't count as a weapon." },
+  'alert': { title: 'Alert (feat)', text: 'Add your Proficiency Bonus to your Initiative rolls. The Criminal background gives this Origin feat.' },
+  'luck': { title: 'Luck (Halfling)', text: 'When a halfling rolls a 1 on the d20 of a D20 Test, they can reroll the die and must use the new roll.' },
+  'heroic-inspiration': { title: 'Heroic Inspiration', text: 'If you have Heroic Inspiration, you can spend it to reroll any die immediately after rolling it, using the new roll. Humans gain it each Long Rest.' },
+  'expertise': { title: 'Expertise', text: 'Double your Proficiency Bonus for skills you have Expertise in.' },
+  'skills': { title: 'Skills', text: 'A skill check is an ability check for a specific task: Medicine uses Wisdom, Stealth uses Dexterity. Add your Proficiency Bonus if you are proficient in the skill.' },
+  'nimble-escape': { title: 'Nimble Escape (goblins)', text: 'Goblins can take the Disengage or Hide action as a Bonus Action, which is why they can slip out of a fight and still shoot.' },
+  'stat-block': { title: 'Stat Blocks', text: "Monsters don't build their numbers like heroes do: their stat block lists the totals. A Goblin Warrior's Scimitar is +4 to hit and deals 1d6 + 2, plus 1d4 if it attacked with Advantage." },
+  'combat': { title: 'Combat', text: 'A fight runs in rounds. In each round every creature takes one turn, in Initiative order. It ends when one side is defeated.' },
+};
+
+const rule = (k) => GLOSSARY[k] || null;
+
+return { GLOSSARY, rule };
+})();
+
+/* ===== src/ui/explain.js ===== */
+__mods["src/ui/explain.js"] = (() => {
+// Turns battle records into words: a one-line summary for the roll toast and
+// log, and the full "Why?" breakdown with links to the glossary.
+
+const { GLOSSARY } = __mods["src/rules/glossary.js"];
+const { signed } = __mods["src/rules/data.js"];
+
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const R = (rule, label) => (rule && GLOSSARY[rule] ? `<a class="rl" data-rule="${rule}">${esc(label || GLOSSARY[rule].title)}</a>` : esc(label || ''));
+const sumv = (a) => a.reduce((s, x) => s + x.value, 0);
+
+const name = (b, id) => esc(b?.creatures?.[id]?.name || id);
+
+// Records worth a pop-up dice card.
+const ROLLED = new Set(['attack', 'save', 'check', 'heal', 'initiative']);
+
+function d20Text(d) {
+  if (d.rolls.length === 1) return `${d.kept}`;
+  return `${d.kept} <span class="dim">(rolled ${d.rolls.join(' and ')}, kept the ${d.mode === 'advantage' ? 'higher' : 'lower'})</span>`;
+}
+
+function short(r, b) {
+  switch (r.kind) {
+    case 'attack': {
+      const res = { crit: 'CRIT!', hit: 'HIT', miss: 'MISS', fumble: 'MISS (nat 1)' }[r.outcome];
+      const dmg = r.damage ? ` · ${r.damage.total} dmg` : '';
+      const mode = r.d20.mode === 'normal' ? '' : r.d20.mode === 'advantage' ? ' · Adv' : ' · Dis';
+      return `🎲 ${r.d20.kept} ${signed(sumv(r.mods))} = <b>${r.total}</b> vs AC ${r.ac} · <b class="${r.damage ? 'good' : 'bad'}">${res}</b>${dmg}${mode}`;
+    }
+    case 'save': return `🎲 Death save: ${r.d20.kept} vs 10 · <b>${{ success: 'Success', fail: 'Failure', fail2: 'Two failures', revive: 'Back up!' }[r.outcome]}</b>`;
+    case 'check': return `🎲 ${r.skill}: ${r.d20.kept} ${signed(sumv(r.mods))} = <b>${r.total}</b> vs DC ${r.dc} · <b>${r.outcome === 'success' ? 'Success' : 'Failure'}</b>`;
+    case 'heal': return `🎲 ${r.what}: ${r.roll.rolls[0]} + ${sumv(r.mods)} = <b class="good">${r.total} HP</b>`;
+    case 'initiative': return `🎲 Initiative: ${r.entries.map((e) => `${name(b, e.id)} ${e.total}`).join(', ')}`;
+    default: return esc(r.text);
+  }
+}
+
+// The full breakdown, as HTML.
+function detail(r, b) {
+  const L = [];
+  const line = (left, right = '', cls = '') => L.push(`<div class="ln ${cls}"><span>${left}</span><b>${right}</b></div>`);
+  L.push(`<p class="lead">${esc(r.text)}</p>`);
+  if (r.kind === 'attack') {
+    L.push(`<h4>${R(r.rule, r.reaction ? 'Opportunity Attack' : 'Attack roll')}</h4>`);
+    for (const a of r.d20.adv) line(`Advantage: ${R(a.rule, a.text)}`);
+    for (const a of r.d20.dis) line(`Disadvantage: ${R(a.rule, a.text)}`);
+    if (r.d20.adv.length && r.d20.dis.length) line(R('advantage', 'Advantage and Disadvantage cancel out'));
+    line(`🎲 d20${r.d20.luck ? ' (a 1 was rerolled: ' + R('luck', 'Luck') + ')' : ''}`, d20Text(r.d20));
+    for (const m of r.mods) line(R(m.rule, m.label), signed(m.value));
+    line('Total', r.total, 'sum');
+    line(`${name(b, r.target)}'s ${R('armor-class', 'Armor Class')}`, r.ac);
+    for (const n of r.notes || []) line(R(n.rule, n.text));
+    const verdict = { crit: `Natural 20: ${R('critical-hit', 'Critical Hit')}!`, hit: 'Hit: the total meets or beats the AC', miss: 'Miss: the total is below the AC', fumble: `Natural 1: ${R('critical-hit', 'always misses')}` }[r.outcome];
+    line(verdict, '', r.damage ? 'good' : 'bad');
+    if (r.damage) {
+      L.push(`<h4>${R('damage', 'Damage')}</h4>`);
+      for (const p of r.damage.parts) {
+        line(R(p.rule, p.label) + (p.rolls ? ` <span class="dim">🎲 ${p.rolls.join(' + ')}</span>` : ''), p.rolls ? p.value : signed(p.value));
+        if (p.savage) line(`<span class="dim">${R('savage-attacker', p.savage)}</span>`);
+      }
+      line(`${r.damage.type} damage`, r.damage.total, 'sum');
+      if (r.after) line(`${name(b, r.target)}: ${r.after.before} → ${r.after.after} HP`);
+      if (r.after?.downed) line(R('unconscious', 'Drops to 0 HP: Unconscious'), '', 'bad');
+      if (r.after?.deathFail) line(R('death-saves', `${r.after.deathFail} failed death save${r.after.deathFail > 1 ? 's' : ''} (hit at 0 HP)`), '', 'bad');
+    }
+    if (r.mastery) L.push(`<h4>${R('weapon-mastery', 'Weapon Mastery')}: ${R(r.mastery.rule, r.mastery.name)}</h4><p>${esc(r.mastery.text)}</p>`);
+  } else if (r.kind === 'save') {
+    L.push(`<h4>${R('death-saves', 'Death Saving Throw')}</h4>`);
+    line(`🎲 d20${r.d20.luck ? ' (' + R('luck', 'Luck') + ' rerolled a 1)' : ''}`, r.d20.kept);
+    line('Needs 10 or higher', '');
+    line('Tally', `${r.tally.s} ✔ · ${r.tally.f} ✖`);
+  } else if (r.kind === 'check') {
+    L.push(`<h4>${R(r.rule, 'Ability check')}</h4>`);
+    line('🎲 d20', r.d20.kept);
+    for (const m of r.mods) line(R(m.rule, m.label), signed(m.value));
+    line('Total', r.total, 'sum');
+    line('Difficulty Class', r.dc);
+  } else if (r.kind === 'heal') {
+    L.push(`<h4>${R(r.rule, r.what)}</h4>`);
+    line(`🎲 ${r.roll.label}`, r.roll.rolls[0]);
+    for (const m of r.mods) line(esc(m.label), signed(m.value));
+    line('Healing', r.total, 'sum');
+    line(`HP ${r.before} → ${r.after}`, '');
+  } else if (r.kind === 'initiative') {
+    L.push(`<h4>${R('initiative', 'Initiative')}</h4>`);
+    for (const e of r.entries) {
+      const parts = e.parts.map((p) => `${R(p.rule, p.label)} ${signed(p.value)}`).join(', ');
+      line(`${name(b, e.id)}: 🎲 ${e.d20.kept}${e.d20.luck ? ' (Luck reroll)' : ''}, ${parts}`, e.total);
+    }
+    line('Highest goes first', '');
+  }
+  if (r.rule && GLOSSARY[r.rule]) {
+    L.push(`<p class="rulebox"><b>${esc(GLOSSARY[r.rule].title)}.</b> ${esc(GLOSSARY[r.rule].text)}</p>`);
+  }
+  return L.join('');
+}
+
+function glossaryHtml(key) {
+  const g = GLOSSARY[key];
+  if (!g) return '';
+  return `<h3>${esc(g.title)}</h3><p>${esc(g.text)}</p>`;
+}
+
+// Rule keys seen in a fight, for the end-of-fight recap.
+function rulesSeen(log) {
+  const seen = new Set();
+  for (const r of log) {
+    if (r.rule) seen.add(r.rule);
+    for (const m of r.mods || []) if (m.rule) seen.add(m.rule);
+    for (const a of r.d20?.adv || []) seen.add(a.rule);
+    for (const a of r.d20?.dis || []) seen.add(a.rule);
+    for (const p of r.damage?.parts || []) if (p.rule) seen.add(p.rule);
+    if (r.mastery) seen.add(r.mastery.rule);
+  }
+  return [...seen].filter((k) => GLOSSARY[k]);
+}
+
+return { esc, ROLLED, short, detail, glossaryHtml, rulesSeen };
+})();
+
+/* ===== src/ui/main.js ===== */
+__mods["src/ui/main.js"] = (() => {
+// First Roll - the app: home, lobby and battle screens, wired to a room.
+// The host's phone runs the room itself (LocalNet) and opens it to friends
+// over WebRTC (Host); a friend's phone talks to it through RtcNet. Either way
+// this file only sends intents and renders the state it is sent.
+
+const { createRoom } = __mods["src/game/room.js"];
+const { Host, LocalNet, RtcNet, onlineSupported, normCode } = __mods["src/net/online.js"];
+const { buildHero } = __mods["src/rules/character.js"];
+const { PREMADES, ABILITIES, signed, MASTERIES } = __mods["src/rules/data.js"];
+const { previewMove, reachableSquares, attackOptions } = __mods["src/rules/combat.js"];
+const { occupantAt, cheb } = __mods["src/rules/grid.js"];
+const { coach } = __mods["src/rules/ai.js"];
+const { createBoard } = __mods["src/ui/board.js"];
+const { short, detail, glossaryHtml, rulesSeen, esc, ROLLED } = __mods["src/ui/explain.js"];
+const { GLOSSARY } = __mods["src/rules/glossary.js"];
+
+const $ = (id) => document.getElementById(id);
+const ls = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+  del(k) { try { localStorage.removeItem(k); } catch { /* private mode */ } },
+};
+const K = { name: 'fr.name', save: 'fr.save', solo: 'fr.save.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest' };
+
+const app = {
+  mode: null, room: null, host: null, net: null, code: null, timer: null,
+  me: null, S: null, lastSeq: 0, preview: null, target: null,
+  toasts: [], toastBusy: false, wake: null, status: '', reactUntil: 0,
+};
+window.__FR = app;   // for the console and tools/e2e.mjs
+
+// ------------------------------------------------------------ helpers ----
+function show(id) {
+  for (const s of document.querySelectorAll('.screen')) s.classList.toggle('active', s.id === `scr-${id}`);
+}
+let errTimer = null;
+function showErr(text) {
+  const e = $('err');
+  e.textContent = text;
+  e.classList.remove('hidden');
+  clearTimeout(errTimer);
+  errTimer = setTimeout(() => e.classList.add('hidden'), 3200);
+}
+function openSheet(html) {
+  $('sheet-body').innerHTML = html;
+  $('sheet').classList.remove('hidden');
+}
+const closeSheet = () => $('sheet').classList.add('hidden');
+const send = (m) => app.net?.send(m);
+const myName = () => ($('in-name').value.trim() || ls.get(K.name) || '').slice(0, 20);
+const seatMe = () => app.S?.seats.find((s) => s.pid === app.me);
+const isHost = () => app.S?.seats[0]?.pid === app.me;
+const heroColors = (S) => Object.fromEntries(S.seats.filter((s) => s.hero).map((s) => [s.hero, s.color]));
+
+// Links to glossary entries anywhere on the page.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-rule]');
+  if (!a) return;
+  e.preventDefault();
+  e.stopPropagation();
+  openSheet(glossaryHtml(a.dataset.rule));
+});
+$('sheet-x').onclick = closeSheet;
+$('sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') closeSheet(); });
+
+// --------------------------------------------------------------- home ----
+const params = new URLSearchParams(location.search);
+$('in-name').value = ls.get(K.name) || '';
+const joinParam = normCode(params.get('join'));
+if (joinParam.length === 4) {
+  $('join-box').classList.remove('hidden');
+  $('join-code-show').textContent = joinParam;
+  $('in-code').value = joinParam;
+}
+if (ls.get(K.save)) $('btn-continue').classList.remove('hidden');
+
+function needName() {
+  const n = myName();
+  if (!n) { $('home-msg').textContent = 'Type your name first.'; $('in-name').focus(); return null; }
+  ls.set(K.name, n);
+  $('home-msg').textContent = '';
+  return n;
+}
+
+$('btn-host').onclick = () => { const n = needName(); if (n) startHosting({ name: n, online: true, fresh: true }); };
+$('btn-continue').onclick = () => { const n = needName(); if (n) startHosting({ name: n, online: true, fresh: false }); };
+$('btn-solo').onclick = () => { const n = needName(); if (n) startHosting({ name: n, online: false, fresh: true }); };
+$('btn-join').onclick = () => {
+  const n = needName();
+  const code = normCode($('in-code').value);
+  if (!n) return;
+  if (code.length !== 4) { $('home-msg').textContent = 'Party codes are 4 letters.'; return; }
+  joinParty(n, code);
+};
+$('btn-join-link').onclick = () => { const n = needName(); if (n) joinParty(n, joinParam); };
+$('in-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-join').click(); });
+$('lnk-credits').onclick = (e) => {
+  e.preventDefault();
+  openSheet(`<h3>Credits</h3><p>First Roll is an original game. Its rules and monster statistics come from the System Reference Document.</p>
+    <p class="rulebox">This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast LLC,
+    available at <a href="https://www.dndbeyond.com/srd" target="_blank" rel="noopener">https://www.dndbeyond.com/srd</a>. The SRD 5.2.1 is licensed under the
+    Creative Commons Attribution 4.0 International License, available at
+    <a href="https://creativecommons.org/licenses/by/4.0/legalcode" target="_blank" rel="noopener">https://creativecommons.org/licenses/by/4.0/legalcode</a>.</p>`);
+};
+
+// ---------------------------------------------------------- sessions ----
+async function startHosting({ name, online, fresh }) {
+  const key = online ? K.save : K.solo;
+  if (fresh) ls.del(key);
+  const store = { load: () => ls.get(key), save: (s) => ls.set(key, s), remove: () => ls.del(key) };
+  app.room = createRoom({ store });
+  app.timer = setInterval(() => app.room.tick(), 100);
+  app.mode = online ? 'host' : 'solo';
+  app.code = null;
+  app.net = new LocalNet(app.room, onMessage, () => {});
+  app.net.connect({ name, token: ls.get(K.hostToken) });
+  show('lobby');
+  if (online) {
+    if (!onlineSupported()) {
+      setStatus('This browser can\'t host online games. Playing solo.');
+      app.mode = 'solo';
+    } else {
+      setStatus('Opening your party…');
+      app.host = new Host(app.room, { name, onStatus: (s) => setStatus(s === 'online' ? 'Open: friends can join' : 'Reconnecting to the mailbox…') });
+      try {
+        app.code = await app.host.start();
+        render();
+      } catch (e) {
+        app.host = null;
+        app.mode = 'solo';
+        setStatus(`Couldn't open an online party (${e.message}). You can still play solo.`);
+      }
+    }
+  }
+  wakeLock();
+  render();
+}
+
+function joinParty(name, code) {
+  app.mode = 'guest';
+  app.code = code;
+  app.net = new RtcNet(code, onMessage, onGuestStatus);
+  app.net.connect({ name, token: ls.get(K.guestToken) });
+  show('lobby');
+  renderLobbyShell();
+}
+
+const GUEST_STATUS = {
+  finding: 'Finding the party…', gathering: 'Getting ready…', waiting: 'Knocking on the host\'s door…',
+  linking: 'Connecting…', online: 'Connected', offline: 'Reconnecting…',
+};
+function onGuestStatus(s) {
+  if (s === 'noroom') { leave(); $('home-msg').textContent = `No party with the code ${app.code || ''}. Check it with your host.`; return; }
+  if (s === 'blocked') {
+    setStatus('Can\'t reach the host\'s phone from this network. Try another wifi or mobile data.');
+    $('net-status').insertAdjacentHTML('beforeend', ' <button class="btn small" id="btn-retry">Retry</button>');
+    $('btn-retry').onclick = () => app.net?.retry();
+    return;
+  }
+  setStatus(GUEST_STATUS[s] || s);
+}
+function setStatus(t) {
+  app.status = t;
+  const el = $('net-status');
+  if (el) el.textContent = t;
+}
+
+function leave() {
+  clearInterval(app.timer);
+  app.host?.stop();
+  app.net?.close();
+  app.wake?.release?.().catch(() => {});
+  Object.assign(app, { mode: null, room: null, host: null, net: null, code: null, timer: null, me: null, S: null, lastSeq: 0, preview: null, target: null, wake: null });
+  $('over').classList.add('hidden');
+  $('react').classList.add('hidden');
+  if (ls.get(K.save)) $('btn-continue').classList.remove('hidden');
+  show('home');
+}
+$('btn-leave').onclick = leave;
+window.addEventListener('pagehide', () => app.host?.stopNow());
+
+async function wakeLock() {
+  try { app.wake = await navigator.wakeLock?.request('screen'); } catch { /* not allowed */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && app.mode && app.mode !== 'guest') wakeLock();
+});
+
+// ----------------------------------------------------------- messages ----
+function onMessage(m) {
+  if (m.t === 'welcome') {
+    app.me = m.pid;
+    ls.set(app.mode === 'guest' ? K.guestToken : K.hostToken, m.token);
+  } else if (m.t === 'state') {
+    const prev = app.S;
+    app.S = m;
+    takeRecords(prev, m);
+    if (prev?.control !== m.control && m.control === app.me && m.battle && !m.battle.over) {
+      banner('Your turn!');
+      navigator.vibrate?.(40);
+    }
+    render();
+  } else if (m.t === 'ping') {
+    const s = app.S?.seats.find((x) => x.pid === m.pid);
+    board.ping(m.x, m.y, s?.color || '#fff');
+  } else if (m.t === 'error') {
+    showErr(m.text);
+  }
+}
+
+function takeRecords(prev, S) {
+  const b = S.battle;
+  if (!b) { app.lastSeq = 0; return; }
+  if (b.seq < app.lastSeq) app.lastSeq = 0;                // a new fight
+  const fresh = app.lastSeq === 0 && b.seq > 8;          // joined mid-fight: no replay
+  const news = b.log.filter((r) => r.seq > app.lastSeq);
+  app.lastSeq = b.seq;
+  if (fresh) return;
+  for (const r of news) {
+    if (ROLLED.has(r.kind)) queueToast(r);
+    if (r.kind === 'move' || r.kind === 'turn') { app.preview = null; app.target = null; }
+    if (r.kind === 'attack' && r.after?.dead) app.target = null;
+  }
+}
+
+// -------------------------------------------------------------- toasts ----
+function queueToast(r) {
+  app.toasts.push(r);
+  if (app.toasts.length > 4) app.toasts.splice(0, app.toasts.length - 4);
+  if (!app.toastBusy) nextToast();
+}
+function nextToast() {
+  const r = app.toasts.shift();
+  const t = $('toast');
+  if (!r) { app.toastBusy = false; t.classList.add('hidden'); return; }
+  app.toastBusy = true;
+  const b = app.S?.battle;
+  const who = b?.creatures[r.by]?.name || '';
+  t.innerHTML = `<span class="t"><span class="who">${esc(who)}${r.weapon ? ` · ${esc(r.weapon)}` : ''}${r.target && b ? ` → ${esc(b.creatures[r.target]?.name)}` : ''}</span>${short(r, b)}</span><button class="btn">Why?</button>`;
+  t.querySelector('.btn').onclick = () => openSheet(detail(r, app.S?.battle));
+  t.classList.remove('hidden');
+  t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
+  setTimeout(nextToast, app.toasts.length ? 1800 : 3200);
+}
+function banner(text) {
+  const el = $('banner');
+  el.textContent = text;
+  el.classList.remove('hidden');
+  el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  clearTimeout(banner.t);
+  banner.t = setTimeout(() => el.classList.add('hidden'), 1700);
+}
+
+// -------------------------------------------------------------- render ----
+app.render = () => render();
+function render() {
+  const S = app.S;
+  if (!S) return;
+  if (S.phase === 'lobby') {
+    $('over').classList.add('hidden');
+    $('react').classList.add('hidden');
+    show('lobby');
+    renderLobby(S);
+  } else {
+    show('battle');
+    renderBattle(S);
+  }
+}
+
+function renderLobbyShell() {
+  $('lobby-code').textContent = app.mode === 'solo' ? 'SOLO' : (app.code || '····');
+  $('btn-share').classList.toggle('hidden', !app.code);
+  $('net-status').textContent = app.status;
+}
+
+function heroCard(cls, S) {
+  const p = PREMADES[cls];
+  const h = buildHero(cls);
+  const owner = S.seats.find((s) => s.hero === cls);
+  const mine = owner?.pid === app.me;
+  const atk = h.attacks.map((a) => `${a.name} ${signed(a.hit.reduce((s, x) => s + x.value, 0))}`).join(' · ');
+  const btn = mine ? '<button class="btn wide" data-unpick>✓ Yours (tap to drop)</button>'
+    : owner ? `<button class="btn wide" disabled>Taken by ${esc(owner.name)}</button>`
+      : `<button class="btn primary wide" data-pick="${cls}">Play the ${p.className}</button>`;
+  return `<div class="hero ${mine ? 'mine' : ''}">
+    <div class="em">${p.emoji}</div>
+    <h3>${p.className}</h3>
+    <div class="sub">${h.species} · ${h.background} · level 1</div>
+    <div class="stats"><div><b>${h.ac}</b>AC</div><div><b>${h.hpMax}</b>HP</div><div><b>${h.speed}</b>ft</div></div>
+    <p>${esc(p.blurb)}</p>
+    <p class="sub">${esc(atk)}</p>
+    <button class="btn small ghost" data-sheet="${cls}">Character sheet</button>
+    ${btn}
+  </div>`;
+}
+
+function renderLobby(S) {
+  renderLobbyShell();
+  $('seat-list').innerHTML = S.seats.map((s) => {
+    const hero = s.hero ? `${PREMADES[s.hero].emoji} ${PREMADES[s.hero].className}` : '<span class="dim">watching</span>';
+    return `<li class="${s.online ? '' : 'off'}"><span class="dot" style="background:${s.color}"></span>
+      <span class="who">${esc(s.name)}${s.pid === app.me ? ' <span class="dim">(you)</span>' : ''}${s.host ? ' 👑' : ''}</span>${hero}</li>`;
+  }).join('');
+  $('hero-cards').innerHTML = ['fighter', 'rogue'].map((c) => heroCard(c, S)).join('');
+  for (const b of document.querySelectorAll('[data-pick]')) b.onclick = () => send({ t: 'pick', hero: b.dataset.pick });
+  for (const b of document.querySelectorAll('[data-unpick]')) b.onclick = () => send({ t: 'pick', hero: null });
+  for (const b of document.querySelectorAll('[data-sheet]')) b.onclick = () => openSheet(sheetHtml(buildHero(b.dataset.sheet)));
+  $('btn-start').classList.toggle('hidden', !isHost());
+  $('lobby-wait').classList.toggle('hidden', isHost());
+}
+
+$('btn-share').onclick = async () => {
+  const url = `${location.origin}${location.pathname}?join=${app.code}${params.get('signal') ? `&signal=${encodeURIComponent(params.get('signal'))}` : ''}`;
+  try {
+    if (navigator.share) await navigator.share({ title: 'First Roll', text: `Join my First Roll party: ${app.code}`, url });
+    else { await navigator.clipboard.writeText(url); showErr('Link copied.'); }
+  } catch { /* cancelled */ }
+};
+$('btn-start').onclick = () => send({ t: 'start' });
+
+// A character sheet laid out like a real one: abilities, AC, HP, attacks, features.
+function sheetHtml(c) {
+  const R = (rule, label) => (rule && GLOSSARY[rule] ? `<a class="rl" data-rule="${rule}">${esc(label)}</a>` : esc(label));
+  const abil = ABILITIES.map((a) => `<div>${a.toUpperCase()}<b>${signed(c.mods[a])}</b>${c.scores[a]}</div>`).join('');
+  const ac = c.acParts.map((p) => `${esc(p.label)} ${p.value}`).join(' + ');
+  const atks = c.attacks.map((a) => {
+    const hit = a.hit.reduce((s, x) => s + x.value, 0);
+    const flat = a.dmgFlat.reduce((s, x) => s + x.value, 0);
+    const rng = a.range ? ` · range ${a.range[0]}/${a.range[1]} ft` : ' · reach 5 ft';
+    const m = a.mastery ? ` · Mastery: ${R(MASTERIES[a.mastery].rule, MASTERIES[a.mastery].name)}` : '';
+    const extra = a.advDice ? ` (+${a.advDice} with Advantage)` : '';
+    return `<div class="ln"><span><b>${esc(a.name)}</b> ${R('attack-roll', signed(hit))} to hit${rng}${m}</span><b>${a.dice}${signed(flat)}${extra} ${a.type}</b></div>`;
+  }).join('');
+  const feats = (c.features || []).map((f) => `<p class="feat"><b>${R(f.rule, f.name)}</b>${f.source ? ` <span class="dim">(${esc(f.source)})</span>` : ''}: ${esc(f.text)}</p>`).join('');
+  const subtitle = c.side === 'foe' ? `${esc(c.statName)} · Small Fey (Goblinoid)` : `${esc(c.species)} ${esc(c.className)} · ${esc(c.background)} background · level ${c.level}`;
+  return `<h3>${c.emoji} ${esc(c.name)}</h3><p class="dim">${subtitle}</p>
+    <div class="grid6">${abil}</div>
+    <h4>Defense</h4>
+    <div class="ln"><span>${R('armor-class', 'Armor Class')}: ${ac}</span><b>${c.ac}</b></div>
+    <div class="ln"><span>Hit Points${c.hpParts ? ': ' + c.hpParts.map((p) => `${esc(p.label)} ${p.value}`).join(' + ') : ''}</span><b>${c.hp} / ${c.hpMax}</b></div>
+    <div class="ln"><span>Speed</span><b>${c.speed} ft</b></div>
+    <div class="ln"><span>${R('initiative', 'Initiative')}</span><b>${signed(c.initParts.reduce((s, p) => s + p.value, 0))}</b></div>
+    ${c.pb ? `<div class="ln"><span>${R('proficiency', 'Proficiency Bonus')}</span><b>${signed(c.pb)}</b></div>` : ''}
+    <h4>Attacks</h4>${atks}
+    <h4>Features</h4>${feats}`;
+}
+
+// ------------------------------------------------------------- battle ----
+const board = createBoard($('board'), onTap);
+// After closing the end screen, tapping "Victory!" / "Defeat" brings it back.
+$('b-turn').onclick = () => { if (app.S?.battle?.over) { $('over').dataset.dismissed = ''; render(); } };
+
+function myHeroId() {
+  return seatMe()?.hero || null;
+}
+function myTurn() {
+  const S = app.S;
+  return !!S?.battle && !S.battle.over && !S.battle.pending && S.control === app.me;
+}
+
+function onTap(x, y) {
+  const S = app.S;
+  const b = S?.battle;
+  if (!b) return;
+  const occ = occupantAt(b, x, y);
+  if (!myTurn()) {
+    if (occ) openSheet(sheetHtml(occ));
+    else send({ t: 'ping', x, y });
+    return;
+  }
+  const me = b.creatures[myHeroId()];
+  if (occ) {
+    app.preview = null;
+    if (occ.id === me.id) { app.target = null; openSheet(sheetHtml(me)); }
+    else if (occ.side !== me.side) app.target = app.target === occ.id ? null : occ.id;
+    else if (occ.hp <= 0 && !occ.dead && !occ.stable && cheb(me, occ) <= 1) app.target = occ.id;
+    else openSheet(sheetHtml(occ));
+    renderBattle(S);
+    return;
+  }
+  const end = app.preview?.path[app.preview.path.length - 1];
+  if (end && end.x === x && end.y === y) { doMove(x, y); return; }
+  app.target = null;
+  app.preview = previewMove(b, me.id, x, y);
+  if (!app.preview) send({ t: 'ping', x, y });
+  renderBattle(S);
+}
+
+function doMove(x, y) {
+  send({ t: 'act', intent: { a: 'move', x, y } });
+  app.preview = null;
+}
+const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; };
+
+function renderBattle(S) {
+  const b = S.battle;
+  const cur = b.idx >= 0 ? b.creatures[b.order[b.idx]] : null;
+  const mine = myHeroId();
+  const mt = myTurn();
+  const colors = heroColors(S);
+
+  $('b-round').textContent = `Round ${b.round}`;
+  $('b-code').textContent = app.mode === 'solo' ? 'Solo' : (app.code || '');
+  const turnEl = $('b-turn');
+  turnEl.classList.toggle('me', mt);
+  turnEl.textContent = b.over ? (b.over === 'victory' ? 'Victory!' : 'Defeat')
+    : mt ? 'Your turn' : `${cur?.name}'s turn${cur?.side === 'hero' && S.control === 'ai' && !/\(AI\)$/.test(cur.name) ? ' (AI)' : ''}`;
+  document.body.dataset.myturn = mt ? '1' : '';
+
+  $('b-order').innerHTML = b.order.map((id) => {
+    const c = b.creatures[id];
+    const out = c.dead || (c.side === 'foe' && c.hp <= 0);
+    return `<span class="${id === cur?.id ? 'cur' : ''} ${out ? 'out' : ''}" style="${colors[id] ? `border-color:${colors[id]}` : ''}">${c.emoji} ${esc(c.name)}</span>`;
+  }).join('');
+
+  const tip = mt ? coach(b, mine) : null;
+  board.render({
+    b, colors, curId: cur?.id, mine,
+    reach: mt && !app.target ? reachableSquares(b, mine) : [],
+    preview: mt ? app.preview : null,
+    target: mt ? app.target : null,
+    suggest: tip?.intent.a === 'move' && !app.preview ? tip.intent : null,
+  });
+
+  renderPanel(S, b, mine, mt, tip);
+  renderLog(b);
+  renderReact(S, b);
+  renderOver(S, b);
+}
+
+function renderPanel(S, b, mine, mt, tip) {
+  const P = $('panel');
+  if (b.over) { P.innerHTML = ''; return; }
+  if (!mt) {
+    let text;
+    if (b.pending && S.reactor === app.me) text = 'Your Reaction: decide below.';
+    else if (b.pending) text = `${esc(b.creatures[b.pending.reactor].name)} is deciding on an ${'<a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>'}…`;
+    else if (!mine) text = 'You\'re watching. Tap a token to see its sheet.';
+    else text = `Waiting for ${esc(b.creatures[b.order[b.idx]]?.name)}… Tap a square to ping it for your party.`;
+    P.innerHTML = `<div class="waiting">${text}</div>`;
+    return;
+  }
+  const me = b.creatures[mine];
+  const t = b.turn;
+  const chip = (on, label, rule) => `<span class="chip ${on ? '' : 'used'}"><a data-rule="${rule}">${label}</a></span>`;
+  let html = `<div class="budget">
+    ${chip(t.action, 'Action', 'your-turn')}${chip(t.bonus && me.secondWind?.uses, 'Bonus Action', 'your-turn')}
+    ${chip(me.reaction, 'Reaction', 'opportunity-attack')}${chip(t.moveLeft >= 5, `Move ${t.moveLeft} ft`, 'movement')}</div>`;
+  if (tip?.text && !app.target && !app.preview) {
+    html += `<div class="coachline">💡 <span>${esc(tip.text)}</span><button class="btn" id="btn-coach">Do it</button></div>`;
+  }
+  if (app.target) html += targetCard(b, me, b.creatures[app.target]);
+  else if (app.preview) {
+    const oa = app.preview.oas.map((id) => esc(b.creatures[id].name)).join(' and ');
+    html += `<div class="preview"><span>Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>.</b>` : ''} Tap the square again or</span>
+      <button class="btn primary" id="btn-move">Move</button><button class="btn ghost" id="btn-cancel">✕</button></div>`;
+  }
+  html += `<div class="btns">
+    <button class="btn" data-act="dash" ${t.action ? '' : 'disabled'}>Dash</button>
+    <button class="btn" data-act="disengage" ${t.action ? '' : 'disabled'}>Disengage</button>
+    <button class="btn" data-act="dodge" ${t.action ? '' : 'disabled'}>Dodge</button>
+    ${me.secondWind ? `<button class="btn" data-act="second-wind" ${t.bonus && me.secondWind.uses ? '' : 'disabled'}>Second Wind (${me.secondWind.uses})</button>`
+    : '<button class="btn end" data-act="end">End turn</button>'}
+  </div>`;
+  if (me.secondWind) html += '<button class="btn end wide" data-act="end">End turn</button>';
+  P.innerHTML = html;
+  for (const btn of P.querySelectorAll('[data-act]')) btn.onclick = () => act({ a: btn.dataset.act });
+  for (const btn of P.querySelectorAll('[data-attack]')) btn.onclick = () => act({ a: 'attack', target: app.target, attack: btn.dataset.attack });
+  for (const btn of P.querySelectorAll('[data-help]')) btn.onclick = () => act({ a: btn.dataset.help, target: app.target });
+  if ($('btn-coach')) $('btn-coach').onclick = () => act(tip.intent);
+  if ($('btn-move')) $('btn-move').onclick = () => { const e = app.preview.path[app.preview.path.length - 1]; doMove(e.x, e.y); };
+  if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; renderBattle(app.S); };
+  if ($('btn-tx')) $('btn-tx').onclick = () => { app.target = null; renderBattle(app.S); };
+  if ($('btn-tinfo')) $('btn-tinfo').onclick = () => openSheet(sheetHtml(b.creatures[app.target]));
+}
+
+function targetCard(b, me, T) {
+  const t = b.turn;
+  let rows = '';
+  if (T.side === me.side) {
+    rows = `<div class="opt"><button class="btn primary" data-help="stabilize" ${t.action ? '' : 'disabled'}>Stabilize</button>
+      <span class="why"><a class="rl" data-rule="stabilize">Help action</a>: DC 10 Wisdom (Medicine) check, you have ${signed(me.skills.medicine)}.</span></div>`;
+  } else {
+    for (const o of attackOptions(b, me, T)) {
+      const flat = o.atk.dmgFlat.reduce((s, x) => s + x.value, 0);
+      const bits = [`${Math.round(o.p * 100)}% to hit`, `${o.atk.dice}${signed(flat)} ${o.atk.type}`];
+      if (o.mode === 'advantage') bits.push(`<b class="good">Advantage</b>: ${o.adv.map((a) => `<a class="rl" data-rule="${a.rule}">${esc(a.text)}</a>`).join(', ')}`);
+      if (o.mode === 'disadvantage') bits.push(`<b class="bad">Disadvantage</b>: ${o.dis.map((a) => `<a class="rl" data-rule="${a.rule}">${esc(a.text)}</a>`).join(', ')}`);
+      if (o.adv.length && o.dis.length) bits.push('<a class="rl" data-rule="advantage">Advantage and Disadvantage cancel</a>');
+      if (o.sneak) bits.push(`<b class="good">+${me.sneak} <a class="rl" data-rule="sneak-attack">Sneak Attack</a></b>`);
+      if (o.atk.mastery) bits.push(`<a class="rl" data-rule="${MASTERIES[o.atk.mastery].rule}">${MASTERIES[o.atk.mastery].name}</a>`);
+      const why = o.ok ? bits.join(' · ') : `Out of ${o.atk.kind === 'melee' ? 'reach: move next to it first' : 'range'}.`;
+      rows += `<div class="opt"><button class="btn primary" data-attack="${o.atk.id}" ${o.ok && t.action ? '' : 'disabled'}>${esc(o.atk.name)}</button><span class="why">${why}</span></div>`;
+    }
+    if (cheb(me, T) <= 1) {
+      rows += `<div class="opt"><button class="btn" data-help="help" ${t.action ? '' : 'disabled'}>Help</button>
+        <span class="why"><a class="rl" data-rule="help">Help action</a>: your ally's next attack on ${esc(T.name)} gets Advantage.</span></div>`;
+    }
+    if (!t.action) rows += '<div class="why dim">You have already used your action this turn.</div>';
+  }
+  return `<div class="target"><div class="th"><b>${T.emoji} ${esc(T.name)}</b>
+    <span>AC ${T.ac} · HP ${T.hp}/${T.hpMax} <button class="btn small ghost" id="btn-tinfo">ⓘ</button><button class="btn small ghost" id="btn-tx">✕</button></span></div>${rows}</div>`;
+}
+
+function renderLog(b) {
+  const L = $('log');
+  const nearBottom = L.scrollHeight - L.scrollTop - L.clientHeight < 40;
+  const shown = b.log.filter((r) => r.kind !== 'prompt' && r.kind !== 'end-turn');
+  L.innerHTML = shown.map((r) => `<li class="k-${r.kind}" data-seq="${r.seq}">${r.kind === 'turn' ? `— ${esc(r.text)}` : esc(r.text)}</li>`).join('');
+  for (const li of L.children) {
+    li.onclick = () => {
+      const r = b.log.find((x) => x.seq === +li.dataset.seq);
+      if (r) openSheet(detail(r, b));
+    };
+  }
+  if (nearBottom || L.dataset.n !== String(shown.length)) L.scrollTop = L.scrollHeight;
+  L.dataset.n = String(shown.length);
+}
+
+function renderReact(S, b) {
+  const el = $('react');
+  if (!b.pending || S.reactor !== app.me || b.over) { el.classList.add('hidden'); el.dataset.k = ''; return; }
+  const R = b.creatures[b.pending.reactor], M = b.creatures[b.pending.mover];
+  const k = `${b.seq}`;
+  if (el.dataset.k === k) return;
+  el.dataset.k = k;
+  app.reactUntil = Date.now() + S.reactIn;
+  const opt = attackOptions(b, R, M).filter((o) => o.atk.kind === 'melee').sort((p, q) => q.expected - p.expected)[0];
+  el.innerHTML = `<h3>⚡ Reaction!</h3>
+    <p>${esc(M.name)} is leaving your reach. Use your Reaction for an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>
+    with your ${esc(opt.atk.name)} (${Math.round(opt.p * 100)}% to hit)?</p>
+    <div class="row"><button class="btn primary" id="btn-react-yes">Attack!</button><button class="btn" id="btn-react-no">Let it go</button></div>
+    <div class="timer" id="react-timer"></div>`;
+  el.classList.remove('hidden');
+  navigator.vibrate?.([30, 40, 30]);
+  $('btn-react-yes').onclick = () => { send({ t: 'react', yes: true }); el.classList.add('hidden'); };
+  $('btn-react-no').onclick = () => { send({ t: 'react', yes: false }); el.classList.add('hidden'); };
+  const total = S.reactIn || 1;
+  const tick = () => {
+    const left = app.reactUntil - Date.now();
+    const bar = $('react-timer');
+    if (!bar || el.classList.contains('hidden')) return;
+    bar.style.transform = `scaleX(${Math.max(0, left / total)})`;
+    if (left > 0) requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+function renderOver(S, b) {
+  const el = $('over');
+  if (!b.over) { el.classList.add('hidden'); el.dataset.dismissed = ''; return; }
+  if (el.dataset.dismissed === String(b.seq)) return;
+  if (!el.classList.contains('hidden') && el.dataset.seq === String(b.seq)) return;
+  el.dataset.seq = String(b.seq);
+  const rules = rulesSeen(b.log).map((k) => `<a class="chip rl" data-rule="${k}">${esc(GLOSSARY[k].title)}</a>`).join('');
+  const win = b.over === 'victory';
+  el.innerHTML = `<div class="card"><div class="logo">${win ? '🏆' : '💀'}</div><h2>${win ? 'Victory!' : 'Defeat'}</h2>
+    <p class="dim">${win ? 'The goblins are beaten' : 'The goblins win this time'} after ${b.round} round${b.round === 1 ? '' : 's'}.</p>
+    <h4 class="kicker">Rules you used: tap one to read it again</h4>
+    <div class="chips">${rules}</div>
+    ${isHost() ? '<button class="btn primary wide" id="btn-again">Back to the lobby</button>' : '<p class="dim">Waiting for the host…</p>'}
+    <button class="btn ghost wide" id="btn-over-log">See the combat log</button></div>`;
+  el.classList.remove('hidden');
+  if ($('btn-again')) $('btn-again').onclick = () => send({ t: 'again' });
+  $('btn-over-log').onclick = () => { el.classList.add('hidden'); el.dataset.dismissed = String(b.seq); };
+}
+
+return {  };
+})();
+</script>
+</body>
+</html>

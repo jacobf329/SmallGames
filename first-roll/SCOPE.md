@@ -3,7 +3,8 @@
 *Working title. A light, co-op, turn-based RPG that teaches the 2024
 fifth-edition rules by playing them with friends.*
 
-Status: scoping, no code yet. Builds here in `SmallGames/first-roll/` and ships to
+Status: **Phase 0 built** (see [README.md](README.md)): a co-op combat prototype.
+Builds here in `SmallGames/first-roll/` and ships to
 `jteef/public/play/first-roll/` the same way Skyline Hustle and Turbo Surfers do.
 
 ---

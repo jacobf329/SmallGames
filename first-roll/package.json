@@ -1,0 +1,14 @@
+{
+  "name": "first-roll",
+  "version": "0.1.0",
+  "description": "First Roll - a co-op turn-based RPG that teaches the 2024 fifth-edition rules.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "serve": "node tools/serve.mjs",
+    "test": "node --test test/*.test.js",
+    "bundle": "node tools/bundle.mjs",
+    "e2e": "node tools/e2e.mjs"
+  },
+  "engines": { "node": ">=18" }
+}
