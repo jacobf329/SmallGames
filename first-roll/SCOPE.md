@@ -1,7 +1,7 @@
 # First Roll: scope
 
-*Working title. A light turn-based RPG that teaches the 2024 fifth-edition rules
-by playing them.*
+*Working title. A light, co-op, turn-based RPG that teaches the 2024
+fifth-edition rules by playing them with friends.*
 
 Status: scoping, no code yet. Builds here in `SmallGames/first-roll/` and ships to
 `jteef/public/play/first-roll/` the same way Skyline Hustle and Turbo Surfers do.
@@ -10,27 +10,30 @@ Status: scoping, no code yet. Builds here in `SmallGames/first-roll/` and ships 
 
 ## 1. The idea in one paragraph
 
-You make a level 1 character, and over a short campaign of about 8 chapters
-(roughly 2–3 hours total) the game hands you the rules **one at a time, at the
-moment you need them**. Every roll shows its math: *d20 (14) + STR 3 + PB 2 = 19
-vs AC 15, hit*. Tap any number to see the rule behind it. By the end the player
-has made a character, run full combat turns, cast spells, made saves, used
-conditions, rested and leveled to 3. That's enough to sit down at a real table
-and not feel lost.
+**Two to four friends each make a level 1 hero and play a short campaign
+together online**, each on their own phone. There are about 8 chapters, roughly
+2–3 hours in all. The game hands out the rules **one at a time, at the moment the
+party needs them**. Every roll shows its math to the whole table: *Mira: d20
+(14) + STR 3 + PB 2 = 19 vs AC 15, hit*. Anyone can tap a number to see the rule
+behind it. Watching each other's turns is half the teaching, just as at a real
+table. By the end the group has made characters, run full combat turns, cast
+spells, made saves, dealt with conditions, rested and leveled to 3. That's
+enough to sit down at a real table, maybe as the same group, and not feel lost.
 
-**Success test:** someone who has never played can finish the game, then fill
-out a real 2024 character sheet and play a combat turn at a table without asking
-what to roll.
+Solo still works: one player, with AI companions in the empty seats.
+
+**Success test:** a group of newcomers finishes the campaign together, then
+fills out real 2024 character sheets and plays a combat round at a table
+without asking what to roll.
 
 ## 2. How it fits your existing setup
-
-What I found in your repos:
 
 | Thing | How it works today | What First Roll does |
 | --- | --- | --- |
 | Play hub | `jteef/public/play/index.html`. A `GAMES` array; each game is one folder with a single `index.html` | Add one tile, one folder |
-| Skyline Hustle | One self-contained 1.4 MB HTML file, no external assets, online play over WebRTC with Firestore REST signalling | Same single-file format. Online is optional and comes later |
-| Turbo Surfers | Plain ES modules, zero dependencies, `tools/bundle.mjs` inlines everything into `dist/*.html` | Same toolchain, copied and adapted |
+| Skyline Hustle online | Transport-free `room.js` runs on the **host's phone**. Friends connect over **WebRTC data channels**. Firestore (`gameRooms/{CODE}/joins`) is only a mailbox for swapping connection details. 4-letter codes, `?join=CODE` invites, seat tokens, saves, a LAN WebSocket mode | **Same architecture, ported.** A turn-based game is the easiest possible fit: tiny messages, no latency sensitivity |
+| Turbo Surfers | Plain ES modules, zero dependencies, `tools/bundle.mjs` inlines everything into one HTML file | Same toolchain |
+| Firestore rules (`jteef/dnd/firestore.rules`) | `gameRooms` create only allows `game in ['skyline','turbo','arena']` | **Add `'firstroll'`** and deploy the rules. That's the only backend change |
 | CampaignCraft (`jteef/dnd`) | Has a 2024 compendium JSON | **Not used.** See licensing below |
 
 **Deploy flow (same as the other games):**
@@ -38,11 +41,12 @@ What I found in your repos:
 ```
 node first-roll/tools/bundle.mjs       -> first-roll/dist/first-roll.html
 copy to jteef/public/play/first-roll/index.html
+add 'firstroll' to gameRooms in jteef/dnd/firestore.rules (one time), deploy rules
 add the tile to GAMES in jteef/public/play/index.html
 deploy as usual (firebase hosting)
 ```
 
-Tile: `{ emoji:"🎲", name:"First Roll", desc:"Learn to play the 2024 fifth-edition rules by playing: make a hero, roll the dice, and see why every roll works.", url:"/play/first-roll/" }`
+Tile: `{ emoji:"🎲", name:"First Roll", desc:"Learn the 2024 fifth-edition rules together: make heroes, roll the dice, and see why every roll works. Solo, or co-op with up to 4 friends.", url:"/play/first-roll/" }`
 
 ## 3. Licensing: the one hard constraint
 
@@ -52,175 +56,234 @@ Tile: `{ emoji:"🎲", name:"First Roll", desc:"Learn to play the 2024 fifth-edi
   screen and in the file header).
 - **Do not use `jteef/dnd/public/compendium/2024-*.json`.** It was built from a
   user-supplied "Complete Compendium" XML that almost certainly holds
-  non-SRD book text (it lists 66 monsters, for example, which looks like book
-  content rather than the SRD set). That's fine inside a private campaign tool
-  but not in a public game.
+  non-SRD book text. That's fine inside a private campaign tool, but not in a
+  public game.
 - **No trademarks in the branding.** Don't put "Dungeons & Dragons" or "D&D" in
   the game name or logo. "Fifth edition", "5e" and "2024 rules" in the
   description are fine.
 - Setting, characters, story and art are all original.
 
-What the SRD 5.2.1 gives us: all 12 classes (one subclass each), 9 species
-(Dragonborn, Dwarf, Elf, Gnome, Goliath, Halfling, Human, Orc, Tiefling), 4
+What the SRD 5.2.1 gives us: all 12 classes (one subclass each), 9 species, 4
 backgrounds (Acolyte, Criminal, Sage, Soldier), origin feats, weapons with
-Mastery properties, the spell list, conditions and a bestiary. That covers
-everything this game needs.
+Mastery properties, the spell list, conditions and a bestiary.
 
-## 4. What it teaches: the curriculum
+## 4. Co-op design (the main focus)
 
-Each chapter is one short scene (exploration, a talk, or a fight) built around
-one new idea. Earlier ideas keep coming back so they stick.
+### The session flow
+
+1. **Host** taps *Start a party* and gets a 4-letter code plus a share link
+   (`/play/first-roll/?join=CODE`).
+2. **Friends join** (up to 4 heroes in all) and land in the **Tavern lobby**:
+   each player builds a hero there, and everyone sees the others' choices as they
+   make them. A party-roles panel ("no healer yet") teaches why parties mix
+   classes.
+3. Host taps *Begin*. Empty seats can be filled with **AI companions** (pre-made
+   heroes) so encounters stay balanced for 4.
+4. Play the chapter. The host's phone **autosaves after every action**.
+5. Stop at any point. Next time the host taps *Continue campaign*, and friends
+   rejoin with the same code link; their **seat token** (kept in their browser)
+   puts them back on their hero.
+
+### Who does what during play
+
+| Moment | How it works in co-op | What it teaches |
+| --- | --- | --- |
+| **Combat** | Initiative order. On your turn, your phone gets the board and action bar; everyone else watches live and sees each roll's Why? breakdown | Turn structure, by watching three other people take turns |
+| **Reactions** | Off-turn prompt with a short timer: *"Goblin is leaving your reach: Opportunity Attack?"* | Reactions happen on other people's turns |
+| **Help action** | Help a friend; they see the Advantage you gave them arrive | Teamwork rules |
+| **Skill challenges** | The game asks "who checks?" The party picks the best person, uses a **Group Check**, or someone takes the Help action | Group checks, picking the right character |
+| **Story choices** | Party vote; ties go to the host. Shown as a short poll | Table decision-making |
+| **Loot** | A shared pool, claimed in turn | Party economy |
+| **Rests** | Anyone proposes a Short or Long Rest; it starts when everyone accepts | Rest rules and Hit Point Dice |
+
+### Keeping waits short
+
+Waiting for other players is the biggest risk in co-op turn-based play.
+
+- Monster turns resolve fast, as one compact animated step each.
+- The **Coach** gives a suggested action, so a new player never stares at the
+  screen.
+- An optional **turn timer** (off by default). When it runs out, the turn ends
+  with Dodge, which teaches Dodge.
+- **Table talk**: tap-to-ping a square, quick emoji reactions, and preset
+  "plan" chips ("I'll take the archer", "Need healing").
+- Each player sets their **own coaching level**, so a veteran friend can turn
+  hints off while a newcomer keeps Coach on.
+
+### Dice
+
+The host rolls every die with a seeded RNG. That keeps one truth and makes
+cheating pointless, and every roll is broadcast as an explained record.
+**"Use my own dice"** works per player: on your roll your phone asks for the
+number you rolled at your real table, and the host trusts it, as a real table
+would.
+
+### Solo
+
+The same game with one seat. Companions are AI-controlled by default, or set to
+"you control" (the earlier default) to practise every class.
+
+## 5. What it teaches: the curriculum
+
+Each chapter is one short scene (exploration, a talk, or a fight) built around one
+new idea. Earlier ideas keep coming back.
 
 | # | Chapter teaches | 2024 rules covered |
 | --- | --- | --- |
-| 0 | **Rolling the d20** | D20 Tests (ability checks, saves, attacks), modifiers, DC, Advantage / Disadvantage, Heroic Inspiration |
-| 1 | **Making your hero** | Class → Background (its +2/+1 or +1/+1/+1 ability increases, Origin feat, skills) → Species → equipment. Point-buy or standard array. Proficiency Bonus |
+| 0 | **Rolling the d20** (in the lobby, while friends join) | D20 Tests (ability checks, saves, attacks), modifiers, DC, Advantage / Disadvantage, Heroic Inspiration |
+| 1 | **Making your hero** | Class → Background (its +2/+1 or +1/+1/+1 ability increases, Origin feat, skills) → Species → equipment. Standard array or point-buy. Proficiency Bonus. Party roles |
 | 2 | **Your first fight** | Initiative, a turn = move + action + bonus action (+ reaction), Attack action, attack roll vs AC, damage dice, HP |
-| 3 | **Weapon Mastery** | Mastery properties (Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex), Two-Weapon fighting with Nick |
-| 4 | **Positioning** | 5-ft squares, Opportunity Attacks, Disengage, Dash, Dodge, cover, ranged in melee, Help |
-| 5 | **Out of combat** | Skills, Search / Study / Influence / Utilize actions, Hide (DC 15 Stealth, Invisible), passive Perception, group checks |
+| 3 | **Weapon Mastery and teamwork** | Mastery properties (Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex), Help, flanking positions *without* the optional flanking rule |
+| 4 | **Positioning** | 5-ft squares, Opportunity Attacks, Disengage, Dash, Dodge, cover, ranged attacks in melee |
+| 5 | **Out of combat** | Skills, Search / Study / Influence / Utilize actions, Hide (DC 15 Stealth, Invisible), passive Perception, Group Checks |
 | 6 | **Magic** | Cantrips, spell slots, spell attack vs saving throw, spell save DC, Concentration, the one-slot-spell-per-turn rule, rituals |
 | 7 | **Conditions and danger** | Prone, Grappled (2024 unarmed grapple save), Frightened, Poisoned, Restrained, Exhaustion (−2 per level), surprise (Disadvantage on Initiative) |
-| 8 | **Rest and grow** | Short / Long Rest, Hit Point Dice, Death Saving Throws, level up to 2 and 3, subclass choice at 3 |
+| 8 | **Rest and grow** | Short / Long Rest, Hit Point Dice, Death Saving Throws (and friends stabilising you), level up to 2 and 3, subclass at 3 |
 
-A **Rules Glossary** fills up as chapters unlock terms. That gives the player a
-plain-language reference they've already earned, with links back to the
-moment each rule first came up.
+A shared **Rules Glossary** fills up as chapters unlock terms, with links back to
+the moment each rule first came up.
 
-## 5. Gameplay
+## 6. Classes, party and screens
 
-### Party
+**MVP classes (levels 1–3):** Fighter (Champion), Rogue (Thief), Cleric (Life
+Domain), Wizard (Evoker). That's one of each classic role, so a full party of 4 is
+a natural first group. Duplicate classes are allowed. The other 8 SRD classes
+come after launch.
 
-You create **one hero** (this teaches character building), and **two pre-made
-companions** join in chapter 2. You control all three in combat, which gets you
-hands-on with a martial class, a caster and a support class.
+**Encounter scaling:** encounters are built with the 2024 XP budget for the
+actual party size (1–4 heroes, counting AI companions).
 
-### MVP class set (levels 1–3)
+**Screens:**
 
-| Class | Why it's in | SRD subclass at 3 |
-| --- | --- | --- |
-| Fighter | Simplest turn, teaches Mastery, Second Wind, Action Surge | Champion |
-| Rogue | Sneak Attack, Cunning Action, Hide, bonus actions | Thief |
-| Cleric | Saves vs attacks, healing, Concentration | Life Domain |
-| Wizard | Slots, cantrips, rituals, spellbook | Evoker |
+1. **Lobby / Tavern**: room code, seats, hero builder, party-roles panel.
+2. **Map / story**: chapter node map, text scenes, votes, skill checks with the
+   DC and odds shown.
+3. **Combat board**: portrait-first square grid (about 8×10), tokens in player
+   colours, movement range in 5-ft squares, threat zones for Opportunity
+   Attacks, pings.
+4. **Action bar**: Action / Bonus Action / Reaction / Movement as four budget
+   chips that empty as you use them.
+5. **Dice tray + Why? panel**: on everyone's screen for every roll.
+6. **Character sheet**: laid out like a real 2024 sheet. Tap a party member to
+   see theirs.
 
-The other 8 classes come after launch (each about one session of data plus a few
-rules hooks).
+## 7. Technical design
 
-### The screens
-
-1. **Map / story**: a node map of the chapter. Text scenes with choices; some
-   choices are skill checks with the DC and odds shown.
-2. **Combat board**: a small square grid (about 8×10, fits a phone in portrait).
-   Tokens, movement range highlighted in 5-ft squares, threat zones shown for
-   Opportunity Attacks.
-3. **Action bar**: Action / Bonus Action / Reaction / Movement as four "budget"
-   chips that empty as you use them. This makes the turn structure visible.
-4. **Dice tray + "Why?" panel**: animated dice, then the full breakdown. Every
-   number links to its rule.
-5. **Character sheet**: laid out like a real 2024 sheet so the skill carries over
-   to the table.
-
-### Coaching levels (player picks, can change anytime)
-
-- **Coach**: explains every roll and suggests a good action each turn.
-- **Hints**: explains when tapped. No suggestions.
-- **Table**: no help. Optional **"use my own dice"**: you roll real dice and type
-  the result, so you practise the physical habit too.
-
-## 6. Technical design
-
-Same philosophy as Turbo Surfers: **plain JS modules, zero dependencies, no asset
-files, one HTML out.**
+Same philosophy as your other games: **plain JS modules, zero dependencies, no
+asset files, one HTML out.**
 
 ```
 first-roll/
   SCOPE.md
   index.html, style.css
-  src/rules/      pure rules engine, no DOM
-    dice.js         seeded RNG (reuse shared/rng.js mulberry32), roll parsing "2d6+3"
+  src/rules/      pure rules engine, no DOM, no network
+    dice.js         seeded RNG (mulberry32), "2d6+3" parsing
     d20.js          D20 Tests, adv/dis, Heroic Inspiration
     character.js    derive stats: mods, PB, AC, HP, saves, skills, spell DC
     combat.js       initiative, turn budget, attacks, damage, resistances
     actions.js      the 2024 action list (Attack, Dash, Disengage, Dodge, Help,
                     Hide, Influence, Magic, Ready, Search, Study, Utilize)
-    mastery.js      the 8 mastery properties
-    conditions.js   the condition list and their effects as modifiers
-    spells.js       slots, concentration, save/attack spells, area templates
-    rest.js         rests, Hit Point Dice, death saves, level up
-  src/data/       SRD 5.2.1 subset as JS objects (classes, species, backgrounds,
-                  feats, weapons, armor, ~40 spells, ~15 monsters)
-  src/game/       chapters, encounters, monster AI, save/load (localStorage)
-  src/ui/         board, action bar, dice tray, why-panel, sheet, glossary, story
-  test/           node --test, rules engine unit tests
+    mastery.js, conditions.js, spells.js, rest.js
+  src/data/       SRD 5.2.1 subset (classes, species, backgrounds, feats,
+                  weapons, armor, ~40 spells, ~15 monsters)
+  src/game/
+    room.js         THE authoritative party: seats, lobby, campaign state,
+                    turn order, votes, saves. Transport-free, like Skyline's
+    campaign.js     chapters, scenes, encounters
+    ai.js           monster AI and AI companions
+  src/net/        ported from Skyline Hustle
+    online.js       Firestore-signalled WebRTC (host + join), framing/chunking
+    lan.js          WebSocket for a local server (optional)
+    local.js        in-tab loopback transport, for solo and tests
+  src/ui/         lobby, board, action bar, dice tray, why-panel, sheet,
+                  glossary, story, votes, pings
+  test/           node --test (rules engine, room protocol)
   tools/bundle.mjs
   dist/first-roll.html
 ```
 
-**The key design decision is that the rules engine explains itself.** Every
-function that resolves something returns a structured record, not just a number:
+### Two design decisions carry the whole thing
+
+**1. The rules engine explains itself.** Every resolution returns a structured
+record, not just a number:
 
 ```js
 { kind: 'attack', who: 'Mira', target: 'Goblin Warrior',
   die: { sides: 20, rolls: [14, 6], kept: 14, mode: 'advantage', why: 'Target is Prone' },
   mods: [ { label: 'STR', value: 3 }, { label: 'Proficiency', value: 2 } ],
-  total: 19, vs: { label: 'AC', value: 15 }, outcome: 'hit',
-  rule: 'attack-roll' }
+  total: 19, vs: { label: 'AC', value: 15 }, outcome: 'hit', rule: 'attack-roll' }
 ```
 
-The UI renders these records as the "Why?" panel, the combat log and the glossary
-links. Teaching comes straight out of the engine, so the explanations can't
-drift from what the game actually did. Because the engine is pure and seeded,
-it can be unit-tested against worked examples from the rules.
+The UI renders these records as the Why? panel, the log and the glossary links,
+so the explanations can't drift from what the game actually did.
 
-**Monster AI:** simple utility scoring (target the weakest in reach, use
-mastery and conditions, retreat when bloodied). Enough to feel fair, but it
-plays by the same rules and logs the same records, so the player can tap a
-monster's turn and see why it hit.
+**2. These records are also the network protocol.** Players send *intents*
+(`{ t:'act', action:'attack', with:'longsword', target:'g2' }`). The host's
+`room.js` validates each intent against the rules, resolves it, and broadcasts
+the resolution records plus a small state patch. All phones animate the same
+records. Messages are tiny (well under 1 KB), and a turn-based game doesn't care
+about 200 ms of latency, so it's a very easy load for Skyline's transport.
 
-**Visuals and sound:** SVG/emoji tokens and procedurally drawn tiles, synthesized
-dice sounds (the Turbo Surfers `audio.js` approach). Size target: under 1 MB.
+### Networking details
 
-**Saving:** localStorage, wrapped in try/catch, with an export/import code as a
-backup.
+- **Topology:** a star, with the host's browser as the authority. Skyline's
+  `online.js` is reused: offer/answer through `gameRooms/{CODE}/joins`, STUN
+  only, and the mailbox is deleted when the host leaves.
+- **Seats:** each join gets `{ pid, token }`, and the token is stored in the
+  player's localStorage. Rejoining with the token reclaims the seat and hero. A
+  dropped player's hero switches to the AI companion until they're back, so
+  nobody is stuck waiting on them.
+- **Saves:** the host keeps the campaign (all heroes and progress) in
+  localStorage after every action, with an export code as a backup. Each player
+  also keeps a copy of **their own hero**, so they can bring that hero into
+  another friend's party.
+- **Host leaves:** the session pauses for everyone ("Waiting for host…"). It
+  resumes when the host reopens and continues. There's no host migration in v1.
+- **Validation:** the host rejects intents that break the rules or come out of
+  turn, so a modified client can't break the game.
 
-## 7. Phases
+**Visuals and sound:** SVG/emoji tokens, procedural tiles, synthesized dice
+sounds. Size target: under 1.2 MB.
+
+## 8. Phases
+
+Co-op is built in from the first prototype rather than added on later.
 
 | Phase | Delivers | Rough size |
 | --- | --- | --- |
-| **0. Combat prototype** | Rules engine core (dice, d20, character, combat, actions), one Fighter vs 3 goblins on the grid, Why? panel working, engine tests. Plays in the browser from `first-roll/index.html` | 1–2 sessions |
-| **1. Vertical slice** | Chapters 0–3, character creator (4 classes, 9 species, 4 backgrounds), companions, Coach mode, save/load, bundle and deploy to `/play/first-roll/` as **early access** | 3–4 sessions |
-| **2. Full curriculum** | Chapters 4–8, spells, conditions, rests, level 2–3 and subclasses, glossary, all three coaching levels, "use my own dice" | 4–6 sessions |
-| **3. Polish and extras** | Sound, animation, accessibility pass (colour-blind-safe, screen-reader log), credits/attribution, replayable "Skirmish" mode with random encounters | 2–3 sessions |
-| **Later (optional)** | Remaining 8 classes; 2–4 player online co-op using Skyline's WebRTC + Firestore signalling; AI narrator for scene text | separate scope |
+| **0. Co-op combat prototype** | Rules engine core, `room.js` with turn order and intents, the in-tab loopback transport, then the ported Skyline WebRTC transport. **Two phones fight 3 goblins together** with a Fighter and a Rogue. Why? panel on both screens. Engine and room tests, plus a two-browser Playwright test | 2–3 sessions |
+| **1. Vertical slice (early access)** | Lobby with hero builder (4 classes, 9 species, 4 backgrounds), chapters 0–3, reactions, Help, votes, pings, AI companions for empty or dropped seats, saves and rejoin. Firestore rule updated. Deployed to `/play/first-roll/` | 4–5 sessions |
+| **2. Full curriculum** | Chapters 4–8, spells, conditions, rests, death saves, level 2–3 and subclasses, shared glossary, per-player coaching levels, "use my own dice", turn timer | 4–6 sessions |
+| **3. Polish** | Sound, animation, accessibility pass (colour-blind-safe player colours, screen-reader log), credits and attribution, replayable **Skirmish** mode (random co-op encounters for an evening), LAN mode | 2–3 sessions |
+| **Later** | Remaining 8 classes; levels 4–5; TURN relay for strict networks; host migration; AI narrator for scene text | separate scope |
 
 A "session" is one focused build conversation like the ones that made Turbo
 Surfers.
 
-## 8. Risks and how we handle them
+## 9. Risks and how we handle them
 
 | Risk | Mitigation |
 | --- | --- |
-| Rules scope creep (5e is huge) | Hard cap: 4 classes, levels 1–3, ~40 spells, ~15 monsters for launch. Anything else goes in "Later" |
-| Teaching 2014 rules by accident | Data comes only from SRD 5.2.1. Engine tests cite the 2024 rule they check. Watch the known differences: backgrounds give the ability increases, Weapon Mastery, Exhaustion, surprise, grapple, Hide, bonus-action spell rule |
-| Licensing | SRD-only data, CC-BY attribution, no trademarks in branding, original story/art |
-| Grid tactics on a phone | Portrait-first 8×10 grid, tap-to-select, tap-to-move with a confirm, big targets. Test on a phone at Phase 0 |
-| Too much text | One new idea per chapter. Explanations are one line by default and expand on tap |
+| Waiting around in co-op | Fast monster turns, Coach suggestions, reactions and pings on other people's turns, optional timer, drop-in AI for absent players |
+| Some networks can't connect (STUN only, no TURN), as with Skyline | Clear "couldn't connect" message with a tip to try another network. LAN mode. Adding TURN is a "Later" item if friends hit it often |
+| Host's phone sleeps or closes | Autosave every action, Wake Lock while hosting, everyone pauses and resumes cleanly |
+| Rules scope creep (5e is huge) | Hard cap: 4 classes, levels 1–3, ~40 spells, ~15 monsters for launch |
+| Teaching 2014 rules by accident | SRD 5.2.1 data only. Tests cite the 2024 rule they check. Watch the known differences: backgrounds give the ability increases, Weapon Mastery, Exhaustion, surprise, grapple, Hide, the bonus-action spell rule |
+| Licensing | SRD-only data, CC-BY attribution, no trademarks in branding, original story and art |
+| Grid tactics on a phone | Portrait 8×10 grid, tap-to-select, tap-to-move with a confirm. Tested on real phones in Phase 0 |
 
-## 9. Decisions I need from you
+## 10. Decisions
 
-Defaults are in **bold**; I'll go with them unless you say otherwise.
+Settled:
 
-1. **Audience**: **teens/adults new to the game**, or kids (your HGL site
-   suggests that might matter; it would change reading level and tone).
-2. **Name**: "First Roll" is a placeholder.
-3. **Party**: **your hero + 2 companions you control**, or a solo hero only
-   (simpler, but you learn one class).
-4. **Online co-op**: **later**, or in scope for launch.
-5. **Where the source lives**: **`SmallGames/first-roll/`** (Turbo Surfers stays at
-   the repo root), or its own repo.
+- **Audience:** teens and adults who are new to the game.
+- **Name:** "First Roll" (placeholder until something better comes up).
+- **Party:** each player brings one hero, and AI companions fill empty seats (in
+  solo they can be set to "you control").
+- **Co-op:** the main focus, 1–4 players, built in from Phase 0.
+- **Source:** `SmallGames/first-roll/`.
 
-Once those are settled, Phase 0 can start straight away.
+Nothing is blocking Phase 0.
 
 ---
 
