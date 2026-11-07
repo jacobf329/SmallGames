@@ -4,13 +4,17 @@
 // on each of the player's turns every target card, the Misty Step picker and
 // the character sheets are drawn too. Any exception fails the run.
 //
-//   node tools/ui-smoke.mjs [fighter|rogue|cleric|wizard] [species]
+//   node tools/ui-smoke.mjs [fighter|rogue|cleric|wizard] [species] [--bundle]
+//
+// --bundle runs the app from dist/first-roll.html (run tools/bundle.mjs first).
 //
 // It catches broken templates and missing fields; it can't see layout. Use
 // tools/e2e.mjs (Playwright) for that.
 
-const cls = process.argv[2] || 'cleric';
-const species = process.argv[3] || 'human';
+const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const cls = args[0] || 'cleric';
+const species = args[1] || 'human';
+const fromBundle = process.argv.includes('--bundle');
 
 // ------------------------------------------------------------ fake DOM ----
 class El {
@@ -63,7 +67,17 @@ const { defaultSpec } = await import('../src/rules/character.js');
 const { SCENES } = await import('../src/game/campaign.js');
 const { sheetHtml } = await import('../src/ui/sheet.js');
 const { detail } = await import('../src/ui/explain.js');
-await import('../src/ui/main.js');
+if (fromBundle) {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const html = fs.readFileSync(new URL('../dist/first-roll.html', import.meta.url), 'utf8');
+  const code = [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].pop()[1];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-smoke-'));
+  const file = path.join(dir, 'app.mjs');
+  fs.writeFileSync(file, code);
+  await import(file);
+} else await import('../src/ui/main.js');
 const app = globalThis.__FR;
 const $ = (id) => document.getElementById(id);
 const flush = () => new Promise((r) => setTimeout(r, 0));

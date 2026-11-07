@@ -354,7 +354,7 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
     </div>
     <p id="home-msg" class="msg"></p>
     <button id="btn-lesson-home" class="btn ghost small">New to the d20? Try the dice lesson</button>
-    <p class="fine">Early access: chapters 0 to 3. Play solo with AI companions, or co-op with up to 4 friends.
+    <p class="fine">Playtest build: chapters 0 to 8, levels 1 to 3. Play solo with AI companions, or co-op with up to 4 friends.
       Rules from the SRD 5.2.1 (CC-BY-4.0). <a href="#" id="lnk-credits">Credits</a></p>
   </div>
 </section>
@@ -6813,7 +6813,7 @@ function targetCard(b, me, T) {
       const intent = { a: 'cast', spell: sp.id, target: T.id };
       if (sp.kind === 'heal' || (sp.kind === 'stabilize' && T.hp <= 0 && !T.dead && !T.stable)) {
         const ok = sp.range === 5 ? self || near : inRange(sp.range);
-        const why = !ok ? `Out of range (${sp.range === 5 ? 'touch' : `${sp.range} ft`}).` : c.ok ? `${sp.kind === 'heal' ? `Heals ${sp.dice} + your modifier${me.discipleOfLife ? ` + ${R0('disciple-of-life', 'Disciple of Life')}` : ''}` : 'Makes them Stable'} · ${tag}` : esc(c.error);
+        const why = !ok ? `Out of range (${sp.range === 5 ? 'touch' : `${sp.range} ft`}).` : c.ok ? `${sp.kind === 'heal' ? `Heals ${sp.dice} + your modifier${me.discipleOfLife && c.pay === 'slot' ? ` + ${R0('disciple-of-life', 'Disciple of Life')}` : ''}` : 'Makes them Stable'} · ${tag}` : esc(c.error);
         rows += row(sp.name, intent, ok && c.ok, why, true, upButtons(b, me, sp, intent, ok && c.ok));
       } else if (sp.kind === 'cure') {
         const cond = (T.conds || []).find((x) => sp.cures.includes(x.id));

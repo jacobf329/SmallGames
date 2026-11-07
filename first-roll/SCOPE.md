@@ -3,7 +3,7 @@
 *Working title. A light, co-op, turn-based RPG that teaches the 2024
 fifth-edition rules by playing them with friends.*
 
-Status: **Phase 1 built** (see [README.md](README.md)): early access, chapters 0 to 3, co-op for 1–4 players.
+Status: **Phase 2 built** (see [README.md](README.md)): chapters 0 to 8, levels 1 to 3, co-op for 1–4 players. What Phase 2 left for Phase 3 is listed under section 8.
 Builds here in `SmallGames/first-roll/` and ships to
 `jteef/public/play/first-roll/` the same way Skyline Hustle and Turbo Surfers do.
 
@@ -257,6 +257,30 @@ Co-op is built in from the first prototype rather than added on later.
 | **2. Full curriculum** | Chapters 4–8, spells, conditions, rests, death saves, level 2–3 and subclasses, shared glossary, per-player coaching levels, "use my own dice", turn timer | 4–6 sessions |
 | **3. Polish** | Sound, animation, accessibility pass (colour-blind-safe player colours, screen-reader log), credits and attribution, replayable **Skirmish** mode (random co-op encounters for an evening), LAN mode | 2–3 sessions |
 | **Later** | Remaining 8 classes; levels 4–5; TURN relay for strict networks; host migration; AI narrator for scene text | separate scope |
+
+### What Phase 2 built, and what moved to Phase 3
+
+Built: chapters 4 to 8 (High Ground, Asking Around, Magic in the Cellar, Bad
+Air and Worse Company, The Barrow); levels 2 and 3 with each class's features
+and one subclass each (Champion, Thief, Life Domain, Evoker); 11 new spells,
+Concentration and casting with a higher slot; the Shield reaction; cover and
+line of sight; Prone, Restrained, Grappled, Frightened, Poisoned, Paralyzed,
+Incapacitated and Exhaustion; Hide and Shove; seven new monsters; saving-throw
+scenes, Short and Long Rests with Hit Point Dice; the party's state carried
+between fights; choices that set flags (a back door you found, cultists you
+talked out of it); the Rules book; a per-player tips toggle; the host's turn
+timer.
+
+Moved to Phase 3:
+
+- **"Use my own dice"**: typing in a physical roll instead of the app rolling.
+- **Coaching levels** beyond on/off (for example, tips only when asked).
+- **A glossary that fills up as chapters unlock terms**, with links back to
+  where each rule first came up. Phase 2 ships the whole Rules book at once.
+- **Grappling by heroes** (monsters can grapple, heroes can only escape),
+  the Search, Study, Influence and Utilize actions in fights, Topple and Nick
+  masteries, rituals, and one more subclass per class.
+- **A Skirmish mode** of random fights, as already planned.
 
 A "session" is one focused build conversation like the ones that made Turbo
 Surfers.
