@@ -12,7 +12,15 @@ const el = (tag, attrs = {}, text) => {
   return n;
 };
 
-const EFFECT_ICONS = { dodge: '🛡', sap: '💫', vex: '🎯', helped: '🤝', disengage: '💨' };
+const EFFECT_ICONS = {
+  dodge: '🛡', sap: '💫', vex: '🎯', helped: '🤝', disengage: '💨', guided: '✨', chill: '❄️', shield: '🔰',
+  aim: '🏹', bless: '🙏', faith: '⛨',
+};
+// Conditions, shown on the token.
+export const COND_ICONS = {
+  prone: '🛌', restrained: '🕸', grappled: '✊', frightened: '😱', poisoned: '🤢', paralyzed: '🧊',
+  incapacitated: '😵', hidden: '👤', commanded: '🙇',
+};
 
 export function createBoard(svg, onTap) {
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -29,7 +37,7 @@ export function createBoard(svg, onTap) {
     if (x >= 0 && y >= 0 && x < W && y < H) onTap(x, y);
   });
 
-  function drawTerrain(walls) {
+  function drawTerrain(walls, cover = []) {
     terrain.innerHTML = '';
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
@@ -41,6 +49,12 @@ export function createBoard(svg, onTap) {
       terrain.append(el('rect', { x: x + 0.04, y: y + 0.04, width: 0.92, height: 0.92, rx: 0.18, class: 'wall' }));
       terrain.append(el('text', { x: x + 0.5, y: y + 0.68, class: 'wallmoji' }, i % 2 ? '🌲' : '🪨'));
     });
+    // Low walls and crates: they block movement but not sight, and give Half Cover.
+    for (const k of cover) {
+      const [x, y] = k.split(',').map(Number);
+      terrain.append(el('rect', { x: x + 0.1, y: y + 0.3, width: 0.8, height: 0.5, rx: 0.1, class: 'cover' }));
+      terrain.append(el('text', { x: x + 0.5, y: y + 0.66, class: 'covermoji' }, '🧱'));
+    }
   }
 
   function tokenNode(c) {
@@ -65,8 +79,8 @@ export function createBoard(svg, onTap) {
   // view: { b, colors{id:color}, curId, reach[], preview{path,oas}, suggest{x,y}, mine }
   function render(view) {
     const { b } = view;
-    const wk = b.walls.join(';');
-    if (wk !== wallsKey) { drawTerrain(b.walls); wallsKey = wk; }
+    const wk = `${b.walls.join(';')}|${(b.cover || []).join(';')}`;
+    if (wk !== wallsKey) { drawTerrain(b.walls, b.cover || []); wallsKey = wk; }
 
     over.innerHTML = '';
     for (const s of view.reach || []) over.append(el('rect', { x: s.x + 0.03, y: s.y + 0.03, width: 0.94, height: 0.94, rx: 0.12, class: 'reach' }));
@@ -86,6 +100,11 @@ export function createBoard(svg, onTap) {
     if (view.cone && view.mine) {
       for (const q of coneSquares(b.creatures[view.mine], view.cone)) over.append(el('rect', { x: q.x + 0.05, y: q.y + 0.05, width: 0.9, height: 0.9, rx: 0.1, class: 'cone' }));
     }
+    for (const q of view.picks || []) over.append(el('rect', { x: q.x + 0.06, y: q.y + 0.06, width: 0.88, height: 0.88, rx: 0.2, class: 'pick' }));
+    for (const e of b.effects) {
+      if (e.type !== 'spiritual') continue;
+      over.append(el('text', { x: e.x + 0.5, y: e.y + 0.66, class: 'spirit' }, '🗡️'));
+    }
     if (view.target) {
       const t = b.creatures[view.target];
       over.append(el('circle', { cx: t.x + 0.5, cy: t.y + 0.5, r: 0.49, class: 'aim' }));
@@ -94,7 +113,7 @@ export function createBoard(svg, onTap) {
     const fxBy = {};
     for (const e of b.effects) {
       const who = e.type === 'dodge' || e.type === 'disengage' ? e.by : e.target;
-      if (who) (fxBy[who] ||= []).push(EFFECT_ICONS[e.type]);
+      if (who && EFFECT_ICONS[e.type]) (fxBy[who] ||= []).push(EFFECT_ICONS[e.type]);
     }
     const seen = new Set();
     for (const c of Object.values(b.creatures)) {
@@ -113,8 +132,9 @@ export function createBoard(svg, onTap) {
       const frac = Math.max(0, c.hp / c.hpMax);
       hp.setAttribute('width', (0.76 * frac).toFixed(3));
       hp.setAttribute('class', `hp ${frac <= 0.5 ? 'low' : ''}`);
-      fxi.textContent = (fxBy[c.id] || []).join('');
-      lbl.textContent = c.side === 'foe' ? (c.kind === 'goblin-boss' ? 'BOSS' : c.name.replace('Goblin ', 'G')) : '';
+      const conds = [...new Set((c.conds || []).map((x) => COND_ICONS[x.id]).filter(Boolean))];
+      fxi.textContent = [...conds, ...(c.conc ? ['🔮'] : []), ...(fxBy[c.id] || [])].slice(0, 3).join('');
+      lbl.textContent = c.side === 'foe' ? shortLabel(c) : '';
     }
     for (const [id, n] of nodes) if (!seen.has(id)) { n.remove(); nodes.delete(id); }
   }
@@ -127,4 +147,12 @@ export function createBoard(svg, onTap) {
   }
 
   return { render, ping };
+}
+
+// A tiny label over a monster: "BOSS", "G2", "Wolf 1" -> "W1".
+function shortLabel(c) {
+  if (c.kind === 'goblin-boss') return 'BOSS';
+  const m = /^(.*?)\s+(\d+)$/.exec(c.name);
+  if (!m) return c.name.length > 6 ? c.name.split(' ').map((w) => w[0]).join('') : c.name;
+  return `${m[1].split(' ').map((w) => w[0]).join('')}${m[2]}`;
 }

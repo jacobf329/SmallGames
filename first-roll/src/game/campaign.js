@@ -217,7 +217,7 @@ export const SCENES = {
   'c5-level': {
     chapter: 5, kind: 'level', level: 2, title: 'Level 2', next: 'c6-night',
     text: [`You've fought goblins and wolves and tracked them home. Everyone in the party reaches level 2.`],
-    lesson: 'Leveling up: your Hit Point maximum goes up by your Hit Die\'s average plus your Constitution modifier, and you gain your class\'s level 2 features. Tap your hero to see what\'s new.',
+    lesson: 'Leveling up: your Hit Point maximum goes up by your Hit Die\'s fixed value (half the die, plus one) plus your Constitution modifier, and you gain your class\'s level 2 features. Tap your hero to see what\'s new.',
   },
 
   // ------------------------------------------ chapter 6: Magic in the Cellar

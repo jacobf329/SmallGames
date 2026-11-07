@@ -9,10 +9,10 @@ import { Host, LocalNet, RtcNet, onlineSupported, normCode } from '../net/online
 import { buildHero, spellList } from '../rules/character.js';
 import { CLASSES, SPELLS, MASTERIES, signed } from '../rules/data.js';
 import {
-  previewMove, reachableSquares, attackOptions, canAttack, canCast, coneTargets, attackFactors,
-  hitChance, hitBonus, saveChance, spellAttack, spellDC,
+  previewMove, reachableSquares, attackOptions, canAttack, canCast, coneTargets, cubeTargets, attackFactors,
+  hitChance, hitBonus, saveChance, spellAttack, spellDC, scaled, speedOf, acAgainst,
 } from '../rules/combat.js';
-import { occupantAt, cheb } from '../rules/grid.js';
+import { occupantAt, cheb, lineOfSight, canEndAt, onBoard } from '../rules/grid.js';
 import { coach } from '../rules/ai.js';
 import { SCENES } from '../game/campaign.js';
 import { createBoard } from './board.js';
@@ -24,11 +24,12 @@ import { openBuilder } from './builder.js';
 import { openLesson, LESSON_DONE } from './lesson.js';
 import { renderStory } from './story.js';
 
-const K = { name: 'fr.name', save: 'fr.save2', solo: 'fr.save2.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest', spec: 'fr.lastSpec' };
+const K = { name: 'fr.name', save: 'fr.save2', solo: 'fr.save2.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest', spec: 'fr.lastSpec', coach: 'fr.coach' };
+const coachOn = () => ls.get(K.coach) !== 'off';
 
 const app = {
   mode: null, room: null, host: null, net: null, code: null, timer: null,
-  me: null, S: null, lastSeq: 0, preview: null, target: null,
+  me: null, S: null, lastSeq: 0, preview: null, target: null, pick: null, turnEndsAt: 0,
   toasts: [], toastBusy: false, wake: null, status: '', reactUntil: 0,
   overlay: null,            // 'build' | 'lesson' while one of those screens is open
 };
@@ -207,7 +208,7 @@ function takeRecords(prev, S) {
   if (fresh) return;
   for (const r of news) {
     if (ROLLED.has(r.kind)) queueToast(r);
-    if (r.kind === 'move' || r.kind === 'turn') { app.preview = null; app.target = null; }
+    if (r.kind === 'move' || r.kind === 'turn') { app.preview = null; app.target = null; app.pick = null; }
     if (r.kind === 'attack' && r.after?.dead) app.target = null;
   }
 }
@@ -269,7 +270,7 @@ function renderStoryScreen(S) {
   $('story-join').innerHTML = !mine && !full
     ? '<div class="joinbar">You\'re watching. <button class="btn small primary" id="btn-join-hero">Build a hero and join in</button></div>' : '';
   if ($('btn-join-hero')) $('btn-join-hero').onclick = () => buildMine(null);
-  renderStory({ S, me: app.me, isHost: isHost(), send, openSheet });
+  renderStory({ S, me: app.me, isHost: isHost(), send, openSheet, openRulesBook });
 }
 
 // --------------------------------------------------------------- lobby ----
@@ -282,7 +283,7 @@ function renderLobbyShell() {
 function heroSummary(spec, name) {
   const h = buildHero(spec, { name });
   return `<div class="herosum"><span class="em">${h.emoji}</span><span><b>${esc(h.name)}</b><span class="sub">${esc(h.species)} ${esc(h.className)} · ${esc(h.background)}</span>
-    <span class="sub">AC ${h.ac} · HP ${h.hpMax} · Speed ${h.speed} ft${h.casting?.slots ? ` · ${h.casting.slots.max} spell slots` : ''}</span></span></div>`;
+    <span class="sub">AC ${h.ac} · HP ${h.hpMax} · Speed ${h.speed} ft${h.casting?.slots?.[1] ? ` · ${h.casting.slots[1].max} spell slots` : ''}</span></span></div>`;
 }
 
 function renderLobby(S) {
@@ -318,6 +319,11 @@ function renderLobby(S) {
   $('companions-row').innerHTML = isHost() ? `<span class="host-label">AI companions</span><div class="seg">${['auto', 0, 1, 2, 3].map((n) =>
     `<button data-comp="${n}" class="${String(comp) === String(n) ? 'on' : ''}">${n === 'auto' ? 'Auto' : n}</button>`).join('')}</div>` : '';
   for (const el of document.querySelectorAll('[data-comp]')) el.onclick = () => send({ t: 'companions', n: el.dataset.comp === 'auto' ? 'auto' : +el.dataset.comp });
+  if (isHost()) {
+    $('companions-row').insertAdjacentHTML('beforeend', `<span class="host-label">Turn timer</span><div class="seg">${[0, 30, 60, 90].map((n) =>
+      `<button data-timer="${n}" class="${(S.timer || 0) === n ? 'on' : ''}">${n ? `${n}s` : 'Off'}</button>`).join('')}</div>`);
+    for (const el of document.querySelectorAll('[data-timer]')) el.onclick = () => send({ t: 'timer', s: +el.dataset.timer });
+  }
 
   $('btn-start').classList.toggle('hidden', !isHost());
   $('btn-start').disabled = !S.party.length;
@@ -355,6 +361,11 @@ function onTap(x, y) {
     return;
   }
   const me = b.creatures[myHeroId()];
+  if (app.pick) {
+    if (app.pick.squares.some((q) => q.x === x && q.y === y)) act({ a: 'cast', spell: app.pick.spell, x, y });
+    else { app.pick = null; renderBattle(S); }
+    return;
+  }
   if (occ) {
     app.preview = null;
     app.target = app.target === occ.id ? null : occ.id;
@@ -373,7 +384,7 @@ function doMove(x, y) {
   send({ t: 'act', intent: { a: 'move', x, y } });
   app.preview = null;
 }
-const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; };
+const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; app.pick = null; };
 
 function renderBattle(S) {
   const b = S.battle;
@@ -388,6 +399,9 @@ function renderBattle(S) {
   turnEl.classList.toggle('me', mt);
   turnEl.textContent = b.over ? (b.over === 'victory' ? 'Victory!' : 'Defeat')
     : mt ? 'Your turn' : `${cur?.name}'s turn${cur?.side === 'hero' && S.control === 'ai' ? ' (AI)' : ''}`;
+  app.turnEndsAt = S.turnEndsIn ? Date.now() + S.turnEndsIn : 0;
+  turnEl.dataset.base = turnEl.textContent;
+  tickClock();
   document.body.dataset.myturn = mt ? '1' : '';
 
   $('b-order').innerHTML = b.order.map((id) => {
@@ -396,14 +410,15 @@ function renderBattle(S) {
     return `<span class="${id === cur?.id ? 'cur' : ''} ${out ? 'out' : ''}" style="${colors[id] ? `border-color:${colors[id]}` : ''}">${c.emoji} ${esc(c.name)}</span>`;
   }).join('');
 
-  const tip = mt ? coach(b, mine) : null;
+  const tip = mt && coachOn() ? coach(b, mine) : null;
   board.render({
     b, colors, curId: cur?.id, mine,
-    reach: mt && !app.target ? reachableSquares(b, mine) : [],
+    picks: mt && app.pick ? app.pick.squares : [],
+    reach: mt && !app.target && !app.pick ? reachableSquares(b, mine) : [],
     preview: mt ? app.preview : null,
     target: mt ? app.target : null,
     cone: mt && app.target ? coneFor(b, b.creatures[mine], b.creatures[app.target]) : null,
-    suggest: tip?.intent.a === 'move' && !app.preview ? tip.intent : null,
+    suggest: tip?.intent.a === 'move' && !app.preview && !app.pick ? tip.intent : null,
   });
 
   renderPanel(S, b, mine, mt, tip);
@@ -411,6 +426,27 @@ function renderBattle(S) {
   renderReact(S, b);
   renderOver(S, b);
 }
+
+// The host's turn timer: seconds left on the turn, beside whose turn it is.
+function tickClock() {
+  const el = $('b-turn');
+  if (!el) return;
+  const left = app.turnEndsAt ? Math.ceil((app.turnEndsAt - Date.now()) / 1000) : 0;
+  el.textContent = left > 0 ? `${el.dataset.base} · ${left}s` : el.dataset.base || el.textContent;
+  el.classList.toggle('hurry', left > 0 && left <= 10);
+}
+setInterval(tickClock, 500);
+
+// Every rule in the game, A to Z (spells separately).
+function openRulesBook() {
+  const all = Object.entries(GLOSSARY);
+  const spells = all.filter(([k]) => SPELLS[k]).sort((p, q) => p[1].title.localeCompare(q[1].title));
+  const rules = all.filter(([k]) => !SPELLS[k]).sort((p, q) => p[1].title.localeCompare(q[1].title));
+  const chips = (list) => list.map(([k, g]) => `<a class="chip rl" data-rule="${k}">${esc(g.title)}</a>`).join('');
+  openSheet(`<h3>📖 Rules book</h3><p class="dim">Every rule the game uses, in plain words. Tap one to read it.</p>
+    <h4>Rules</h4><div class="chips">${chips(rules)}</div><h4>Spells</h4><div class="chips">${chips(spells)}</div>`);
+}
+app.openRulesBook = openRulesBook;
 
 // If the hero has a cone (Burning Hands, Breath Weapon), the squares it would cover aimed at T.
 function coneFor(b, me, T) {
@@ -426,6 +462,7 @@ function renderPanel(S, b, mine, mt, tip) {
   if (!mt) {
     let text;
     if (b.pending && S.reactor === app.me) text = 'Your Reaction: decide below.';
+    else if (b.pending?.kind === 'shield') text = `${esc(b.creatures[b.pending.reactor].name)} is deciding whether to cast <a class="rl" data-rule="shield">Shield</a>…`;
     else if (b.pending) text = `${esc(b.creatures[b.pending.reactor].name)} is deciding on an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>…`;
     else if (!mine) text = "You're watching. Tap a token to see its sheet.";
     else text = `Waiting for ${esc(b.creatures[b.order[b.idx]]?.name)}… Tap a square to ping it for your party.`;
@@ -435,39 +472,90 @@ function renderPanel(S, b, mine, mt, tip) {
   const me = b.creatures[mine];
   const t = b.turn;
   const chip = (on, label, rule) => `<span class="chip ${on ? '' : 'used'}"><a data-rule="${rule}">${label}</a></span>`;
+  const slots = Object.entries(me.casting?.slots || {}).map(([lv, x]) => `L${lv} ${'●'.repeat(x.left)}${'○'.repeat(x.max - x.left)}`).join(' ');
   let html = `<div class="budget">
     ${chip(canAttack(t), 'Action', 'your-turn')}${chip(t.bonus, 'Bonus Action', 'your-turn')}
     ${chip(me.reaction, 'Reaction', 'opportunity-attack')}${chip(t.moveLeft >= 5, `Move ${t.moveLeft} ft`, 'movement')}
-    ${me.casting?.slots ? `<span class="chip"><a data-rule="spell-slots">Slots ${'●'.repeat(me.casting.slots.left)}${'○'.repeat(me.casting.slots.max - me.casting.slots.left)}</a></span>` : ''}
+    ${slots ? `<span class="chip"><a data-rule="spell-slots">Slots ${slots}</a></span>` : ''}
+    ${me.conc ? `<span class="chip"><a data-rule="concentration">🔮 ${esc(SPELLS[me.conc.spell]?.name || '')}</a></span>` : ''}
+    ${(me.conds || []).filter((x) => CONDS[x.id]).map((x) => `<span class="chip bad"><a data-rule="${x.id === 'hidden' ? 'hide' : x.id === 'commanded' ? 'command' : x.id}">${CONDS[x.id]}</a></span>`).join('')}
     ${me.tempHp ? `<span class="chip"><a data-rule="temp-hp">+${me.tempHp} temp HP</a></span>` : ''}</div>`;
-  if (tip?.text && !app.target && !app.preview) {
+  if (tip?.text && !app.target && !app.preview && !app.pick) {
     html += `<div class="coachline">💡 <span>${esc(tip.text)}</span><button class="btn" id="btn-coach">Do it</button></div>`;
   }
-  if (app.target) html += targetCard(b, me, b.creatures[app.target]);
+  if (app.pick) {
+    html += `<div class="preview"><span>${esc(app.pick.label)}: tap a highlighted square.</span><button class="btn ghost" id="btn-pick-x">✕</button></div>`;
+  } else if (app.target) html += targetCard(b, me, b.creatures[app.target]);
   else if (app.preview) {
     const oa = app.preview.oas.map((id) => esc(b.creatures[id].name)).join(' and ');
     html += `<div class="preview"><span>Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>.</b>` : ''} Tap the square again or</span>
       <button class="btn primary" id="btn-move">Move</button><button class="btn ghost" id="btn-cancel">✕</button></div>`;
   } else if (me.casting || me.breath) {
-    html += '<div class="hint">Tap an enemy for attacks and spells, an ally (or yourself) for healing.</div>';
+    html += '<div class="hint">Tap an enemy for attacks and spells, an ally (or yourself) for healing and help.</div>';
   }
   const extra = [];
-  if (me.secondWind) extra.push(`<button class="btn" data-act="second-wind" ${t.bonus && me.secondWind.uses ? '' : 'disabled'}>Second Wind (${me.secondWind.uses})</button>`);
-  if (me.adrenaline) extra.push(`<button class="btn" data-act="adrenaline" ${t.bonus && me.adrenaline.uses ? '' : 'disabled'}>Adrenaline Rush (${me.adrenaline.uses})</button>`);
+  const btn = (label, intent, ok, rule) => `<button class="btn" ${intentAttr(intent)} ${ok ? '' : 'disabled'} title="${esc(GLOSSARY[rule]?.title || '')}">${esc(label)}</button>`;
+  const prone = (me.conds || []).some((x) => x.id === 'prone');
+  if (prone) extra.push(btn(`Stand up (${Math.floor(speedOf(b, me) / 2)} ft)`, { a: 'stand' }, speedOf(b, me) > 0 && t.moveLeft >= Math.floor(speedOf(b, me) / 2), 'prone'));
+  if ((me.conds || []).some((x) => x.id === 'grappled')) extra.push(btn('Escape the grapple', { a: 'escape' }, t.action, 'grappled'));
+  if (me.secondWind) extra.push(btn(`Second Wind (${me.secondWind.uses})`, { a: 'second-wind' }, t.bonus && me.secondWind.uses, 'second-wind'));
+  if (me.actionSurge) extra.push(btn(`Action Surge (${me.actionSurge.uses})`, { a: 'surge' }, me.actionSurge.uses && !t.surged, 'action-surge'));
+  if (me.adrenaline) extra.push(btn(`Adrenaline Rush (${me.adrenaline.uses})`, { a: 'adrenaline' }, t.bonus && me.adrenaline.uses, 'adrenaline-rush'));
+  if (me.steadyAim) extra.push(btn('Steady Aim', { a: 'aim' }, t.bonus && !t.moves && t.moveLeft >= speedOf(b, me), 'steady-aim'));
+  if (me.cunning) {
+    extra.push(btn('Dash (bonus)', { a: 'dash', bonus: true }, t.bonus, 'cunning-action'));
+    extra.push(btn('Disengage (bonus)', { a: 'disengage', bonus: true }, t.bonus, 'cunning-action'));
+    extra.push(btn('Hide (bonus)', { a: 'hide', bonus: true }, t.bonus, 'cunning-action'));
+  }
+  if (me.channel && me.level >= 2) {
+    const undead = Object.values(b.creatures).some((c) => c.side !== me.side && c.creature === 'undead' && c.hp > 0 && cheb(me, c) * 5 <= 30);
+    extra.push(btn(`Turn Undead (${me.channel.uses})`, { a: 'turn' }, t.action && !t.magicUsed && me.channel.uses && undead, 'turn-undead'));
+    if (me.preserveLife) extra.push(btn(`Preserve Life (${me.channel.uses})`, { a: 'preserve' }, t.action && !t.magicUsed && me.channel.uses, 'preserve-life'));
+  }
+  for (const sp of spellList(me)) {
+    if (sp.kind !== 'teleport') continue;
+    const c = canCast(b, me, sp.id);
+    extra.push(`<button class="btn" data-pick="${sp.id}" ${c.ok ? '' : 'disabled'}>${esc(sp.name)}</button>`);
+  }
   html += `<div class="btns">
     <button class="btn" data-act="dash" ${t.action ? '' : 'disabled'}>Dash</button>
     <button class="btn" data-act="disengage" ${t.action ? '' : 'disabled'}>Disengage</button>
     <button class="btn" data-act="dodge" ${t.action ? '' : 'disabled'}>Dodge</button>
+    <button class="btn" data-act="hide" ${t.action ? '' : 'disabled'}>Hide</button>
     <button class="btn end" data-act="end">End turn</button>
-  </div>${extra.length ? `<div class="btns two">${extra.join('')}</div>` : ''}`;
+  </div>${extra.length ? `<div class="btns two">${extra.join('')}</div>` : ''}
+  <div class="panel-foot"><button class="btn small ghost" id="btn-coach-toggle">💡 Tips ${coachOn() ? 'on' : 'off'}</button><button class="btn small ghost" id="btn-rules">📖 Rules</button></div>`;
   P.innerHTML = html;
-  for (const btn of P.querySelectorAll('[data-act]')) btn.onclick = () => act({ a: btn.dataset.act });
-  for (const btn of P.querySelectorAll('[data-intent]')) btn.onclick = () => act(JSON.parse(btn.dataset.intent));
+  for (const el of P.querySelectorAll('[data-act]')) el.onclick = () => act({ a: el.dataset.act });
+  for (const el of P.querySelectorAll('[data-intent]')) el.onclick = () => act(JSON.parse(el.dataset.intent));
+  for (const el of P.querySelectorAll('[data-pick]')) el.onclick = () => startPick(b, me, el.dataset.pick);
   if ($('btn-coach')) $('btn-coach').onclick = () => act(tip.intent);
   if ($('btn-move')) $('btn-move').onclick = () => { const e = app.preview.path[app.preview.path.length - 1]; doMove(e.x, e.y); };
   if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; renderBattle(app.S); };
+  if ($('btn-pick-x')) $('btn-pick-x').onclick = () => { app.pick = null; renderBattle(app.S); };
   if ($('btn-tx')) $('btn-tx').onclick = () => { app.target = null; renderBattle(app.S); };
   if ($('btn-tinfo')) $('btn-tinfo').onclick = () => openSheet(sheetHtml(b.creatures[app.target]));
+  $('btn-coach-toggle').onclick = () => { ls.set(K.coach, coachOn() ? 'off' : 'on'); renderBattle(app.S); };
+  $('btn-rules').onclick = openRulesBook;
+}
+
+const CONDS = { prone: 'Prone', restrained: 'Restrained', grappled: 'Grappled', frightened: 'Frightened', poisoned: 'Poisoned',
+  paralyzed: 'Paralyzed', incapacitated: 'Incapacitated', hidden: 'Hidden', commanded: 'Commanded' };
+
+// Misty Step: pick an empty square you can see within range.
+function startPick(b, me, sid) {
+  const sp = SPELLS[sid];
+  const squares = [];
+  for (let y = 0; y < 10; y++) {
+    for (let x = 0; x < 8; x++) {
+      if ((x === me.x && y === me.y) || cheb(me, { x, y }) * 5 > sp.range) continue;
+      if (!canEndAt(b, me, x, y) || !lineOfSight(b, me, { x, y })) continue;
+      squares.push({ x, y });
+    }
+  }
+  app.target = null; app.preview = null;
+  app.pick = { spell: sid, label: sp.name, squares };
+  renderBattle(app.S);
 }
 
 const reasons = (o) => {
@@ -478,71 +566,152 @@ const reasons = (o) => {
   return bits;
 };
 const intentAttr = (i) => `data-intent='${esc(JSON.stringify(i))}'`;
-const row = (label, intent, ok, why, primary = true) =>
-  `<div class="opt"><button class="btn ${primary ? 'primary' : ''}" ${intentAttr(intent)} ${ok ? '' : 'disabled'}>${esc(label)}</button><span class="why">${why}</span></div>`;
+const row = (label, intent, ok, why, primary = true, more = '') =>
+  `<div class="opt"><span class="ob"><button class="btn ${primary ? 'primary' : ''}" ${intentAttr(intent)} ${ok ? '' : 'disabled'}>${esc(label)}</button>${more}</span><span class="why">${why}</span></div>`;
 
 function spellCost(b, me, sid) {
   const s = SPELLS[sid];
   const c = canCast(b, me, sid);
-  if (s.level === 0) return { c, tag: '<a class="rl" data-rule="cantrips">cantrip</a>' };
-  if (c.pay === 'free') return { c, tag: '<a class="rl" data-rule="magic-initiate">free cast</a>' };
-  return { c, tag: `<a class="rl" data-rule="spell-slots">spell slot</a>${s.time === 'bonus' ? ', <b>Bonus Action</b>' : ''}` };
+  const bonus = s.time === 'bonus' ? ', <b>Bonus Action</b>' : '';
+  const conc = s.conc ? `, <a class="rl" data-rule="concentration">Concentration</a>${me.conc ? ` <b class="bad">(ends ${esc(SPELLS[me.conc.spell]?.name || '')})</b>` : ''}` : '';
+  if (s.level === 0) return { c, tag: `<a class="rl" data-rule="cantrips">cantrip</a>${bonus}` };
+  if (c.pay === 'free') return { c, tag: `<a class="rl" data-rule="magic-initiate">free cast</a>${bonus}${conc}` };
+  return { c, tag: `<a class="rl" data-rule="spell-slots">level ${c.slot || s.level} slot</a>${bonus}${conc}` };
+}
+
+// What a higher slot adds, for the small "Level 2" buttons.
+function upText(sid, lv) {
+  const s = SPELLS[sid];
+  const sc = scaled(sid, lv);
+  if (s.up?.dice) return sc.dice;
+  if (s.up?.darts) return `${sc.darts} darts`;
+  if (s.up?.rays) return `${sc.rays} rays`;
+  if (s.up?.amount) return `+${sc.amount} HP`;
+  if (s.up?.targets) return `${sc.targets} targets`;
+  return '';
+}
+function upButtons(b, me, sp, intent, ok) {
+  if (!ok || !sp.level || !me.casting?.slots || ['command', 'hold'].includes(sp.kind) || !Object.keys(sp.up || {}).length) return '';
+  const base = canCast(b, me, sp.id);
+  if (!base.ok) return '';
+  let out = '';
+  for (const lv of Object.keys(me.casting.slots).map(Number).sort((p, q) => p - q)) {
+    if (lv <= (base.slot || sp.level)) continue;
+    const c = canCast(b, me, sp.id, lv);
+    if (!c.ok || c.slot !== lv) continue;
+    const extra = sp.kind === 'buff' && intent.targets ? { targets: buffTargets(b, me, b.creatures[intent.targets[0]], sp, lv) } : {};
+    out += `<button class="btn small up" ${intentAttr({ ...intent, ...extra, slot: lv })} title="Cast with a level ${lv} slot">Lv ${lv}: ${esc(upText(sp.id, lv))}</button>`;
+  }
+  return out;
+}
+
+// Bless and Aid: the tapped ally first, then the nearest others in range.
+function buffTargets(b, me, T, sp, lv) {
+  const n = scaled(sp.id, lv || canCast(b, me, sp.id).slot || sp.level).targets;
+  const pals = [me, ...Object.values(b.creatures).filter((c) => c.side === me.side && c !== me)]
+    .filter((c) => !c.dead && c.hp > 0 && onBoard(c) && (c === me || (cheb(me, c) * 5 <= sp.range && lineOfSight(b, me, c))));
+  pals.sort((p, q) => (p === T ? -1 : q === T ? 1 : cheb(me, p) - cheb(me, q)));
+  return pals.slice(0, n).map((c) => c.id);
 }
 
 function targetCard(b, me, T) {
   const t = b.turn;
   let rows = '';
   const self = T.id === me.id;
+  const near = cheb(me, T) <= 1;
+  const sees = self || lineOfSight(b, me, T);
+  const inRange = (ft) => self || (cheb(me, T) * 5 <= ft && sees);
   if (T.side === me.side) {
-    // Healing and saving friends (or yourself).
+    // Healing, help and buffs for friends (or yourself).
     for (const sp of spellList(me)) {
-      if (sp.kind !== 'heal' && sp.kind !== 'stabilize') continue;
-      if (sp.kind === 'stabilize' && (T.hp > 0 || T.dead || T.stable)) continue;
       const { c, tag } = spellCost(b, me, sp.id);
-      const inR = self || cheb(me, T) * 5 <= sp.range;
-      const why = !inR ? `Out of range (${sp.range === 5 ? 'touch' : `${sp.range} ft`}).` : c.ok ? `${sp.kind === 'heal' ? `Heals ${sp.dice} + your modifier` : 'Makes them Stable'} · ${tag}` : esc(c.error);
-      rows += row(sp.name, { a: 'cast', spell: sp.id, target: T.id }, inR && c.ok, why);
+      const intent = { a: 'cast', spell: sp.id, target: T.id };
+      if (sp.kind === 'heal' || (sp.kind === 'stabilize' && T.hp <= 0 && !T.dead && !T.stable)) {
+        const ok = sp.range === 5 ? self || near : inRange(sp.range);
+        const why = !ok ? `Out of range (${sp.range === 5 ? 'touch' : `${sp.range} ft`}).` : c.ok ? `${sp.kind === 'heal' ? `Heals ${sp.dice} + your modifier${me.discipleOfLife && c.pay === 'slot' ? ` + ${R0('disciple-of-life', 'Disciple of Life')}` : ''}` : 'Makes them Stable'} · ${tag}` : esc(c.error);
+        rows += row(sp.name, intent, ok && c.ok, why, true, upButtons(b, me, sp, intent, ok && c.ok));
+      } else if (sp.kind === 'cure') {
+        const cond = (T.conds || []).find((x) => sp.cures.includes(x.id));
+        if (!cond) continue;
+        const ok = self || near;
+        rows += row(sp.name, { ...intent, cond: cond.id }, ok && c.ok, !ok ? 'Touch: move next to them first.' : c.ok ? `Ends ${esc(CONDS[cond.id] || cond.id)} · ${tag}` : esc(c.error));
+      } else if (sp.kind === 'buff' && T.hp > 0) {
+        const ok = inRange(sp.range);
+        if (sp.buff === 'faith') {
+          rows += row(sp.name, intent, ok && c.ok, !ok ? `Out of range (${sp.range} ft).` : c.ok ? `+2 AC for ${esc(T.name)} · ${tag}` : esc(c.error));
+        } else {
+          const ids = ok ? buffTargets(b, me, T, sp) : [];
+          const who = ids.map((id) => esc(b.creatures[id].name)).join(', ');
+          const what = sp.buff === 'bless' ? '+1d4 to attack rolls and saves' : `+${sp.amount} Hit Points and maximum`;
+          const bi = { a: 'cast', spell: sp.id, targets: ids };
+          rows += row(sp.name, bi, ok && c.ok && ids.length, !ok ? `Out of range (${sp.range} ft).` : c.ok ? `${what} for ${who} · ${tag}` : esc(c.error), true, upButtons(b, me, sp, bi, ok && c.ok));
+        }
+      }
+    }
+    if (me.channel && me.level >= 2 && T.hp < T.hpMax && !T.dead) {
+      const ok = inRange(30) && t.action && !t.magicUsed && me.channel.uses > 0;
+      rows += row(`Divine Spark (${me.channel.uses})`, { a: 'spark', target: T.id }, ok,
+        `${R0('divine-spark', 'Channel Divinity')}: heals 1d8 ${signed(me.mods.wis)}${inRange(30) ? '' : ' (out of range: 30 ft)'}`, false);
+    }
+    const web = (T.conds || []).find((x) => x.id === 'restrained' && x.web);
+    if (web) {
+      const ok = canAttack(t) && (self || near || me.attacks.some((a) => a.kind === 'ranged'));
+      rows += row('Cut the web', { a: 'cut', target: T.id }, ok, `Attack the web (AC ${web.web.ac}, ${web.web.hp} HP left) to free ${self ? 'yourself' : esc(T.name)} · ${R0('restrained', 'Restrained')}`, false);
     }
     if (!self && T.hp <= 0 && !T.dead && !T.stable) {
-      rows += row('Stabilize', { a: 'stabilize', target: T.id }, t.action && cheb(me, T) <= 1,
-        cheb(me, T) <= 1 ? `<a class="rl" data-rule="stabilize">Help action</a>: DC 10 Wisdom (Medicine) check, you have ${signed(me.skills.medicine)}.` : 'Move next to them first.');
+      rows += row('Stabilize', { a: 'stabilize', target: T.id }, t.action && near,
+        near ? `<a class="rl" data-rule="stabilize">Help action</a>: DC 10 Wisdom (Medicine) check, you have ${signed(me.skills.medicine)}.` : 'Move next to them first.');
     }
-    if (!rows) rows = `<div class="why dim">${self ? 'Nothing to do on yourself right now.' : `${esc(T.name)} is fine.`}</div>`;
+    if (!rows) rows = `<div class="why dim">${self ? 'Nothing to do on yourself right now. Your other options are below.' : `${esc(T.name)} is fine.`}</div>`;
     rows += `<div class="opt"><button class="btn small ghost" id="btn-tinfo">${self ? 'My character sheet' : 'Character sheet'}</button></div>`;
   } else {
     for (const o of attackOptions(b, me, T)) {
       const flat = o.atk.dmgFlat.reduce((s, x) => s + x.value, 0);
       const bits = [`${Math.round(o.p * 100)}% to hit`, `${o.atk.dice}${signed(flat)} ${o.atk.type}`, ...reasons(o)];
+      if (o.cover) bits.push(`<b class="bad">${R0('cover', `Half Cover (${esc(o.cover.what)})`)}: +2 AC</b>`);
       if (o.sneak) bits.push(`<b class="good">+${me.sneak} <a class="rl" data-rule="sneak-attack">Sneak Attack</a></b>`);
       if (o.atk.mastery) bits.push(`<a class="rl" data-rule="${MASTERIES[o.atk.mastery].rule}">${MASTERIES[o.atk.mastery].name}</a>`);
-      const why = o.ok ? bits.join(' · ') : `Out of ${o.atk.kind === 'melee' ? 'reach: move next to it first' : 'range'}.`;
+      const why = o.ok ? bits.join(' · ') : esc(o.why || `Out of ${o.atk.kind === 'melee' ? 'reach: move next to it first' : 'range'}.`);
       rows += row(o.atk.name, { a: 'attack', target: T.id, attack: o.atk.id }, o.ok && canAttack(t), why);
     }
     for (const sp of spellList(me)) {
-      if (!['attack', 'save', 'missile', 'cone'].includes(sp.kind)) continue;
+      if (!['attack', 'save', 'missile', 'rays', 'cone', 'cube', 'command', 'hold', 'spiritual'].includes(sp.kind)) continue;
       const { c, tag } = spellCost(b, me, sp.id);
-      if (sp.kind === 'cone') {
-        const hit = coneTargets(b, me, T.x, T.y);
-        const pals = hit.filter((x) => x.side === me.side);
-        const foes = hit.filter((x) => x.side !== me.side);
-        const why = !foes.length ? `Too far: a 15-ft Cone toward ${esc(T.name)} wouldn't reach it. Get within 15 feet.`
-          : `15-ft Cone toward ${esc(T.name)}: catches ${hit.map((x) => esc(x.name)).join(', ')}${pals.length ? ` <b class="bad">(including your ally!)</b>` : ''} · DC ${spellDC(me, sp.id)} DEX save, ${sp.dice} ${sp.type}, half on a save · ${tag}`;
-        rows += row(sp.name, { a: 'cast', spell: sp.id, x: T.x, y: T.y }, c.ok && foes.length > 0, c.ok ? why : esc(c.error));
+      if (sp.kind === 'cone' || sp.kind === 'cube') {
+        let x = T.x, y = T.y;
+        if (sp.kind === 'cube') { x = me.x + Math.sign(T.x - me.x); y = me.y + Math.sign(T.y - me.y); }
+        const hit = sp.kind === 'cone' ? coneTargets(b, me, x, y) : cubeTargets(b, me, x, y);
+        const pals = hit.filter((h) => h.side === me.side);
+        const foes = hit.filter((h) => h.side !== me.side);
+        const shape = sp.kind === 'cone' ? '15-ft Cone' : '15-ft Cube';
+        const why = !foes.length ? `Too far: a ${shape} toward ${esc(T.name)} wouldn't reach it. Get within 15 feet.`
+          : `${shape} toward ${esc(T.name)}: catches ${hit.map((h) => esc(h.name)).join(', ')}${pals.length ? ` <b class="bad">(including your ally!)</b>` : ''} · DC ${spellDC(me, sp.id)} ${sp.save.toUpperCase()} save, ${sp.dice} ${sp.type}, half on a save${sp.push ? `, pushed ${sp.push} ft on a failure` : ''} · ${tag}`;
+        const intent = { a: 'cast', spell: sp.id, x, y };
+        rows += row(sp.name, intent, c.ok && foes.length > 0, c.ok ? why : esc(c.error), true, upButtons(b, me, sp, intent, c.ok && foes.length > 0));
         continue;
       }
-      const inR = cheb(me, T) * 5 <= sp.range;
+      const intent = { a: 'cast', spell: sp.id, target: T.id };
+      if (sp.kind === 'spiritual' && b.effects.some((e) => e.type === 'spiritual' && e.by === me.id)) {
+        rows += row(`${sp.name}: strike`, { a: 'spiritual', target: T.id }, !!t.bonus, `<b>Bonus Action</b>: the weapon moves up to 20 ft and attacks, ${scaledDice(b, me)} + your modifier Force`);
+        continue;
+      }
+      const ok = inRange(sp.range) && !(T.conds || []).some((x) => x.id === 'hidden');
       let why;
-      if (!inR) why = `Out of range (${sp.range} ft).`;
+      if (!sees) why = `You can't see ${esc(T.name)}: a wall is in the way (${R0('line-of-sight', 'line of sight')}).`;
+      else if (!ok) why = `Out of range (${sp.range} ft).`;
       else if (!c.ok) why = esc(c.error);
-      else if (sp.kind === 'attack') {
-        const atk = spellAttack(me, sp.id);
+      else if (sp.kind === 'attack' || sp.kind === 'rays' || sp.kind === 'spiritual') {
+        const atk = spellAttack(me, sp.id, sp.kind === 'spiritual' ? { melee: true } : undefined);
         const f = attackFactors(b, me, T, atk);
-        why = [`${Math.round(hitChance(hitBonus(atk), T.ac, f.mode, me.luck) * 100)}% to hit`, `${sp.dice} ${sp.type}`, ...reasons({ ...f, adv: f.adv, dis: f.dis }), tag].join(' · ');
-      } else if (sp.kind === 'save') {
+        const n = sp.kind === 'rays' ? scaled(sp.id, c.slot).rays : 1;
+        why = [`${Math.round(hitChance(hitBonus(atk), acAgainst(b, me, T, atk).value, f.mode, me.luck) * 100)}% to hit${n > 1 ? `, ${n} rays` : ''}`, `${sp.dice}${n > 1 ? ' each' : ''} ${sp.type}`, ...reasons({ ...f, adv: f.adv, dis: f.dis }), tag].join(' · ');
+      } else if (sp.kind === 'save' || sp.kind === 'command' || sp.kind === 'hold') {
+        if (sp.only && T.creature !== sp.only) { rows += row(sp.name, intent, false, `Only works on a ${esc(sp.only)}.`); continue; }
         const dc = spellDC(me, sp.id);
-        why = `${Math.round((1 - saveChance(b, T, sp.save, dc)) * 100)}% it fails a DC ${dc} ${sp.save.toUpperCase()} save · ${sp.dice} ${sp.type} · ${tag}`;
-      } else why = `Never misses · 3 × (1d4 + 1) Force · ${tag}`;
-      rows += row(sp.name, { a: 'cast', spell: sp.id, target: T.id }, inR && c.ok, why);
+        const eff = sp.kind === 'save' ? `${sp.dice} ${sp.type}` : sp.kind === 'command' ? `"Grovel!": it falls ${R0('prone', 'Prone')} and loses its turn` : `${R0('paralyzed', 'Paralyzed')}, saves at the end of each of its turns`;
+        why = `${Math.round((1 - saveChance(b, T, sp.save || 'wis', dc)) * 100)}% it fails a DC ${dc} ${(sp.save || 'wis').toUpperCase()} save · ${eff} · ${tag}`;
+      } else why = `Never misses · ${scaled(sp.id, c.slot).darts} × (1d4 + 1) Force · ${tag}`;
+      rows += row(sp.name, intent, ok && c.ok, why, true, upButtons(b, me, sp, intent, ok && c.ok));
     }
     if (me.breath) {
       const hit = coneTargets(b, me, T.x, T.y);
@@ -552,14 +721,28 @@ function targetCard(b, me, T) {
       rows += row(`Breath Weapon (${me.breath.uses})`, { a: 'breath', x: T.x, y: T.y }, ok,
         `<a class="rl" data-rule="breath-weapon">Replaces an attack</a>: 15-ft Cone, catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody (get within 15 feet)'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''} · DC ${dc} DEX save, ${me.breath.dice} ${me.breath.type}`);
     }
-    if (cheb(me, T) <= 1) {
+    if (me.channel && me.level >= 2) {
+      const ok = inRange(30) && t.action && !t.magicUsed && me.channel.uses > 0;
+      const dc = spellDC(me, Object.keys(me.casting?.known || {})[0]);
+      rows += row(`Divine Spark (${me.channel.uses})`, { a: 'spark', target: T.id }, ok,
+        `${R0('divine-spark', 'Channel Divinity')}: DC ${dc} CON save, 1d8 ${signed(me.mods.wis)} Radiant, half on a save${inRange(30) ? '' : ' (out of range: 30 ft)'}`, false);
+    }
+    if (near) {
+      const shoveOk = canAttack(t) && T.hp > 0;
+      const dc = 8 + me.mods.str + me.pb;
+      rows += row('Shove: Prone', { a: 'shove', target: T.id, mode: 'prone' }, shoveOk,
+        `${R0('unarmed-strike', 'Replaces an attack')}: DC ${dc} STR or DEX save, or it falls ${R0('prone', 'Prone')}`, false,
+        `<button class="btn small" ${intentAttr({ a: 'shove', target: T.id, mode: 'push' })} ${shoveOk ? '' : 'disabled'}>Push 5 ft</button>`);
       rows += row('Help', { a: 'help', target: T.id }, t.action, `<a class="rl" data-rule="help">Help action</a>: your ally's next attack on ${esc(T.name)} gets Advantage.`, false);
     }
     if (!canAttack(t)) rows += '<div class="why dim">You have already used your action this turn.</div>';
   }
+  const tc = (T.conds || []).filter((x) => CONDS[x.id]).map((x) => CONDS[x.id]).join(', ');
   return `<div class="target ${T.side === me.side ? 'ally' : ''}"><div class="th"><b>${T.emoji} ${esc(T.name)}</b>
-    <span>AC ${T.ac} · HP ${T.hp}/${T.hpMax}${T.side !== me.side || !self ? ' <button class="btn small ghost" id="btn-tinfo2">ⓘ</button>' : ''}<button class="btn small ghost" id="btn-tx">✕</button></span></div>${rows}</div>`;
+    <span>AC ${T.ac} · HP ${T.hp}/${T.hpMax}${tc ? ` · <span class="bad">${esc(tc)}</span>` : ''}${T.side !== me.side || !self ? ' <button class="btn small ghost" id="btn-tinfo2">ⓘ</button>' : ''}<button class="btn small ghost" id="btn-tx">✕</button></span></div>${rows}</div>`;
 }
+const R0 = (rule, label) => (GLOSSARY[rule] ? `<a class="rl" data-rule="${rule}">${label}</a>` : label);
+const scaledDice = (b, me) => b.effects.find((e) => e.type === 'spiritual' && e.by === me.id)?.dice || '1d8';
 document.addEventListener('click', (e) => { if (e.target.id === 'btn-tinfo2' && app.target) openSheet(sheetHtml(app.S.battle.creatures[app.target])); });
 
 function renderLog(b) {
@@ -580,17 +763,29 @@ function renderLog(b) {
 function renderReact(S, b) {
   const el = $('react');
   if (!b.pending || S.reactor !== app.me || b.over) { el.classList.add('hidden'); el.dataset.k = ''; return; }
-  const R = b.creatures[b.pending.reactor], M = b.creatures[b.pending.mover];
+  const R = b.creatures[b.pending.reactor];
   const k = `${b.seq}`;
   if (el.dataset.k === k) return;
   el.dataset.k = k;
   app.reactUntil = Date.now() + S.reactIn;
-  const opt = attackOptions(b, R, M).filter((o) => o.atk.kind === 'melee').sort((p, q) => q.expected - p.expected)[0];
-  el.innerHTML = `<h3>⚡ Reaction!</h3>
-    <p>${esc(M.name)} is leaving your reach. Use your Reaction for an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>
-    with your ${esc(opt.atk.name)} (${Math.round(opt.p * 100)}% to hit)?</p>
-    <div class="row"><button class="btn primary" id="btn-react-yes">Attack!</button><button class="btn" id="btn-react-no">Let it go</button></div>
-    <div class="timer" id="react-timer"></div>`;
+  if (b.pending.kind === 'shield') {
+    const A = b.creatures[b.pending.attacker];
+    const p = b.pending;
+    const saves = p.total < p.ac + 5;
+    el.innerHTML = `<h3>⚡ Reaction!</h3>
+      <p>${esc(A.name)}'s attack rolled <b>${p.total}</b> against your AC ${p.ac}: a hit. Cast <a class="rl" data-rule="shield">Shield</a>
+      for +5 AC until your next turn? It uses a spell slot, and ${saves ? '<b class="good">this attack would miss</b>' : '<b class="bad">this attack still hits</b> (but later ones are harder)'}.</p>
+      <div class="row"><button class="btn primary" id="btn-react-yes">Cast Shield</button><button class="btn" id="btn-react-no">Take the hit</button></div>
+      <div class="timer" id="react-timer"></div>`;
+  } else {
+    const M = b.creatures[b.pending.mover];
+    const opt = attackOptions(b, R, M).filter((o) => o.atk.kind === 'melee').sort((p, q) => q.expected - p.expected)[0];
+    el.innerHTML = `<h3>⚡ Reaction!</h3>
+      <p>${esc(M.name)} is leaving your reach. Use your Reaction for an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>
+      ${opt ? `with your ${esc(opt.atk.name)} (${Math.round(opt.p * 100)}% to hit)` : ''}?</p>
+      <div class="row"><button class="btn primary" id="btn-react-yes">Attack!</button><button class="btn" id="btn-react-no">Let it go</button></div>
+      <div class="timer" id="react-timer"></div>`;
+  }
   el.classList.remove('hidden');
   navigator.vibrate?.([30, 40, 30]);
   $('btn-react-yes').onclick = () => { send({ t: 'react', yes: true }); el.classList.add('hidden'); };

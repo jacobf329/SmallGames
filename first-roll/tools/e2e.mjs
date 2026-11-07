@@ -2,7 +2,7 @@
 // two phones) host and join a party over real WebRTC, with signalling through
 // the dev server's local Firestore stand-in. Ana hosts and builds a Fighter,
 // Ben joins by link and builds a Cleric, one AI companion joins them, and they
-// play the whole early-access campaign: votes, skill checks and both fights,
+// play the whole campaign to level 3: votes, checks, saves, rests and all six fights,
 // each taking the Coach's advice on their own turns. Both phones must reach
 // the end, the AI must never play for a connected player, and Ben must get
 // his seat back after a reload.
@@ -82,15 +82,17 @@ try {
   console.log('both heroes built; the story begins on both phones');
 
   const turns = { Ana: 0, Ben: 0 };
-  const done = { votes: 0, checks: 0, fights: 0, retries: 0 };
+  const done = { votes: 0, checks: 0, fights: 0, retries: 0, hitDice: 0 };
   let reactions = 0, shot = false;
   const state = (p) => p.evaluate(() => ({ phase: window.__FR.S?.phase, scene: window.__FR.S?.story?.scene, me: window.__FR.me }));
-  for (let i = 0; i < 4000; i++) {
+  for (let i = 0; i < 20000; i++) {
     const a = await state(ana);
-    if (a.phase === 'story' && a.scene === 'c3-end') break;
+    if (a.phase === 'story' && a.scene === 'c8-end') break;
     for (const p of [ana, ben]) {
       const st = await state(p);
       if (st.phase === 'story') {
+        const hd = await p.$(`[data-hd="${st.me}"]`);
+        if (hd) { await hd.click(); done.hitDice++; await p.waitForTimeout(150); continue; }
         if (p === ana && await p.$('#s-continue')) { await p.click('#s-continue'); continue; }
         if (await p.$('#s-roll')) { await p.click('#s-roll'); done.checks++; continue; }
         const claim = await p.$(`[data-claim="${st.me}"]`);
@@ -118,10 +120,12 @@ try {
     }
     await ana.waitForTimeout(100);
   }
-  await ben.waitForFunction(() => window.__FR.S?.story?.scene === 'c3-end', null, { timeout: 10000 });
-  console.log(`campaign finished: ${done.votes} votes, ${done.checks} check rolls, ${done.fights} fights won, ${done.retries} retries; Ana took ${turns.Ana} battle actions, Ben ${turns.Ben}; ${reactions} reaction prompts`);
+  await ben.waitForFunction(() => window.__FR.S?.story?.scene === 'c8-end', null, { timeout: 10000 });
+  console.log(`campaign finished: ${done.votes} votes, ${done.checks} check rolls, ${done.fights} fights won, ${done.retries} retries, ${done.hitDice} Hit Point Dice spent; Ana took ${turns.Ana} battle actions, Ben ${turns.Ben}; ${reactions} reaction prompts`);
   if (!turns.Ana || !turns.Ben) fail('both players should have acted in battle');
-  if (done.fights !== 2) fail(`expected 2 fights won, got ${done.fights}`);
+  if (done.fights !== 6) fail(`expected 6 fights won, got ${done.fights}`);
+  const lvl = await ana.evaluate(() => window.__FR.S.level);
+  if (lvl !== 3) fail(`the party should finish at level 3, not ${lvl}`);
   const takeovers = await ana.evaluate(() => window.__FR.room.aiForPlayers);
   if (takeovers) fail(`the AI played ${takeovers} steps for a connected player`);
   if (shotsAt) await ana.screenshot({ path: `${shotsAt}/coop-end-ana.png`, fullPage: true });
