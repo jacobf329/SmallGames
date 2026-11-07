@@ -3,8 +3,8 @@
 *Working title. A co-op, turn-based fantasy RPG built on the 2024
 fifth-edition rules, for 1–4 players on their phones.*
 
-Status: **Phase 1 built** (see [README.md](README.md)): early access with two
-chapters, co-op for 1–4 players with AI companions.
+Status: **Phase 2 (progression) built** (see [README.md](README.md)): two
+chapters, levels 1–3, loot and a merchant, co-op for 1–4 players with AI companions.
 
 Builds here in `SmallGames/first-roll/` and ships to
 `jteef/public/play/first-roll/` like Skyline Hustle and Turbo Surfers.
@@ -36,12 +36,16 @@ return.
 | Combat | 8×10 grid, initiative and surprise, movement and Opportunity Attacks, attacks, crits, Advantage/Disadvantage, Weapon Mastery (Sap, Vex), Sneak Attack, Help, Dodge, Dash, Disengage, 0 HP and death saves, Multiattack, monster reactions |
 | Magic | Cantrips and level 1 spells, spell slots, one slot per turn, saves, 15-ft cones, Magic Initiate |
 | Story | Scenes with party votes, skill checks (single with Help, or group), surprise, retry on defeat |
-| Campaign | Chapter 1, The Flour Road; Chapter 2, The Goblin Camp |
+| Campaign | Chapter 1, The Flour Road; Chapter 2, The Goblin Camp; town stops in Dunmarket |
+| Progression | XP and levels 1–3 with each class's level 2–3 features and subclass; HP and resources carried between fights; Short and Long Rests with Hit Point Dice; gold, potions, magic items, armor upgrades and a merchant; heroes saved per player and brought into other parties |
 | Multiplayer | Host-authoritative room, seat tokens and rejoin, AI takeover, autosave and continue |
 
 ## 3. Roadmap
 
-### Phase 2: Progression (the RPG loop)
+### Phase 2: Progression (the RPG loop) — built, to level 3
+
+Levels 4–5 (an ASI or feat at 4, Extra Attack and level 3 spells at 5) arrive
+with the chapters that need them.
 
 - **XP and levels 1 → 5:** XP from fights and quests, with a level-up screen.
   - Hit Points on level-up.

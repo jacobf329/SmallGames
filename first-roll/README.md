@@ -9,8 +9,19 @@ roll can be opened to see its dice and modifiers. Scope and roadmap: [SCOPE.md](
 
 | Chapter | What happens |
 | --- | --- |
-| 1 · The Flour Road | Escort a miller's cart to market: pick a route (the woods mean a Perception check), then a goblin ambush |
-| 2 · The Goblin Camp | Follow the stolen flour: sneak in (group Stealth) or make demands (Intimidation), then fight the Goblin Boss |
+| 1 · The Flour Road | Escort a miller's cart to market: pick a route (the woods mean a Perception check), survive a goblin ambush, get paid in Dunmarket |
+| 2 · The Goblin Camp | Follow the stolen flour: sneak in (group Stealth) or make demands (Intimidation), fight the Goblin Boss and its guards, bring the carts home |
+
+**Progression.**
+- **XP and levels:** fights and finished jobs give XP. Heroes reach level 2 in Dunmarket and level 3 by the end. Level-ups add Hit Points and the real class features:
+  - Fighter: Action Surge, then Champion with Improved Critical.
+  - Rogue: Cunning Action, then Steady Aim, 2d6 Sneak Attack and Thief.
+  - Cleric: Channel Divinity (Divine Spark), then Life Domain with Disciple of Life, and Aid.
+  - Wizard: more slots, then Evoker with Potent Cantrip, Scorching Ray and Misty Step.
+- **Between fights:** HP, spell slots and limited uses carry over. A Short Rest spends Hit Point Dice and recovers Second Wind, Action Surge, Channel Divinity and Arcane Recovery. A stop in town is a Long Rest.
+- **Gold and loot:** foes drop gold and Potions of Healing, which anyone drinks or gives as a Bonus Action. The boss also drops a +1 Weapon and a Cloak of Protection.
+- **The merchant** sells potions and armor (studded leather, chain mail, splint).
+- **Your hero is saved on your phone** (class, XP and gear). Bring them into anyone's party. Newcomers mid-campaign start at the party's level.
 
 - **1–4 players**, each on their own phone, with **AI companions** filling the
   party (Auto keeps at least three heroes). Fights scale to the party's size
@@ -46,7 +57,7 @@ second browser, so each has its own storage. **Play solo** needs nothing at all.
 ## Test it
 
 ```bash
-npm test                            # rules, spells, room and campaign (node --test)
+npm test                            # rules, spells, progression, room, campaign (46 tests)
 node tools/e2e.mjs                  # two phones, real WebRTC, the whole campaign
 node tools/e2e.mjs --bundle         # the same against dist/first-roll.html
 ```
@@ -54,14 +65,15 @@ node tools/e2e.mjs --bundle         # the same against dist/first-roll.html
 The e2e test uses the pre-installed Playwright and Chromium:
 
 1. Ana hosts and builds a Fighter; Ben joins by link and builds a Cleric. One AI companion makes up the party.
-2. They vote, roll checks and fight both battles; on their turns each phone plays the way an AI companion would (`window.__FR.auto()`).
-3. The test checks that both phones reach the end and that the AI never played for a connected player.
-4. Ben reloads and must get his seat back.
+2. They vote, roll checks, rest, shop in town and fight both battles; on their turns each phone plays the way an AI companion would (`window.__FR.auto()`).
+3. Everyone must reach level 3 by the end.
+4. The test checks that both phones reach the end and that the AI never played for a connected player.
+5. Ben reloads and must get his seat back.
 
 ## Build and deploy
 
 ```bash
-node tools/bundle.mjs               # -> dist/first-roll.html (one file, ~245 KB)
+node tools/bundle.mjs               # -> dist/first-roll.html (one file, ~270 KB)
 ```
 
 To put it on jteef.com/play:
@@ -89,8 +101,10 @@ src/rules/     the rules engine: pure, seeded, JSON state, no DOM or network
 src/game/
   campaign.js    chapters 1-2: scenes, choices, checks, fights, companions
   encounters.js  maps and foes sized to the party
-  room.js        the party: seats, heroes, votes, checks, fights, turn control,
-                 AI turns, reaction prompts, saves. Runs on the host's phone
+  room.js        the party: seats, heroes and their progress, gold/potions/items,
+                 votes, checks, rests, town stops and the shop, fights, XP and
+                 loot, turn control, AI turns, reaction prompts, saves.
+                 Runs on the host's phone
 src/net/online.js WebRTC + Firestore signalling, ported from Skyline Hustle
 src/ui/        main.js (screens), builder.js, story.js, sheet.js,
                board.js (SVG grid), explain.js (Why? text), dom.js

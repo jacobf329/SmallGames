@@ -299,6 +299,24 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 .btns.two { grid-template-columns: 1fr 1fr; }
 .target.ally { border-color: var(--good); }
 .board .cone { fill: rgba(255, 138, 101, .22); stroke: #ff8a65; stroke-width: .03; }
+
+/* --------------------------------------------------------- progression -- */
+.lvl { font-size: 11px; font-weight: 800; background: var(--gold); color: #1b1205; border-radius: 999px; padding: 1px 7px; margin: 0 4px; }
+.notice { background: rgba(92, 209, 138, .08); border: 1px solid rgba(92, 209, 138, .4); border-radius: 14px; padding: 10px 12px; margin: 12px 0; font-size: 14px; display: grid; gap: 4px; }
+.notice b { color: var(--good); }
+.purse { display: flex; gap: 16px; font-size: 16px; margin: 14px 0 4px; }
+.shop { display: grid; gap: 6px; }
+.ware { display: flex; gap: 10px; align-items: center; justify-content: space-between; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; flex-wrap: wrap; }
+.ware > span:first-child { flex: 1; min-width: 180px; font-size: 14px; }
+.ware .sub { display: block; color: var(--dim); font-size: 12px; }
+.roster { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hcard { text-align: left; background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 8px 10px; color: var(--ink); font: 13px/1.3 inherit; font-family: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
+.hcard .sub { color: var(--dim); font-size: 11px; }
+.meter { height: 6px; border-radius: 3px; background: var(--bg2); overflow: hidden; display: block; }
+.meter i { display: block; height: 100%; background: var(--good); }
+.meter.xp i { background: var(--gold); }
+.loot { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; margin: 12px 0; font-size: 15px; }
+.lvlup { color: var(--gold); font-weight: 700; margin: 6px 0; }
 </style>
 </head>
 <body>
@@ -462,6 +480,8 @@ const ARMOR = {
   leather: { name: 'Leather Armor', base: 11, dex: true },
   chainShirt: { name: 'Chain Shirt', base: 13, dex: true, maxDex: 2 },
   chain: { name: 'Chain Mail', base: 16, dex: false },
+  studded: { name: 'Studded Leather Armor', base: 12, dex: true },
+  splint: { name: 'Splint Armor', base: 17, dex: false },
 };
 
 // -------------------------------------------------------------- spells ----
@@ -488,6 +508,12 @@ const SPELLS = {
     text: 'Ranged spell attack. On a hit, 4d6 Radiant damage, and the next attack roll against the target before the end of your next turn has Advantage.' },
   'magic-missile': { name: 'Magic Missile', level: 1, time: 'action', range: 120, kind: 'missile', darts: 3, dice: '1d4', flat: 1, type: 'Force',
     text: 'Three glowing darts that always hit, each dealing 1d4 + 1 Force damage.' },
+  'aid': { name: 'Aid', level: 2, time: 'action', range: 30, kind: 'aid', amount: 5,
+    text: 'Up to three creatures within 30 feet: each one\'s Hit Point maximum and current Hit Points go up by 5 for the rest of the day.' },
+  'scorching-ray': { name: 'Scorching Ray', level: 2, time: 'action', range: 120, kind: 'rays', rays: 3, dice: '2d6', type: 'Fire',
+    text: 'Three rays of fire. Make a ranged spell attack for each; every ray that hits deals 2d6 Fire damage.' },
+  'misty-step': { name: 'Misty Step', level: 2, time: 'bonus', range: 30, kind: 'teleport',
+    text: 'Teleport up to 30 feet to an unoccupied space you can see. A Bonus Action, and it doesn\'t provoke Opportunity Attacks.' },
   'burning-hands': { name: 'Burning Hands', level: 1, time: 'action', kind: 'cone', size: 15, save: 'dex', dice: '3d6', type: 'Fire', half: true,
     text: 'A 15-foot Cone of flame. Each creature in it makes a Dexterity save: 3d6 Fire damage on a failure, half as much on a success. Careful: allies in the Cone burn too.' },
 };
@@ -519,7 +545,7 @@ const CLASSES = {
     skillChoices: { n: 2, from: ['medicine', 'insight', 'religion', 'history', 'persuasion'] },
     armor: 'chainShirt', shield: true, weapons: ['mace'], masteries: [],
     suggested: { wis: 15, con: 14, str: 13, dex: 12, cha: 10, int: 8 },
-    spellcasting: { ability: 'wis', cantrips: ['sacred-flame', 'spare-the-dying', 'thaumaturgy'], prepared: ['healing-word', 'cure-wounds', 'guiding-bolt'], slots: 2 },
+    spellcasting: { ability: 'wis', cantrips: ['sacred-flame', 'spare-the-dying', 'thaumaturgy'], prepared: ['healing-word', 'cure-wounds', 'guiding-bolt'], byLevel: { 3: ['aid'] } },
     blurb: 'Divine magic. Keeps the party standing and burns foes with radiant light.',
     plays: 'Heal whoever is in trouble (Healing Word is a Bonus Action), then Sacred Flame or Guiding Bolt.',
   },
@@ -529,7 +555,7 @@ const CLASSES = {
     skillChoices: { n: 2, from: ['arcana', 'investigation', 'history', 'insight', 'medicine', 'nature', 'religion'] },
     armor: 'none', shield: false, weapons: ['quarterstaff', 'dagger'], masteries: [],
     suggested: { int: 15, con: 14, dex: 13, wis: 12, cha: 10, str: 8 },
-    spellcasting: { ability: 'int', cantrips: ['fire-bolt', 'ray-of-frost', 'mage-hand'], prepared: ['magic-missile', 'burning-hands'], slots: 2 },
+    spellcasting: { ability: 'int', cantrips: ['fire-bolt', 'ray-of-frost', 'mage-hand'], prepared: ['magic-missile', 'burning-hands'], byLevel: { 3: ['scorching-ray', 'misty-step'] } },
     blurb: 'Fragile but powerful. Attacks from a distance with spells.',
     plays: 'Stay back and cast Fire Bolt. Save your spell slots for Magic Missile or Burning Hands on a crowd.',
   },
@@ -650,7 +676,63 @@ const SKIRMISH = {
   ],
 };
 
-return { ABILITIES, ABILITY_NAMES, abilityMod, signed, STANDARD_ARRAY, SKILLS, SKILL_NAMES, WEAPONS, MASTERIES, ARMOR, SPELLS, CLASSES, DRAGON_ANCESTRY, SPECIES, BACKGROUNDS, FEATS, GOBLIN_WARRIOR, GOBLIN_BOSS, SKIRMISH };
+// ----------------------------------------------------------- progression ----
+// XP needed to reach each level (index = level).
+const XP_LEVELS = [0, 0, 300, 900, 2700, 6500];
+const MAX_LEVEL = 3;
+const levelForXp = (xp) => { let l = 1; while (l < MAX_LEVEL && xp >= XP_LEVELS[l + 1]) l++; return l; };
+
+// Full casters' spell slots by character level: { spell level: count }.
+const SPELL_SLOTS = { 1: { 1: 2 }, 2: { 1: 3 }, 3: { 1: 4, 2: 2 }, 4: { 1: 4, 2: 3 }, 5: { 1: 4, 2: 3, 3: 2 } };
+
+// What each class gains at levels 2 and 3 (shown on the level-up screen and sheet).
+const CLASS_FEATURES = {
+  fighter: {
+    2: [{ name: 'Action Surge', rule: 'action-surge', text: 'Once per Short Rest, take one extra action on your turn.' },
+      { name: 'Tactical Mind', text: 'Spend a use of Second Wind to add 1d10 to a failed ability check.' }],
+    3: [{ name: 'Champion: Improved Critical', rule: 'improved-critical', text: 'Your attack rolls score a Critical Hit on a 19 or 20.' },
+      { name: 'Champion: Remarkable Athlete', text: 'Advantage on Initiative rolls and Strength (Athletics) checks.' }],
+  },
+  rogue: {
+    2: [{ name: 'Cunning Action', rule: 'cunning-action', text: 'Take the Dash or Disengage action as a Bonus Action.' }],
+    3: [{ name: 'Sneak Attack 2d6', rule: 'sneak-attack', text: 'Your Sneak Attack damage rises to 2d6.' },
+      { name: 'Thief: Fast Hands', text: 'Use an object, like a potion, as a Bonus Action.' },
+      { name: 'Steady Aim', text: "As a Bonus Action, if you haven't moved this turn, give yourself Advantage on your next attack roll this turn. Your Speed becomes 0 until the end of the turn." }],
+  },
+  cleric: {
+    2: [{ name: 'Channel Divinity: Divine Spark', rule: 'divine-spark', text: 'As an action, a creature within 30 feet regains 1d8 + WIS Hit Points, or takes 1d8 + WIS Radiant damage (Constitution save for half). Two uses, one back on a Short Rest.' },
+      { name: 'More spell slots', rule: 'spell-slots', text: 'Three level 1 slots.' }],
+    3: [{ name: 'Life Domain: Disciple of Life', rule: 'disciple-of-life', text: 'Your healing spells restore an extra 2 + the spell\'s level Hit Points.' },
+      { name: 'Level 2 spells', rule: 'spell-slots', text: 'Two level 2 slots, and you prepare Aid.' }],
+  },
+  wizard: {
+    2: [{ name: 'Scholar', text: 'Expertise in one of Arcana, History, Investigation, Medicine, Nature or Religion.' },
+      { name: 'More spell slots', rule: 'spell-slots', text: 'Three level 1 slots.' }],
+    3: [{ name: 'Evoker: Potent Cantrip', rule: 'potent-cantrip', text: 'When a creature succeeds on a save against your damaging cantrip, or you miss with one, it still takes half the damage.' },
+      { name: 'Level 2 spells', rule: 'spell-slots', text: 'Two level 2 slots, and you prepare Scorching Ray and Misty Step.' }],
+  },
+};
+
+// ---------------------------------------------------------------- items ----
+// kind: potion (party inventory, used in battle), and gear a hero carries:
+// armor, weapon (+1 to attack and damage with weapons), cloak (+1 AC and saves).
+const ITEMS = {
+  'potion-healing': { name: 'Potion of Healing', kind: 'potion', dice: '2d4', flat: 2, price: 50, emoji: '🧪',
+    text: 'Regain 2d4 + 2 Hit Points. Drinking it, or giving it to someone within 5 feet, is a Bonus Action.' },
+  'studded-leather': { name: 'Studded Leather Armor', kind: 'armor', armor: 'studded', price: 45, for: ['rogue', 'cleric', 'fighter'], emoji: '🦺',
+    text: 'Light armor: AC 12 + your Dexterity modifier.' },
+  'chain-mail': { name: 'Chain Mail', kind: 'armor', armor: 'chain', price: 75, for: ['cleric', 'fighter'], emoji: '⛓️',
+    text: 'Heavy armor: AC 16. For Fighters and Protector Clerics.' },
+  'splint': { name: 'Splint Armor', kind: 'armor', armor: 'splint', price: 200, for: ['cleric', 'fighter'], emoji: '🛡️',
+    text: 'Heavy armor: AC 17. For Fighters and Protector Clerics.' },
+  'weapon-plus-1': { name: '+1 Weapon', kind: 'weapon', price: null, emoji: '⚔️',
+    text: "A magic weapon of the hero's choice: +1 to attack and damage rolls with their weapons." },
+  'cloak-protection': { name: 'Cloak of Protection', kind: 'cloak', price: null, emoji: '🧥',
+    text: '+1 to Armor Class and saving throws.' },
+};
+const SHOP = ['potion-healing', 'studded-leather', 'chain-mail', 'splint'];
+
+return { ABILITIES, ABILITY_NAMES, abilityMod, signed, STANDARD_ARRAY, SKILLS, SKILL_NAMES, WEAPONS, MASTERIES, ARMOR, SPELLS, CLASSES, DRAGON_ANCESTRY, SPECIES, BACKGROUNDS, FEATS, GOBLIN_WARRIOR, GOBLIN_BOSS, SKIRMISH, XP_LEVELS, MAX_LEVEL, levelForXp, SPELL_SLOTS, CLASS_FEATURES, ITEMS, SHOP };
 })();
 
 /* ===== src/rules/character.js ===== */
@@ -663,7 +745,7 @@ __mods["src/rules/character.js"] = (() => {
 //          assigned to abilities), plus: { ability: 2, ability: 1 } or three
 //          +1s among the background's abilities, ancestry (dragonborn only), name }
 
-const { ABILITIES, ABILITY_NAMES, abilityMod, WEAPONS, MASTERIES, ARMOR, SPECIES, BACKGROUNDS, FEATS, CLASSES, SKILLS, SPELLS, STANDARD_ARRAY, DRAGON_ANCESTRY, GOBLIN_WARRIOR } = __mods["src/rules/data.js"];
+const { ABILITIES, ABILITY_NAMES, abilityMod, WEAPONS, MASTERIES, ARMOR, SPECIES, BACKGROUNDS, FEATS, CLASSES, SKILLS, SPELLS, STANDARD_ARRAY, DRAGON_ANCESTRY, GOBLIN_WARRIOR, SPELL_SLOTS, CLASS_FEATURES, MAX_LEVEL } = __mods["src/rules/data.js"];
 
 const PB_BY_LEVEL = [0, 2, 2, 2, 2, 3];
 const DEFAULT_BACKGROUND = { fighter: 'soldier', rogue: 'criminal', cleric: 'acolyte', wizard: 'sage' };
@@ -719,7 +801,16 @@ function spellStats(m, pb, ability) {
   };
 }
 
-function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
+// gear: { armor: 'studded' | 'chain' | 'splint' | null, weapon: 0 | 1, cloak: bool }
+const canWear = (cls, armor) => {
+  if (!armor) return true;
+  if (cls === 'wizard') return false;
+  if (armor === 'chain' || armor === 'splint') return cls === 'fighter' || cls === 'cleric';   // Protector Clerics train in heavy armor
+  return true;
+};
+
+function buildHero(rawSpec, { id = 'hero', name, level = 1, gear = {} } = {}) {
+  level = Math.max(1, Math.min(MAX_LEVEL, level | 0));
   const spec = validateSpec(rawSpec);
   const C = CLASSES[spec.cls], S = SPECIES[spec.species], B = BACKGROUNDS[spec.background];
   const feat = FEATS[B.feat];
@@ -729,16 +820,19 @@ function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   const m = Object.fromEntries(ABILITIES.map((a) => [a, abilityMod(scores[a])]));
 
   // Armor Class
-  const armor = ARMOR[C.armor];
+  const armorId = gear.armor && ARMOR[gear.armor] && canWear(spec.cls, gear.armor) ? gear.armor : C.armor;
+  const armor = ARMOR[armorId];
   const acParts = [{ label: armor.name, value: armor.base, rule: 'armor-class' }];
   if (armor.dex) {
     const d = armor.maxDex != null ? Math.min(m.dex, armor.maxDex) : m.dex;
     acParts.push({ label: `DEX modifier${armor.maxDex != null && m.dex > armor.maxDex ? ` (max ${armor.maxDex})` : ''}`, value: d, rule: 'ability-modifier' });
   }
   if (C.shield) acParts.push({ label: 'Shield', value: 2, rule: 'armor-class' });
+  if (gear.cloak) acParts.push({ label: 'Cloak of Protection', value: 1, rule: 'armor-class' });
 
   // Hit Points at level 1: hit die maximum + CON modifier (+ species and feats).
   const hpParts = [{ label: `d${C.hitDie} maximum`, value: C.hitDie }, { label: 'CON modifier', value: m.con }];
+  if (level > 1) hpParts.push({ label: `Levels 2-${level}: ${C.hitDie / 2 + 1} + CON each`, value: (level - 1) * (C.hitDie / 2 + 1 + m.con) });
   if (spec.species === 'dwarf') hpParts.push({ label: 'Dwarven Toughness', value: level });
   if (spec.species === 'human') hpParts.push({ label: 'Tough feat (Versatile)', value: 2 * level });
   const hpMax = Math.max(1, sumParts(hpParts));
@@ -754,6 +848,7 @@ function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   if (spec.species === 'human') { const s = ['perception', 'insight', 'athletics', 'medicine'].find((x) => !prof.has(x)); if (s) prof.add(s); }
   if (spec.species === 'elf') { const s = ['perception', 'insight', 'survival'].find((x) => !prof.has(x)); if (s) prof.add(s); }
   const expertise = C.expertise ? C.expertise.filter((s) => prof.has(s)) : [];
+  if (spec.cls === 'wizard' && level >= 2) { const s = ['arcana', 'investigation', 'history'].find((x) => prof.has(x)); if (s) expertise.push(s); }
   const skills = {};
   for (const [s, ab] of Object.entries(SKILLS)) {
     skills[s] = m[ab] + (prof.has(s) ? (expertise.includes(s) ? 2 : 1) * pb : 0);
@@ -761,7 +856,7 @@ function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
 
   // Saving throws
   const saves = {};
-  for (const a of ABILITIES) saves[a] = m[a] + (C.saves.includes(a) ? pb : 0);
+  for (const a of ABILITIES) saves[a] = m[a] + (C.saves.includes(a) ? pb : 0) + (gear.cloak ? 1 : 0);
 
   // Weapons
   const attacks = C.weapons.map((wid) => {
@@ -773,6 +868,7 @@ function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     ];
     const dmgFlat = [{ label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'damage' }];
     if (C.style === 'dueling' && w.kind === 'melee') dmgFlat.push({ label: 'Dueling fighting style', value: 2, rule: 'dueling' });
+    if (gear.weapon) { hit.push({ label: '+1 magic weapon', value: 1, rule: 'magic-weapon' }); dmgFlat.push({ label: '+1 magic weapon', value: 1, rule: 'magic-weapon' }); }
     const mastery = C.masteries.includes(wid) && ['sap', 'vex'].includes(w.mastery) ? w.mastery : null;
     return {
       id: wid, name: w.name, kind: w.kind, dice: w.dice, type: w.type,
@@ -794,8 +890,10 @@ function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   if (C.spellcasting) {
     const sc = C.spellcasting;
     for (const s of sc.cantrips) learn(s, sc.ability, C.name);
-    for (const s of sc.prepared) learn(s, sc.ability, C.name, { slot: true });
-    slots = { max: sc.slots, left: sc.slots };
+    const prepared = [...sc.prepared, ...Object.entries(sc.byLevel || {}).filter(([l]) => +l <= level).flatMap(([, l]) => l)];
+    for (const s of prepared) learn(s, sc.ability, C.name, { slot: true });
+    slots = {};
+    for (const [sl, n] of Object.entries(SPELL_SLOTS[level])) slots[sl] = { max: n, left: n };
   }
   if (feat.list) {
     const extra = feat.cantrips.filter((s) => !known[s]).slice(0, 2);
@@ -823,13 +921,15 @@ function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     features.push({ name: 'Expertise', rule: 'expertise', text: 'Double Proficiency Bonus in Stealth and Perception.', source: 'Rogue 1' });
     features.push({ name: 'Weapon Mastery', rule: 'weapon-mastery', text: 'Use the mastery property of 2 kinds of weapons. Shortsword and Shortbow: Vex.', source: 'Rogue 1' });
   } else if (spec.cls === 'cleric') {
-    features.push({ name: 'Spellcasting', rule: 'spellcasting', text: 'Cantrips at will; 2 level 1 spell slots. Wisdom is your spellcasting ability.', source: 'Cleric 1' });
+    features.push({ name: 'Spellcasting', rule: 'spellcasting', text: 'Cantrips at will; leveled spells use spell slots. Wisdom is your spellcasting ability.', source: 'Cleric 1' });
     features.push({ name: 'Divine Order: Protector', text: 'Training with heavy armor and martial weapons.', source: 'Cleric 1' });
   } else if (spec.cls === 'wizard') {
-    features.push({ name: 'Spellcasting', rule: 'spellcasting', text: 'Cantrips at will; 2 level 1 spell slots. Intelligence is your spellcasting ability.', source: 'Wizard 1' });
+    features.push({ name: 'Spellcasting', rule: 'spellcasting', text: 'Cantrips at will; leveled spells use spell slots. Intelligence is your spellcasting ability.', source: 'Wizard 1' });
     features.push({ name: 'Ritual Adept', text: 'Cast Ritual spells from your spellbook without preparing them.', source: 'Wizard 1' });
     features.push({ name: 'Arcane Recovery', text: 'Regain some spell slots on a Short Rest, once a day.', source: 'Wizard 1' });
   }
+
+  for (let l = 2; l <= level; l++) for (const f of CLASS_FEATURES[spec.cls][l] || []) features.push({ ...f, source: `${C.name} ${l}` });
 
   const ancestry = DRAGON_ANCESTRY[spec.ancestry];
   return {
@@ -842,8 +942,18 @@ function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     luck: spec.species === 'halfling',
     mentalSaveAdv: spec.species === 'gnome',
     savage: B.feat === 'savage-attacker',
-    sneak: spec.cls === 'rogue' ? '1d6' : null,
+    sneak: spec.cls === 'rogue' ? (level >= 3 ? '2d6' : '1d6') : null,
     secondWind: spec.cls === 'fighter' ? { uses: 2, max: 2 } : null,
+    actionSurge: spec.cls === 'fighter' && level >= 2 ? { uses: 1, max: 1 } : null,
+    critOn: spec.cls === 'fighter' && level >= 3 ? 19 : 20,
+    initAdv: spec.cls === 'fighter' && level >= 3,
+    cunning: spec.cls === 'rogue' && level >= 2,
+    steadyAim: spec.cls === 'rogue' && level >= 3,
+    channel: spec.cls === 'cleric' && level >= 2 ? { uses: 2, max: 2 } : null,
+    discipleOfLife: spec.cls === 'cleric' && level >= 3,
+    potentCantrip: spec.cls === 'wizard' && level >= 3,
+    hitDie: C.hitDie, hitDice: { max: level, left: level },
+    gear: { armor: armorId === C.armor ? null : armorId, weapon: gear.weapon ? 1 : 0, cloak: !!gear.cloak },
     firesBurn: spec.species === 'goliath' ? { uses: pb, max: pb } : null,
     adrenaline: spec.species === 'orc' ? { uses: pb, max: pb } : null,
     relentless: spec.species === 'orc' ? { used: false } : null,
@@ -891,7 +1001,55 @@ function spellList(c) {
   return Object.entries(c.casting.known).map(([sid, k]) => ({ id: sid, ...SPELLS[sid], ...k }));
 }
 
-return { PB_BY_LEVEL, DEFAULT_BACKGROUND, suggestPlus, defaultSpec, validateSpec, buildHero, buildMonster, buildGoblin, spellList };
+// ------------------------------------------------------------- progress ----
+// A hero's state between fights. The creature is rebuilt from spec + level +
+// gear at each fight; progress carries what was spent.
+function freshProgress(h, { xp = 0 } = {}) {
+  const pr = { level: h.level, xp, hp: h.hpMax, hd: h.hitDice.max, aid: 0, gear: { ...h.gear }, uses: {} };
+  harvestUses(h, pr);
+  return pr;
+}
+
+function harvestUses(c, pr) {
+  const u = pr.uses;
+  u.secondWind = c.secondWind?.uses;
+  u.actionSurge = c.actionSurge?.uses;
+  u.channel = c.channel?.uses;
+  u.breath = c.breath?.uses;
+  u.firesBurn = c.firesBurn?.uses;
+  u.adrenaline = c.adrenaline?.uses;
+  u.relentlessUsed = !!c.relentless?.used;
+  u.arcaneRecovery = !!u.arcaneRecovery;
+  u.slots = c.casting?.slots ? Object.fromEntries(Object.entries(c.casting.slots).map(([l, s]) => [l, s.left])) : null;
+  u.free = c.casting ? Object.fromEntries(Object.entries(c.casting.known).filter(([, k]) => k.free != null).map(([sid, k]) => [sid, k.free])) : null;
+}
+
+// Put a saved state onto a freshly built creature.
+function applyProgress(c, pr) {
+  if (!pr) return c;
+  if (pr.aid) { c.hpMax += pr.aid; c.hpParts.push({ label: 'Aid', value: pr.aid }); }
+  c.hp = Math.max(0, Math.min(c.hpMax, pr.hp ?? c.hpMax));
+  c.hitDice.left = Math.max(0, Math.min(c.hitDice.max, pr.hd ?? c.hitDice.max));
+  const u = pr.uses || {};
+  const set = (obj, v) => { if (obj && v != null) obj.uses = Math.max(0, Math.min(obj.max, v)); };
+  set(c.secondWind, u.secondWind); set(c.actionSurge, u.actionSurge); set(c.channel, u.channel);
+  set(c.breath, u.breath); set(c.firesBurn, u.firesBurn); set(c.adrenaline, u.adrenaline);
+  if (c.relentless) c.relentless.used = !!u.relentlessUsed;
+  if (c.casting?.slots && u.slots) for (const [l, s] of Object.entries(c.casting.slots)) if (u.slots[l] != null) s.left = Math.max(0, Math.min(s.max, u.slots[l]));
+  if (c.casting && u.free) for (const [sid, n] of Object.entries(u.free)) if (c.casting.known[sid]?.free != null && n != null) c.casting.known[sid].free = Math.max(0, Math.min(c.casting.known[sid].free, n));
+  return c;
+}
+
+// Read what a creature has left after a fight back into its progress.
+function harvestProgress(c, pr) {
+  const out = { ...pr, uses: { ...pr.uses }, gear: { ...pr.gear } };
+  out.hp = Math.min(c.hp, c.hpMax);
+  out.hd = c.hitDice.left;
+  harvestUses(c, out);
+  return out;
+}
+
+return { PB_BY_LEVEL, DEFAULT_BACKGROUND, suggestPlus, defaultSpec, validateSpec, canWear, buildHero, buildMonster, buildGoblin, spellList, freshProgress, applyProgress, harvestProgress };
 })();
 
 /* ===== src/rules/rng.js ===== */
@@ -1058,18 +1216,18 @@ __mods["src/rules/combat.js"] = (() => {
 
 const { makeRng, die, rollDice, sum, parseDice, avgDice } = __mods["src/rules/rng.js"];
 const { key, cheb, feetBetween, incap, hostile, onBoard, reachMap, canEndAt, pathFrom, coneSquares, FT } = __mods["src/rules/grid.js"];
-const { MASTERIES, SPELLS, ABILITY_NAMES, signed } = __mods["src/rules/data.js"];
+const { MASTERIES, SPELLS, ABILITY_NAMES, ITEMS, signed } = __mods["src/rules/data.js"];
 
 // ------------------------------------------------------------- set-up ----
 
-function createBattle({ heroes, foes, walls = [], seed = 1 }) {
+function createBattle({ heroes, foes, walls = [], seed = 1, potions = 0 }) {
   const creatures = {};
   for (const c of [...heroes, ...foes]) creatures[c.id] = c;
   return {
     creatures, walls: [...walls], rng: makeRng(seed),
     order: [], idx: -1, round: 0, turn: null,
     effects: [], log: [], seq: 0,
-    pending: null, moveCtx: null, over: null,
+    pending: null, moveCtx: null, over: null, potions,
   };
 }
 
@@ -1141,6 +1299,7 @@ function savingThrow(b, T, ability, dc) {
   const d20 = rollD20(b, T, f.mode);
   const mods = [{ label: `${ability.toUpperCase()} modifier`, value: T.mods[ability], rule: 'ability-modifier' }];
   if (T.saveProfs?.includes(ability)) mods.push({ label: 'Proficiency Bonus (proficient save)', value: T.pb, rule: 'proficiency' });
+  if (T.gear?.cloak) mods.push({ label: 'Cloak of Protection', value: 1, rule: 'magic-item' });
   const total = d20.kept + sumParts(mods);
   return { target: T.id, d20: { ...d20, adv: f.adv, dis: f.dis }, mods, total, success: total >= dc };
 }
@@ -1172,6 +1331,9 @@ function attackFactors(b, A, T, atk) {
       adv.push({ text: `Guiding Bolt's light on ${T.name}`, rule: 'guiding-bolt' });
       uses.push(e);
       guideUsed = true;
+    } else if (e.type === 'steady' && e.by === A.id) {
+      adv.push({ text: 'Steady Aim', rule: 'steady-aim' });
+      uses.push(e);
     } else if (e.type === 'sap' && e.target === A.id) {
       dis.push({ text: `Sap: ${C(b, e.by).name} hit ${A.name} with a Sap weapon`, rule: 'mastery-sap' });
       uses.push(e);
@@ -1225,7 +1387,7 @@ function optionFor(b, A, T, atk) {
   return { atk, ok, bonus, p, mode: f.mode, adv: f.adv, dis: f.dis, sneak, avg, expected: ok ? p * avg : 0 };
 }
 
-function rollDamage(b, A, T, atk, crit, mode) {
+function rollDamage(b, A, T, atk, crit, mode, miss = false) {
   const { n, sides } = parseDice(atk.dice);
   const nd = crit ? n * 2 : n;
   const parts = [];
@@ -1252,7 +1414,7 @@ function rollDamage(b, A, T, atk, crit, mode) {
   const sneakWhy = sneakAllowed(b, A, T, atk, mode);
   if (sneakWhy) { extra(`Sneak Attack (${sneakWhy})`, A.sneak, 'sneak-attack'); A.sneakKey = turnKey(b); }
   if (atk.advDice && mode === 'advantage') extra('Extra (attacked with Advantage)', atk.advDice, 'stat-block');
-  if (A.firesBurn?.uses > 0 && A.burnKey !== turnKey(b)) {
+  if (!miss && A.firesBurn?.uses > 0 && A.burnKey !== turnKey(b)) {
     extra("Fire's Burn (Fire)", '1d10', 'fires-burn');
     A.firesBurn.uses--;
     A.burnKey = turnKey(b);
@@ -1336,7 +1498,8 @@ function attack(b, A, T0, atk, { reaction = false } = {}) {
   const d20 = rollD20(b, A, f.mode);
   const total = d20.kept + hitBonus(atk);
   let outcome;
-  if (d20.kept === 20) outcome = 'crit';
+  const critOn = atk.spell ? 20 : (A.critOn || 20);
+  if (d20.kept >= critOn) outcome = 'crit';
   else if (d20.kept === 1) outcome = 'fumble';
   else outcome = total >= T.ac ? 'hit' : 'miss';
   const notes = [];
@@ -1344,6 +1507,7 @@ function attack(b, A, T0, atk, { reaction = false } = {}) {
     outcome = 'crit';
     notes.push({ text: 'Any hit from within 5 feet on an Unconscious creature is a Critical Hit', rule: 'unconscious' });
   }
+  if (outcome === 'crit' && d20.kept < 20) notes.push({ text: `Improved Critical: ${critOn} or higher is a Critical Hit`, rule: 'improved-critical' });
   const hit = outcome === 'hit' || outcome === 'crit';
   let damage = null, after = null, mastery = null, rider = null;
   if (hit) {
@@ -1371,6 +1535,12 @@ function attack(b, A, T0, atk, { reaction = false } = {}) {
       b.effects.push({ type: 'chill', by: A.id, target: T.id, expires: { when: 'start', who: A.id } });
       rider = { text: `${T.name}'s Speed drops by 10 feet until the start of ${A.name}'s next turn.`, rule: 'ray-of-frost' };
     }
+  }
+  if (!hit && atk.spell && SPELLS[atk.spell]?.level === 0 && A.potentCantrip) {
+    const full = rollDamage(b, A, T, atk, false, f.mode, true);
+    const half = Math.floor(full.total / 2);
+    damage = { parts: [...full.parts, { label: 'Potent Cantrip: half damage on a miss', value: half - full.total, rule: 'potent-cantrip' }], total: half, type: full.type };
+    after = applyDamage(b, T, half, false);
   }
   const verb = { crit: 'lands a Critical Hit on', hit: 'hits', miss: 'misses', fumble: 'misses' }[outcome];
   let text = `${A.name} ${verb} ${T.name} with ${atk.name}`;
@@ -1411,9 +1581,18 @@ function canCast(b, A, sid) {
   if (s.level === 0) return { ok: true, pay: null };
   if (k.free > 0) return { ok: true, pay: 'free' };
   if (t.slotSpent) return { ok: false, error: 'You can expend only one spell slot per turn.' };
-  if (!k.slot || !A.casting.slots?.left) return { ok: false, error: 'No spell slots left.' };
-  return { ok: true, pay: 'slot' };
+  const sl = k.slot ? slotLevelFor(A, s.level) : null;
+  if (!sl) return { ok: false, error: `No level ${s.level}+ spell slots left.` };
+  return { ok: true, pay: 'slot', slotLevel: sl };
 }
+
+// The lowest spell slot of at least this level that's still available.
+function slotLevelFor(A, level) {
+  const slots = A.casting?.slots || {};
+  for (const l of Object.keys(slots).map(Number).sort((a, b) => a - b)) if (l >= level && slots[l].left > 0) return l;
+  return null;
+}
+const slotsLeft = (A) => Object.values(A.casting?.slots || {}).reduce((n, s) => n + s.left, 0);
 
 // Creatures in a 15-ft Cone from A aimed at (x, y).
 function coneTargets(b, A, x, y, size = 3) {
@@ -1422,11 +1601,11 @@ function coneTargets(b, A, x, y, size = 3) {
 }
 
 // Area damage with a saving throw (Burning Hands, Sacred Flame, Breath Weapon).
-function areaSave(b, A, targets, { name, ability, dcParts, dice, type, half, rule }) {
+function areaSave(b, A, targets, { name, ability, dcParts, dice, flat = 0, type, half, rule }) {
   const dc = sumParts(dcParts);
   const { n, sides } = parseDice(dice);
   const rolls = rollDice(b.rng, n, sides);
-  const full = sum(rolls);
+  const full = sum(rolls) + flat;
   const results = [];
   for (const T of targets) {
     const sv = savingThrow(b, T, ability, dc);
@@ -1436,7 +1615,8 @@ function areaSave(b, A, targets, { name, ability, dcParts, dice, type, half, rul
   }
   const hits = results.map((r) => `${C(b, r.target).name} ${r.damage}`).join(', ');
   emit(b, {
-    kind: 'save-spell', by: A.id, what: name, ability, dc, dcParts, damage: { parts: [{ label: `${name} ${dice}`, rolls, value: full, rule }], total: full, type },
+    kind: 'save-spell', by: A.id, what: name, ability, dc, dcParts,
+    damage: { parts: [{ label: `${name} ${dice}`, rolls, value: sum(rolls), rule }, ...(flat ? [{ label: 'Modifier', value: flat }] : [])], total: full, type },
     half, results, rule,
     text: targets.length ? `${A.name} uses ${name}: DC ${dc} ${ABILITY_NAMES[ability]} save. ${hits ? `Damage: ${hits}.` : ''}` : `${A.name} uses ${name}, but nobody is caught in it.`,
   });
@@ -1451,7 +1631,7 @@ function castSpell(b, A, intent) {
   const T = intent.target ? C(b, intent.target) : null;
   const inReach = (X) => X && feetBetween(A, X) <= (s.range || 0);
   // Target checks first, so a bad tap never costs a slot.
-  if (['attack', 'save', 'missile'].includes(s.kind)) {
+  if (['attack', 'save', 'missile', 'rays'].includes(s.kind)) {
     if (!T || !hostile(A, T) || !onBoard(T) || T.dead) return 'Pick an enemy.';
     if (!inReach(T)) return `${T.name} is out of range (${s.range} ft).`;
   } else if (s.kind === 'heal') {
@@ -1462,13 +1642,20 @@ function castSpell(b, A, intent) {
     if (!inReach(T)) return `${T.name} is out of range (${s.range} ft).`;
   } else if (s.kind === 'cone') {
     if (!Number.isInteger(intent.x) || !Number.isInteger(intent.y) || (intent.x === A.x && intent.y === A.y)) return 'Pick a direction.';
+  } else if (s.kind === 'teleport') {
+    if (!canEndAt(b, A, intent.x, intent.y) || (intent.x === A.x && intent.y === A.y)) return 'Pick an empty square.';
+    if (feetBetween(A, intent) > s.range) return `That's more than ${s.range} feet away.`;
   }
   // Pay.
   const t = b.turn;
   if (s.time === 'bonus') t.bonus = 0; else t.action = 0;
   let paid = '';
   if (can.pay === 'free') { A.casting.known[sid].free--; paid = ' (free cast: Magic Initiate)'; }
-  if (can.pay === 'slot') { A.casting.slots.left--; t.slotSpent = true; paid = ` (spell slot, ${A.casting.slots.left} left)`; }
+  if (can.pay === 'slot') {
+    A.casting.slots[can.slotLevel].left--;
+    t.slotSpent = true;
+    paid = ` (level ${can.slotLevel} slot${can.slotLevel > s.level ? ', cast at a higher level' : ''}, ${slotsLeft(A)} slot${slotsLeft(A) === 1 ? '' : 's'} left)`;
+  }
   emit(b, { kind: 'cast', by: A.id, spell: sid, level: s.level, pay: can.pay, rule: s.level ? 'spell-slots' : 'cantrips',
     text: `${A.name} casts ${s.name}${s.level === 0 ? ' (a cantrip: no slot needed)' : paid}.` });
 
@@ -1492,13 +1679,39 @@ function castSpell(b, A, intent) {
     const { n, sides } = parseDice(s.dice);
     const rolls = rollDice(b.rng, n, sides);
     const mod = spellMod(A, sid);
-    const amount = Math.max(0, sum(rolls) + mod);
+    const mods = [{ label: 'Spellcasting modifier', value: mod }];
+    if (A.discipleOfLife) mods.push({ label: 'Disciple of Life', value: 2 + s.level, rule: 'disciple-of-life' });
+    const amount = Math.max(0, sum(rolls) + sumParts(mods));
     const before = T.hp;
     T.hp = Math.min(T.hpMax, T.hp + amount);
     if (before === 0 && T.hp > 0) { T.deathSaves = { s: 0, f: 0 }; T.stable = false; }
     emit(b, { kind: 'heal', by: A.id, target: T.id, what: s.name,
-      roll: { label: s.dice, rolls }, mods: [{ label: 'Spellcasting modifier', value: mod }], total: amount, before, after: T.hp,
+      roll: { label: s.dice, rolls }, mods, total: amount, before, after: T.hp,
       text: `${T.name} regains ${T.hp - before} HP${before === 0 ? ' and is back on their feet' : ''}.`, rule: sid });
+  } else if (s.kind === 'rays') {
+    for (let i = 0; i < s.rays && !b.over; i++) {
+      let tgt = T;
+      if (tgt.dead || tgt.hp <= 0) tgt = enemiesOf(b, A).filter((e) => !incap(e) && feetBetween(A, e) <= s.range).sort((p, q) => cheb(A, p) - cheb(A, q))[0];
+      if (!tgt) break;
+      attack(b, A, tgt, { ...spellAttack(A, sid), name: `${s.name} (ray ${i + 1})` });
+    }
+  } else if (s.kind === 'aid') {
+    const pick = [A, ...alliesOf(b, A).filter((c) => !c.dead && feetBetween(A, c) <= s.range)]
+      .sort((p, q) => (p.hp > 0) - (q.hp > 0) || p.hp / p.hpMax - q.hp / q.hpMax).slice(0, 3);
+    const want = (intent.targets || []).map((id) => C(b, id)).filter((c) => c && pick.includes(c));
+    const chosen = want.length ? want : pick;
+    for (const c of chosen) {
+      c.hpMax += s.amount;
+      c.hp += s.amount;
+      c.aidBonus = (c.aidBonus || 0) + s.amount;
+      if (c.hp > 0 && c.deathSaves) { c.deathSaves = { s: 0, f: 0 }; c.stable = false; }
+    }
+    emit(b, { kind: 'note', by: A.id, rule: 'aid', text: `${chosen.map((c) => c.name).join(', ')} gain${chosen.length === 1 ? 's' : ''} 5 Hit Points and 5 to their maximum.` });
+  } else if (s.kind === 'teleport') {
+    const from = { x: A.x, y: A.y };
+    A.x = intent.x; A.y = intent.y;
+    emit(b, { kind: 'move', by: A.id, path: [{ x: A.x, y: A.y }], feet: feetBetween(from, A), left: t.moveLeft, teleport: true, rule: 'misty-step',
+      text: `${A.name} vanishes in silver mist and reappears ${feetBetween(from, A)} ft away.` });
   } else if (s.kind === 'stabilize') {
     T.stable = true;
     T.deathSaves = { s: 0, f: 0 };
@@ -1520,7 +1733,7 @@ function expire(b, when, who) {
 // opts.surprised: ids of creatures that roll Initiative with Disadvantage.
 function rollInitiative(b, { surprised = [] } = {}) {
   const entries = Object.values(b.creatures).map((c) => {
-    const mode = surprised.includes(c.id) ? 'disadvantage' : 'normal';
+    const mode = modeFrom(c.initAdv ? [1] : [], surprised.includes(c.id) ? [1] : []);
     const d20 = rollD20(b, c, mode);
     const mod = sumParts(c.initParts);
     return { id: c.id, d20, parts: c.initParts, total: d20.kept + mod, dex: c.mods.dex, surprised: mode === 'disadvantage' };
@@ -1763,6 +1976,76 @@ function perform(b, id, intent) {
       emit(b, { kind: 'action', by: id, what: 'Dash', text: `${A.name} takes the Dash action: +${A.speed} ft of movement this turn.`, rule: 'dash' });
       break;
     }
+    case 'action-surge': {
+      if (!A.actionSurge || A.actionSurge.uses < 1) return fail('No Action Surge left.');
+      if (t.surged) return fail('Only one Action Surge per turn.');
+      A.actionSurge.uses--;
+      t.surged = true;
+      t.action += 1;
+      emit(b, { kind: 'action', by: id, what: 'Action Surge', text: `${A.name} uses Action Surge: one extra action this turn.`, rule: 'action-surge' });
+      break;
+    }
+    case 'cunning': {
+      if (!A.cunning) return fail('No Cunning Action.');
+      if (!t.bonus) return fail('You have already used your Bonus Action.');
+      t.bonus = 0;
+      if (intent.what === 'disengage') {
+        b.effects.push({ type: 'disengage', by: id, expires: { when: 'end', who: id, skip: 0 } });
+        emit(b, { kind: 'action', by: id, what: 'Disengage', text: `${A.name} Disengages as a Bonus Action (Cunning Action).`, rule: 'cunning-action' });
+      } else {
+        t.moveLeft += A.speed;
+        emit(b, { kind: 'action', by: id, what: 'Dash', text: `${A.name} Dashes as a Bonus Action (Cunning Action): +${A.speed} ft.`, rule: 'cunning-action' });
+      }
+      break;
+    }
+    case 'steady-aim': {
+      if (!A.steadyAim) return fail('No Steady Aim.');
+      if (!t.bonus) return fail('You have already used your Bonus Action.');
+      if (t.moves || t.moveLeft < A.speed) return fail("Steady Aim only works if you haven't moved this turn.");
+      t.bonus = 0;
+      t.moveLeft = 0;
+      b.effects.push({ type: 'steady', by: id, expires: { when: 'end', who: id, skip: 0 } });
+      emit(b, { kind: 'action', by: id, what: 'Steady Aim', text: `${A.name} takes Steady Aim: Advantage on the next attack this turn.`, rule: 'steady-aim' });
+      break;
+    }
+    case 'divine-spark': {
+      if (!A.channel || A.channel.uses < 1) return fail('No Channel Divinity left.');
+      if (!t.action) return fail('You have already used your action.');
+      if (!T || T.dead || feetBetween(A, T) > 30) return fail('Pick a creature within 30 feet.');
+      t.action = 0;
+      A.channel.uses--;
+      const wis = A.mods.wis;
+      if (T.side === A.side) {
+        const r = die(b.rng, 8);
+        const before = T.hp;
+        T.hp = Math.min(T.hpMax, T.hp + r + wis);
+        if (before === 0 && T.hp > 0) { T.deathSaves = { s: 0, f: 0 }; T.stable = false; }
+        emit(b, { kind: 'heal', by: id, target: T.id, what: 'Divine Spark', roll: { label: '1d8', rolls: [r] }, mods: [{ label: 'WIS modifier', value: wis }],
+          total: r + wis, before, after: T.hp, text: `${A.name} channels Divine Spark: ${T.name} regains ${T.hp - before} HP.`, rule: 'divine-spark' });
+      } else {
+        const dcParts = A.casting.stats.wis.dc;
+        areaSave(b, A, [T], { name: 'Divine Spark', ability: 'con', dcParts, dice: '1d8', flat: wis, type: 'Radiant', half: true, rule: 'divine-spark' });
+      }
+      break;
+    }
+    case 'potion': {
+      if (!(b.potions > 0)) return fail('The party has no Potions of Healing.');
+      if (!t.bonus) return fail('You have already used your Bonus Action.');
+      const tgt = T || A;
+      if (tgt.side !== A.side || tgt.dead || cheb(A, tgt) > 1) return fail('Drink it yourself or give it to an ally next to you.');
+      t.bonus = 0;
+      b.potions--;
+      const it = ITEMS['potion-healing'];
+      const rolls = rollDice(b.rng, 2, 4);
+      const amount = sum(rolls) + it.flat;
+      const before = tgt.hp;
+      tgt.hp = Math.min(tgt.hpMax, tgt.hp + amount);
+      if (before === 0 && tgt.hp > 0) { tgt.deathSaves = { s: 0, f: 0 }; tgt.stable = false; }
+      emit(b, { kind: 'heal', by: id, target: tgt.id, what: 'Potion of Healing', roll: { label: '2d4', rolls }, mods: [{ label: 'Potion', value: it.flat }],
+        total: amount, before, after: tgt.hp, rule: 'potion',
+        text: `${tgt === A ? `${A.name} drinks` : `${A.name} gives ${tgt.name}`} a Potion of Healing: +${tgt.hp - before} HP (${b.potions} left).` });
+      break;
+    }
     case 'adrenaline': {
       if (!A.adrenaline || A.adrenaline.uses < 1) return fail('No Adrenaline Rush uses left.');
       if (!t.bonus) return fail('You have already used your Bonus Action.');
@@ -1843,7 +2126,7 @@ function perform(b, id, intent) {
 
 
 
-return { signed, enemiesOf, alliesOf, createBattle, current, modeFrom, rollD20, saveFactors, saveChance, attackRangeFeet, inRange, attackFactors, hitChance, hitBonus, attackOptions, spellAttack, spellDC, spellMod, canCast, coneTargets, rollInitiative, provokers, previewMove, reachableSquares, resolveReaction, bestMelee, canAttack, perform };
+return { signed, enemiesOf, alliesOf, createBattle, current, modeFrom, rollD20, saveFactors, saveChance, attackRangeFeet, inRange, attackFactors, hitChance, hitBonus, attackOptions, spellAttack, spellDC, spellMod, canCast, slotLevelFor, slotsLeft, coneTargets, rollInitiative, provokers, previewMove, reachableSquares, resolveReaction, bestMelee, canAttack, perform };
 })();
 
 /* ===== src/rules/ai.js ===== */
@@ -1859,7 +2142,8 @@ __mods["src/rules/ai.js"] = (() => {
 //          support     (Cleric) heal whoever is in trouble, then attack with spells
 
 const { cheb, incap, reachMap, canEndAt, pathFrom, key, onBoard } = __mods["src/rules/grid.js"];
-const { attackOptions, enemiesOf, alliesOf, previewMove, canCast, canAttack, spellAttack, spellDC, attackFactors, hitChance, hitBonus, saveChance, coneTargets, spellMod } = __mods["src/rules/combat.js"];
+const { attackOptions, enemiesOf, alliesOf, previewMove, canCast, canAttack, spellAttack, spellDC, attackFactors, hitChance, hitBonus, saveChance, coneTargets, spellMod, inRange } = __mods["src/rules/combat.js"];
+const { feetBetween } = __mods["src/rules/grid.js"];
 const { SPELLS } = __mods["src/rules/data.js"];
 const { avgDice } = __mods["src/rules/rng.js"];
 
@@ -1913,6 +2197,17 @@ function specialOptions(b, me) {
         const pFail = 1 - saveChance(b, T, s.save, dc);
         add({ a: 'cast', spell: sid, target: T.id }, pFail * avgDice(s.dice) + finishing(T, avgDice(s.dice)) - cost, { T, pFail, dc });
       }
+    } else if (s.kind === 'rays') {
+      const atk = spellAttack(me, sid);
+      for (const T of targetsOf(b, me)) {
+        if (cheb(me, T) * 5 > s.range) continue;
+        const f = attackFactors(b, me, T, atk);
+        const exp = s.rays * hitChance(hitBonus(atk), T.ac, f.mode, me.luck) * avgDice(s.dice);
+        add({ a: 'cast', spell: sid, target: T.id }, exp - cost - 1, { T });
+      }
+    } else if (s.kind === 'aid') {
+      const pals = [me, ...alliesOf(b, me)].filter((c) => !c.dead && cheb(me, c) * 5 <= s.range);
+      if (b.round <= 2 && pals.length >= 2) add({ a: 'cast', spell: sid }, 2 * pals.length - cost, {});
     } else if (s.kind === 'missile') {
       const avg = s.darts * (avgDice(s.dice) + s.flat);
       for (const T of targetsOf(b, me)) {
@@ -1949,6 +2244,27 @@ function specialOptions(b, me) {
       const dc = me.breath.dc.reduce((s, p) => s + p.value, 0);
       const exp = foes.reduce((acc, c) => acc + avgDice(me.breath.dice) * (1 - saveChance(b, c, 'dex', dc) / 2), 0);
       add({ a: 'breath', x: T.x, y: T.y }, exp + (foes.length > 1 ? 2 : -2), { foes });
+    }
+  }
+  if (me.channel?.uses > 0 && t.action) {
+    const wis = me.mods.wis;
+    for (const F of friends) {
+      if (F.dead || cheb(me, F) * 5 > 30) continue;
+      const need = F.hp <= 0 ? 18 : F.hp <= F.hpMax / 3 ? 8 : 0;
+      if (need) add({ a: 'divine-spark', target: F.id }, need - 1, { T: F });
+    }
+    const dc = me.casting.stats.wis.dc.reduce((s2, x) => s2 + x.value, 0);
+    for (const T of targetsOf(b, me)) {
+      if (cheb(me, T) * 5 > 30 || incap(T)) continue;
+      const pSave = saveChance(b, T, 'con', dc);
+      add({ a: 'divine-spark', target: T.id }, (4.5 + wis) * (1 - pSave / 2) + finishing(T, 4.5 + wis) - 1.5, { T });
+    }
+  }
+  if (b.potions > 0 && t.bonus) {
+    for (const F of friends) {
+      if (F.dead || cheb(me, F) > 1) continue;
+      if (F.hp <= 0 && !F.stable) add({ a: 'potion', target: F.id }, 22, { T: F });
+      else if (F.hp > 0 && F.hp <= F.hpMax / 4) add({ a: 'potion', target: F.id }, 10, { T: F });
     }
   }
   out.sort((p, q) => q.score - p.score);
@@ -1991,7 +2307,7 @@ function nearestTarget(b, me) {
 // Best thing to do with the action from here: weapon or special.
 function bestAction(b, me, { kind = null } = {}) {
   const w = bestAttackHere(b, me, { kind });
-  const s = specialOptions(b, me).filter((o) => o.intent.a !== 'cast' || SPELLS[o.intent.spell].time === 'action' || o.intent.a === 'breath')[0];
+  const s = specialOptions(b, me).filter((o) => o.intent.a === 'breath' || o.intent.a === 'divine-spark' || (o.intent.a === 'cast' && SPELLS[o.intent.spell].time === 'action'))[0];
   if (s && (!w || s.score > w.score)) return s;
   return w;
 }
@@ -2007,9 +2323,12 @@ function aiNext(b, id) {
   // Bonus actions first: Second Wind when badly hurt, Healing Word when a friend needs it.
   if (me.secondWind?.uses > 0 && t.bonus && me.hp <= me.hpMax / 2) return { a: 'second-wind' };
   if (t.bonus) {
-    const heal = specialOptions(b, me).find((o) => o.intent.a === 'cast' && SPELLS[o.intent.spell].time === 'bonus' && o.score >= 8);
+    const heal = specialOptions(b, me).find((o) => ((o.intent.a === 'cast' && SPELLS[o.intent.spell].time === 'bonus' && SPELLS[o.intent.spell].kind === 'heal') || o.intent.a === 'potion') && o.score >= 8);
     if (heal) return heal.intent;
   }
+  // Action Surge: a second action when there's something to hit.
+  if (me.actionSurge?.uses > 0 && !t.action && !t.attacksLeft && !t.surged
+    && targetsOf(b, me).some((T) => !incap(T) && me.attacks.some((a) => inRange(me, T, a)))) return { a: 'action-surge' };
 
   // Heroes look after a dying friend if they can.
   if (me.side === 'hero' && t.action) {
@@ -2026,6 +2345,17 @@ function aiNext(b, id) {
   }
 
   if (me.ai === 'caster' || me.ai === 'support') {
+    if (threatened(b, me) && t.bonus && me.casting?.known['misty-step'] && canCast(b, me, 'misty-step').ok) {
+      let best = null;
+      for (let y = 0; y < 10; y++) for (let x = 0; x < 8; x++) {
+        const sq = { x, y };
+        if (feetBetween(me, sq) > 30 || !canEndAt(b, me, x, y)) continue;
+        const near = Math.min(...enemiesOf(b, me).filter((e) => !incap(e)).map((e) => cheb(e, sq)));
+        const score = Math.min(near, 5) * 10 - feetBetween(me, sq) / 10;
+        if (near >= 2 && (!best || score > best.score)) best = { ...sq, score };
+      }
+      if (best) return { a: 'cast', spell: 'misty-step', x: best.x, y: best.y };
+    }
     if (canAttack(t)) {
       const best = bestAction(b, me);
       if (best && best.score > 0.5) return best.intent;
@@ -2077,6 +2407,7 @@ function aiNext(b, id) {
       }
     }
     const shot = bestAction(b, me, { kind: 'ranged' });
+    if (shot && me.steadyAim && t.bonus && !t.moves && !threatened(b, me) && shot.intent.a === 'attack') return { a: 'steady-aim' };
     if (shot) return shot.intent;
     return { a: 'end' };
   }
@@ -2112,7 +2443,10 @@ __mods["src/game/campaign.js"] = (() => {
 //   story  text + choices the party votes on
 //   check  text + a skill check; success and failure lead on with flags
 //   fight  an encounter from encounters.js; victory goes to `next`
-//   end    the end of what's built so far
+//   camp   a town stop: rewards, a Long Rest, the merchant, level-ups;
+//          the host moves on to `next` (or it's the end, with `final`)
+// Choices may carry `rest: 'short'` (a Short Rest before moving on).
+// `reward` ({ xp, gold }, per hero) is paid once, when the scene is reached.
 
 const { defaultSpec } = __mods["src/rules/character.js"];
 
@@ -2136,7 +2470,7 @@ const SCENES = {
     chapter: 1, kind: 'story', title: 'The Mill at Dunmarket',
     text: [
       "Agnes Pell runs the mill on the edge of Dunmarket, and she is two flour carts short. Goblins took them on the road to market, one last week and one three days ago, mules and all.",
-      'She drops a purse of silver on a barrel. "Twelve silver each if tomorrow\'s cart reaches the market square before the noon bell. The bakers buy from whoever gets there first. If it isn\'t me again, I\'m finished."',
+      'She drops a purse on a barrel. "Twenty-five gold each if tomorrow\'s cart reaches the market square before the noon bell. The bakers buy from whoever gets there first. If it isn\'t me again, I\'m finished."',
       "The cart is loaded. Its mule, a grey named Biscuit, is chewing the corner of a flour sack. There are two ways to market.",
     ],
     choices: [
@@ -2174,15 +2508,27 @@ const SCENES = {
   'c2-after': {
     chapter: 1, kind: 'story', title: 'Spilled Flour',
     text: [
-      'When the last goblin falls, Biscuit goes back to eating his sack. In the mud where the fight was, you find an empty flour bag stamped AGNES PELL in blue ink. It came off one of the stolen carts.',
-      'A line of spilled flour runs off the road and up into the hills, white on the dark ground and easy to follow. If her flour is up there, Agnes could have three carts at market tomorrow instead of one.',
+      'When the last goblin falls, Biscuit goes back to eating his sack. In the mud where the fight was, you find an empty flour bag stamped AGNES PELL in blue ink, and a line of spilled flour running off the road toward the hills. That is where her stolen carts went.',
+      "The noon bell is still hours off. The trail will keep; Agnes's bakers won't.",
     ],
-    choices: [{ id: 'follow', label: 'Follow the flour into the hills.', next: 'c3-camp' }],
+    choices: [
+      { id: 'rest', label: 'Catch your breath first. (Short Rest)', next: 'c2-town', rest: 'short' },
+      { id: 'go', label: 'Roll on to Dunmarket.', next: 'c2-town' },
+    ],
+  },
+  'c2-town': {
+    chapter: 1, kind: 'camp', title: 'Market Day in Dunmarket', reward: { xp: 250, gold: 25 }, rest: 'long', next: 'c3-camp',
+    text: [
+      "Dunmarket's square is loud with bakers haggling over prices. Agnes Pell sells every sack before the noon bell stops ringing and pays you on the spot.",
+      'When you show her the stamped bag and tell her about the trail, she counts out a second purse and keeps her hand on it. "Bring my other two carts home and this is yours as well."',
+      'You take rooms at the Copper Kettle for the night. Across the square, a smith named Hobb sells armor out of the front of his forge, and potions from a shelf behind the counter.',
+    ],
+    continueLabel: 'Set out after the stolen carts',
   },
   'c3-camp': {
     chapter: 2, kind: 'story', title: 'The Goblin Camp',
     text: [
-      "The flour trail climbs into a ravine and ends at a goblin camp: a ring of hide tents, a smoky cookfire, and both of Agnes's stolen carts with the sacks still piled in the back.",
+      "At first light you pick up the flour trail. It climbs into a ravine and ends at a goblin camp: a ring of hide tents, a smoky cookfire, and both of Agnes's stolen carts with the sacks still piled in the back.",
       "A goblin in a dented helmet two sizes too big is shouting at the others to hurry up and eat. That's the boss. It has a scimitar on its belt and a bow across its back.",
     ],
     choices: [
@@ -2220,10 +2566,10 @@ const SCENES = {
     chapter: 2, kind: 'fight', title: 'The Goblin Boss', encounter: 'camp', next: 'c3-end',
   },
   'c3-end': {
-    chapter: 2, kind: 'end', title: 'Market Day',
+    chapter: 2, kind: 'camp', final: true, title: 'Two Carts Home', reward: { xp: 600, gold: 25 }, rest: 'long',
     text: [
-      "The Goblin Boss's helmet rolls into the cookfire, and the rest of the morning is hauling. You hitch the stolen carts behind Biscuit's and get down the hill as the noon bell starts to ring.",
-      "Agnes Pell is standing in the market square with her arms folded. When she counts three carts instead of one, she unfolds them. She pays the twelve silver each, then adds a second purse for the flour you brought back.",
+      "The Goblin Boss's helmet rolls into the cookfire, and the rest of the day is hauling. By sunset both stolen carts are back in Agnes Pell's yard, a few sacks lighter than they left.",
+      'She pays the second purse in full and pours everyone a mug of something brown from a jug she keeps under the counter. Biscuit gets a whole sack to himself.',
     ],
   },
 };
@@ -2255,18 +2601,23 @@ const ENCOUNTERS = {
       return spots.slice(0, Math.max(1, n)).map((s, i) => ({ def: W, label: `Goblin ${i + 1}`, ...s }));
     },
   },
-  // Chapter 3, "Weapon Mastery and Teamwork": the boss and its guards.
+  // Chapter 2, "The Goblin Camp": the boss and its guards, for level 2 heroes
+  // (2024 budget per level 2 hero: Moderate 125 XP, High 150 XP).
   camp: {
     name: 'The goblin camp',
     walls: ['0,3', '1,3', '6,2', '7,2', '3,5', '4,5', '1,7', '6,7'],
     heroStarts: [{ x: 3, y: 8 }, { x: 4, y: 8 }, { x: 2, y: 9 }, { x: 5, y: 9 }],
     foes(n) {
       const boss = { def: BOSS, label: 'Goblin Boss', x: 4, y: 1, ai: 'melee' };
-      const g = (i, x, y, ai) => ({ def: W, label: `Goblin ${i}`, x, y, ai });
-      if (n <= 1) return [g(1, 3, 2, 'melee'), g(2, 5, 1, 'archer')];            // 100 XP: High for one
-      if (n === 2) return [boss];                                               // 200 XP: High for two
-      if (n === 3) return [boss, g(1, 3, 1, 'melee')];                          // 250 XP: between Moderate and High
-      return [boss, g(1, 3, 1, 'melee'), g(2, 6, 0, 'archer')];                 // 300 XP: Moderate for four
+      const spots = [
+        { x: 3, y: 1, ai: 'melee' }, { x: 5, y: 2, ai: 'melee' }, { x: 6, y: 0, ai: 'archer' },
+        { x: 1, y: 1, ai: 'archer' }, { x: 2, y: 2, ai: 'melee' }, { x: 7, y: 4, ai: 'melee' },
+      ];
+      const g = (k) => spots.slice(0, k).map((sp, i) => ({ def: W, label: `Goblin ${i + 1}`, ...sp }));
+      if (n <= 1) return g(3);                       // 150 XP: High for one
+      if (n === 2) return [boss, ...g(2)];           // 300 XP: High for two
+      if (n === 3) return [boss, ...g(4)];           // 400 XP: Moderate+ for three
+      return [boss, ...g(6)];                        // 500 XP: Moderate for four
     },
   },
 };
@@ -2277,14 +2628,29 @@ function buildEncounter(id, n) {
   return { walls: e.walls, heroStarts: e.heroStarts, foes, xp: foes.reduce((s, f) => s + f.xp, 0) };
 }
 
+// Loot, rolled with d(sides) when the fight is won. Gold goes to the party's
+// purse, potions to its supply, magic items into its pack to hand out.
+ENCOUNTERS.road.loot = (foes, d) => ({
+  gold: foes.reduce((s) => s + d(8), 0),
+  potions: 1,
+  items: [],
+});
+ENCOUNTERS.camp.loot = (foes, d) => ({
+  gold: 30 + d(10) + d(10) + foes.filter((f) => f.kind === 'goblin').reduce((s) => s + d(8), 0),
+  potions: 1,
+  items: ['weapon-plus-1', 'cloak-protection'],
+});
+
 return { ENCOUNTERS, buildEncounter };
 })();
 
 /* ===== src/game/room.js ===== */
 __mods["src/game/room.js"] = (() => {
 // First Roll - the party room. It runs on the host's phone (or in a test) and
-// is the single authority: seats, heroes, the campaign (story votes, skill
-// checks), battles, turn control, AI turns, reactions and saves.
+// is the single authority: seats, heroes and their progress (XP, levels, HP
+// and resources between fights), the party's gold, potions and items, the
+// campaign (votes, skill checks, rests, town stops), battles, turn control,
+// AI turns, reactions and saves.
 // Transport-free, like Skyline Hustle's room: a connection is anything with
 // send(string) and close().
 //
@@ -2297,16 +2663,17 @@ __mods["src/game/room.js"] = (() => {
 //   start                    vote {choice}    decide (host)
 //   claim {hero}             help {hero}      roll {hero}          continue (host)
 //   act {intent}             react {yes}      retry (host)         again (host)
-//   ping {x, y}
+//   buy {item, hero}         equip {item, hero}                    ping {x, y}
+//   hero {spec, xp, gear}    (bringing a saved hero: only xp and gear carry over)
 // host -> phone:  welcome {pid, token}   state {...}   ping {pid, x, y}   error {text}
 
-const { buildHero, validateSpec } = __mods["src/rules/character.js"];
-const { SKILLS, SKILL_NAMES } = __mods["src/rules/data.js"];
+const { buildHero, validateSpec, freshProgress, applyProgress, harvestProgress, canWear } = __mods["src/rules/character.js"];
+const { SKILLS, SKILL_NAMES, ITEMS, SHOP, XP_LEVELS, MAX_LEVEL, CLASS_FEATURES, levelForXp } = __mods["src/rules/data.js"];
 const { createBattle, rollInitiative, perform, current, resolveReaction, rollD20 } = __mods["src/rules/combat.js"];
-const { makeRng } = __mods["src/rules/rng.js"];
+const { makeRng, die } = __mods["src/rules/rng.js"];
 const { aiNext } = __mods["src/rules/ai.js"];
 const { SCENES, FIRST_SCENE, COMPANIONS } = __mods["src/game/campaign.js"];
-const { buildEncounter } = __mods["src/game/encounters.js"];
+const { buildEncounter, ENCOUNTERS } = __mods["src/game/encounters.js"];
 
 const MAX_HEROES = 4;
 const MAX_SEATS = 8;            // extra people watch
@@ -2336,7 +2703,13 @@ function skillParts(h, skill) {
 // store: { load() -> string|null, save(string), remove() }
 function createRoom({ store = null, now = () => Date.now(), seed = null, log = () => {} } = {}) {
   let S = {
-    v: 2, seats: [], nextPid: 1, companions: 'auto',
+    v: 3, seats: [], nextPid: 1, companions: 'auto',
+    progress: {},              // hero id -> { level, xp, hp, hd, aid, gear, uses }
+    inventory: { gold: 0, potions: 0, items: [] },
+    claimed: {},               // scene rewards already paid
+    rewards: null,             // what the last fight paid out
+    notice: null,              // { title, lines } shown on the next scene (rests, rewards)
+    fightStart: null, settled: false,
     phase: 'lobby',            // lobby | story | battle
     story: null,               // { scene, votes, check, result }
     flags: {},
@@ -2355,7 +2728,7 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
       const raw = store.load();
       if (raw) {
         const s = JSON.parse(raw);
-        if (s.v === 2) S = s;
+        if (s.v === 3) S = s;
         if (S.phase === 'battle' && !S.battle) S.phase = S.story ? 'story' : 'lobby';
       }
     } catch (e) { log('bad save', e); }
@@ -2381,7 +2754,22 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
     const comps = picks.slice(0, Math.min(want, room)).map((c) => ({ id: c.id, controller: null, spec: c.spec, name: c.name }));
     return [...players, ...comps];
   }
-  const heroOf = (p) => buildHero(p.spec, { id: p.id, name: p.name });
+  // XP a newcomer starts with: the lowest in the party, so drop-ins keep up.
+  const partyXp = () => {
+    const xs = party().map((p) => S.progress[p.id]?.xp).filter((x) => x != null);
+    return xs.length ? Math.min(...xs) : 0;
+  };
+  function progressOf(p) {
+    if (!S.progress[p.id]) {
+      const xp = partyXp();
+      S.progress[p.id] = freshProgress(buildHero(p.spec, { id: p.id, level: levelForXp(xp) }), { xp });
+    }
+    return S.progress[p.id];
+  }
+  const heroOf = (p) => {
+    const pr = progressOf(p);
+    return applyProgress(buildHero(p.spec, { id: p.id, name: p.name, level: pr.level, gear: pr.gear }), pr);
+  };
 
   // Who acts for this creature right now: a pid, or 'ai'.
   function actorFor(c, t) {
@@ -2408,6 +2796,8 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
       companions: S.companions,
       party: party().map((p) => ({ id: p.id, name: p.name, controller: p.controller, spec: p.spec })),
       story: S.story, flags: S.flags, battleScene: S.battleScene,
+      progress: Object.fromEntries(party().map((p) => [p.id, progressOf(p)])),
+      inventory: S.inventory, rewards: S.rewards, notice: S.notice,
       battle: b,
       control: cur && !S.battle.over ? actorFor(cur, t) : null,
       reactor: S.battle?.pending ? actorFor(S.battle.creatures[S.battle.pending.reactor], t) : null,
@@ -2423,14 +2813,103 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
   const sendTo = (h, msg) => h.conn.send(JSON.stringify(msg));
 
   // ----------------------------------------------------------- story ----
-  function goto(id) {
+  function goto(id, notice = null) {
     const sc = SCENES[id];
     if (!sc) throw new Error(`No scene ${id}`);
     S.battle = null;
+    S.rewards = null;
+    S.notice = notice;
     if (sc.kind === 'fight') return startFight(id);
     S.phase = 'story';
     S.story = { scene: id, votes: {}, check: null, result: null };
     if (sc.kind === 'check') S.story.check = { roller: null, helpers: [], rolls: {}, done: false };
+    if (sc.kind === 'camp') {
+      const lines = [];
+      if (sc.reward && !S.claimed[id]) { S.claimed[id] = true; lines.push(...payReward(sc.reward)); }
+      if (sc.rest === 'long') lines.push(...longRest());
+      S.notice = { title: sc.final ? 'The end of the chapter' : 'In town', lines };
+    }
+  }
+
+  // ------------------------------------------------- XP, levels, rests ----
+  function levelUp(p, to) {
+    const pr = progressOf(p);
+    const from = pr.level;
+    const before = buildHero(p.spec, { id: p.id, level: from, gear: pr.gear });
+    const after = buildHero(p.spec, { id: p.id, level: to, gear: pr.gear });
+    const fresh = freshProgress(after).uses;
+    pr.hp += after.hpMax - before.hpMax;
+    pr.hd += to - from;
+    for (const [k, v] of Object.entries(fresh)) if (pr.uses[k] == null && v != null) pr.uses[k] = v;
+    if (after.casting?.slots) {
+      pr.uses.slots ||= {};
+      for (const [l, sl] of Object.entries(after.casting.slots)) pr.uses.slots[l] = (pr.uses.slots[l] ?? 0) + sl.max - (before.casting?.slots?.[l]?.max || 0);
+    }
+    pr.level = to;
+    const feats = [];
+    for (let l = from + 1; l <= to; l++) feats.push(...(CLASS_FEATURES[p.spec.cls][l] || []).map((f) => f.name));
+    return `${p.name} reaches level ${to}: +${after.hpMax - before.hpMax} max HP${feats.length ? `, ${feats.join(', ')}` : ''}.`;
+  }
+
+  function grantXp(amount) {
+    const lines = [];
+    for (const p of party()) {
+      const pr = progressOf(p);
+      pr.xp += amount;
+      const to = levelForXp(pr.xp);
+      if (to > pr.level) lines.push(levelUp(p, to));
+    }
+    return lines;
+  }
+
+  function payReward(r) {
+    const n = party().length;
+    const lines = [];
+    if (r.gold) { S.inventory.gold += r.gold * n; lines.push(`The party is paid ${r.gold * n} gold.`); }
+    if (r.xp) { lines.push(`Everyone gains ${r.xp} XP.`); lines.push(...grantXp(r.xp)); }
+    return lines;
+  }
+
+  const d = (sides) => die(S.rng, sides);
+
+  function shortRest() {
+    const lines = [];
+    for (const p of party()) {
+      const pr = progressOf(p);
+      const h = heroOf(p);
+      let healed = 0, spent = 0;
+      while (pr.hd > 0 && h.hpMax - pr.hp >= Math.ceil(h.hitDie / 4)) {
+        const gain = Math.max(1, d(h.hitDie) + h.mods.con);
+        pr.hp = Math.min(h.hpMax, pr.hp + gain);
+        pr.hd--; spent++; healed += gain;
+      }
+      const u = pr.uses;
+      const back = [];
+      if (h.secondWind && u.secondWind < h.secondWind.max) { u.secondWind++; back.push('a Second Wind'); }
+      if (h.actionSurge && u.actionSurge < h.actionSurge.max) { u.actionSurge = h.actionSurge.max; back.push('Action Surge'); }
+      if (h.channel && u.channel < h.channel.max) { u.channel++; back.push('a Channel Divinity'); }
+      if (h.adrenaline && u.adrenaline < h.adrenaline.max) { u.adrenaline = h.adrenaline.max; back.push('Adrenaline Rush'); }
+      if (p.spec.cls === 'wizard' && !u.arcaneRecovery && h.casting?.slots) {
+        let budget = Math.ceil(pr.level / 2);
+        for (const l of Object.keys(h.casting.slots).map(Number).sort((a, b) => b - a)) {
+          while (l <= budget && (u.slots[l] ?? 0) < h.casting.slots[l].max) { u.slots[l] = (u.slots[l] ?? 0) + 1; budget -= l; back.push(`a level ${l} slot (Arcane Recovery)`); u.arcaneRecovery = true; }
+        }
+      }
+      const bits = [];
+      if (spent) bits.push(`spends ${spent} Hit ${spent === 1 ? 'Die' : 'Dice'} and regains ${healed} HP`);
+      if (back.length) bits.push(`gets back ${back.join(', ')}`);
+      lines.push(`${p.name} ${bits.length ? bits.join(' and ') : 'rests'}.`);
+    }
+    return lines;
+  }
+
+  function longRest() {
+    for (const p of party()) {
+      const pr = progressOf(p);
+      const h = buildHero(p.spec, { id: p.id, level: pr.level, gear: pr.gear });
+      S.progress[p.id] = { ...freshProgress(h, { xp: pr.xp }), gear: { ...pr.gear } };
+    }
+    return ['A Long Rest: everyone is back to full Hit Points, Hit Dice, spell slots and abilities.'];
   }
 
   function resolveVote(force = false) {
@@ -2445,7 +2924,8 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
     const top = Math.max(...Object.values(tally));
     const tied = sc.choices.filter((c) => tally[c.id] === top);
     const pick = tied.length > 1 && tied.some((c) => c.id === S.story.votes[hostPid()]) ? S.story.votes[hostPid()] : tied[0].id;
-    goto(sc.choices.find((c) => c.id === pick).next);
+    const choice = sc.choices.find((c) => c.id === pick);
+    goto(choice.next, choice.rest === 'short' ? { title: 'Short Rest', lines: shortRest() } : null);
   }
 
   // One hero's check: d20 (Advantage if Helped) + skill modifier vs DC.
@@ -2492,8 +2972,11 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
     const sc = SCENES[sceneId];
     const members = party();
     const enc = buildEncounter(sc.encounter, members.length);
+    S.fightStart = JSON.parse(JSON.stringify({ progress: S.progress, inventory: S.inventory }));
+    S.settled = false;
+    S.rewards = null;
     const heroes = members.map((p, i) => Object.assign(heroOf(p), enc.heroStarts[i]));
-    S.battle = createBattle({ heroes, foes: enc.foes, walls: enc.walls, seed: Math.floor(Math.random() * 2 ** 31) ^ (now() >>> 0) });
+    S.battle = createBattle({ heroes, foes: enc.foes, walls: enc.walls, seed: Math.floor(Math.random() * 2 ** 31) ^ (now() >>> 0), potions: S.inventory.potions });
     if (seed != null) S.battle.rng = makeRng(seed + S.seq + 1);
     S.battleScene = sceneId;
     S.phase = 'battle';
@@ -2517,7 +3000,7 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
   function act(intent) {
     const c = current(S.battle);
     const r = perform(S.battle, c.id, intent);
-    if (r.ok) onTurnChange();
+    if (r.ok) { onTurnChange(); settle(); }
     return r;
   }
 
@@ -2525,6 +3008,35 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
     resolveReaction(S.battle, yes);
     deadline = 0;
     onTurnChange();
+    settle();
+  }
+
+  // When a fight is won: carry HP and resources forward, pay XP and loot.
+  function settle() {
+    const b = S.battle;
+    if (!b?.over || S.settled) return;
+    S.settled = true;
+    if (b.over !== 'victory') return;
+    const members = party();
+    const lines = [];
+    const revived = [];
+    for (const p of members) {
+      const c = b.creatures[p.id];
+      if (!c) continue;
+      const pr = harvestProgress(c, progressOf(p));
+      pr.aid = (pr.aid || 0) + (c.aidBonus || 0);
+      if (c.hp <= 0) { pr.hp = 1; revived.push(p.name); }
+      S.progress[p.id] = pr;
+    }
+    S.inventory.potions = b.potions;
+    const foes = Object.values(b.creatures).filter((c) => c.side === 'foe');
+    const xp = Math.floor(foes.reduce((s, f) => s + f.xp, 0) / members.length);
+    const loot = ENCOUNTERS[SCENES[S.battleScene].encounter].loot(foes, d);
+    S.inventory.gold += loot.gold;
+    S.inventory.potions += loot.potions;
+    S.inventory.items.push(...loot.items);
+    lines.push(...grantXp(xp));
+    S.rewards = { xp, gold: loot.gold, potions: loot.potions, items: loot.items, revived, levelUps: lines };
   }
 
   // ---------------------------------------------------------- messages ----
@@ -2560,7 +3072,16 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
         let spec;
         try { spec = validateSpec(m.spec); } catch (e) { return err(e.message); }
         if (!s.spec && playerHeroes().length >= MAX_HEROES) return err('The party already has 4 heroes. You can watch.');
+        const old = S.progress[s.pid];
+        const carried = Math.max(0, Math.min(XP_LEVELS[MAX_LEVEL] * 2, Number(m.xp) || 0));
+        const xp = Math.max(old?.xp ?? 0, carried, old ? 0 : partyXp());
+        const g = m.gear || old?.gear || {};
+        const gear = {
+          armor: ['studded', 'chain', 'splint'].includes(g.armor) && canWear(spec.cls, g.armor) ? g.armor : null,
+          weapon: g.weapon ? 1 : 0, cloak: !!g.cloak,
+        };
         s.spec = spec;
+        S.progress[s.pid] = { ...freshProgress(buildHero(spec, { id: s.pid, level: levelForXp(xp), gear }), { xp }), gear };
         return changed();
       }
       case 'companions': {
@@ -2633,17 +3154,49 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
           finishCheck();
         } else if (S.phase === 'battle' && S.battle?.over === 'victory') {
           goto(SCENES[S.battleScene].next);
+        } else if (S.phase === 'story' && sc?.kind === 'camp' && !sc.final) {
+          goto(sc.next);
         }
         return changed();
       }
       case 'retry': {
         if (!isHost || S.phase !== 'battle' || !S.battle?.over) return;
+        if (S.fightStart) { S.progress = S.fightStart.progress; S.inventory = S.fightStart.inventory; }
         startFight(S.battleScene);
         return changed();
       }
       case 'again': {
         if (!isHost) return;
-        S.battle = null; S.story = null; S.phase = 'lobby'; S.flags = {};
+        S.battle = null; S.story = null; S.phase = 'lobby'; S.flags = {}; S.claimed = {}; S.rewards = null; S.notice = null;
+        return changed();
+      }
+      case 'buy': {
+        if (S.phase !== 'story' || sc?.kind !== 'camp') return err('You can only shop in town.');
+        const it = ITEMS[m.item];
+        if (!it || !SHOP.includes(m.item)) return err('Not for sale.');
+        if (S.inventory.gold < it.price) return err(`That costs ${it.price} gold; the party has ${S.inventory.gold}.`);
+        if (it.kind === 'potion') { S.inventory.potions++; }
+        else if (it.kind === 'armor') {
+          const p = party().find((x) => x.id === m.hero);
+          if (!p || !mayControl(s.pid, p.id)) return err('Buy armor for your own hero.');
+          if (!canWear(p.spec.cls, it.armor)) return err(`A ${p.spec.cls} can't wear ${it.name}.`);
+          progressOf(p).gear.armor = it.armor;
+        }
+        S.inventory.gold -= it.price;
+        return changed();
+      }
+      case 'equip': {
+        if (S.phase === 'battle') return err('Not in the middle of a fight.');
+        const i = S.inventory.items.indexOf(m.item);
+        const p = party().find((x) => x.id === m.hero);
+        if (i < 0 || !p) return;
+        if (!mayControl(s.pid, p.id) && !isHost) return err('Hand items to your own hero.');
+        const it = ITEMS[m.item];
+        const gear = progressOf(p).gear;
+        const slot = it.kind === 'weapon' ? 'weapon' : 'cloak';
+        if (gear[slot]) return err(`${p.name} already has one.`);
+        gear[slot] = it.kind === 'weapon' ? 1 : true;
+        S.inventory.items.splice(i, 1);
         return changed();
       }
       case 'act': {
@@ -2720,6 +3273,9 @@ function createRoom({ store = null, now = () => Date.now(), seed = null, log = (
     get story() { return S.story; },
     get party() { return party(); },
     get aiForPlayers() { return aiForPlayers; },
+    get progress() { return S.progress; },
+    get inventory() { return S.inventory; },
+    get rewards() { return S.rewards; },
   };
 }
 
@@ -3725,12 +4281,13 @@ return { openBuilder };
 /* ===== src/ui/story.js ===== */
 __mods["src/ui/story.js"] = (() => {
 // The story screen: scene text, party votes, skill checks (one hero with
-// helpers, or the whole group), and the result that moves the story on.
+// helpers, or the whole group), town stops (rewards, the merchant, the
+// party's pack), and the party's levels, HP and XP.
 
 const { SCENES, CHAPTERS } = __mods["src/game/campaign.js"];
 const { skillParts } = __mods["src/game/room.js"];
-const { buildHero } = __mods["src/rules/character.js"];
-const { SKILL_NAMES, SKILLS, ABILITY_NAMES, signed } = __mods["src/rules/data.js"];
+const { buildHero, applyProgress, canWear } = __mods["src/rules/character.js"];
+const { SKILL_NAMES, SKILLS, ABILITY_NAMES, ITEMS, SHOP, XP_LEVELS, MAX_LEVEL, CLASSES, signed } = __mods["src/rules/data.js"];
 const { $ } = __mods["src/ui/dom.js"];
 const { esc, short, detail } = __mods["src/ui/explain.js"];
 const { sheetHtml } = __mods["src/ui/sheet.js"];
@@ -3741,7 +4298,10 @@ function renderStory(ctx) {
   const st = S.story;
   const sc = SCENES[st.scene];
   const ch = CHAPTERS[sc.chapter];
-  const heroes = S.party.map((p) => ({ ...p, h: buildHero(p.spec, { id: p.id, name: p.name }) }));
+  const heroes = S.party.map((p) => {
+    const pr = S.progress?.[p.id];
+    return { ...p, pr, h: applyProgress(buildHero(p.spec, { id: p.id, name: p.name, level: pr?.level, gear: pr?.gear }), pr) };
+  });
   const mine = heroes.find((p) => p.id === me);
   const canControl = (id) => id === me || (isHost && !heroes.find((p) => p.id === id)?.controller);
   const nameOf = (pid) => S.seats.find((s) => s.pid === pid)?.name || pid;
@@ -3750,6 +4310,9 @@ function renderStory(ctx) {
   let html = `<div class="kicker">Chapter ${sc.chapter} · ${esc(ch.title)}</div>
     <h2 class="scene-title">${esc(sc.title)}</h2>
     ${(sc.text || []).map((p) => `<p class="story">${esc(p)}</p>`).join('')}`;
+  if (S.notice?.lines?.length) {
+    html += `<div class="notice"><b>${esc(S.notice.title)}</b>${S.notice.lines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
+  }
 
   if (sc.kind === 'story') {
     const votes = st.votes || {};
@@ -3801,13 +4364,52 @@ function renderStory(ctx) {
       if (fl) html += `<p class="note">${fl === 'foes' ? 'Your foes will be surprised: they roll Initiative with Disadvantage.' : 'You are surprised: your party rolls Initiative with Disadvantage.'}</p>`;
       html += isHost ? '<button class="btn primary wide" id="s-continue">Continue</button>' : '<p class="note">Waiting for the host to continue…</p>';
     }
-  } else if (sc.kind === 'end') {
-    html += '<div class="result good"><b>To be continued.</b> More adventures are on the way.</div>';
-    html += isHost ? '<button class="btn primary wide" id="s-again">Back to the lobby</button>' : '';
+  } else if (sc.kind === 'camp') {
+    const inv = S.inventory;
+    html += `<div class="purse"><span>💰 <b>${inv.gold}</b> gold</span><span>🧪 <b>${inv.potions}</b> potion${inv.potions === 1 ? '' : 's'}</span></div>`;
+    // The merchant
+    html += '<h4 class="kicker">The merchant</h4><div class="shop">';
+    for (const id of SHOP) {
+      const it = ITEMS[id];
+      const afford = inv.gold >= it.price;
+      let btns;
+      if (it.kind === 'potion') btns = `<button class="btn small primary" data-buy="${id}" ${afford ? '' : 'disabled'}>Buy</button>`;
+      else {
+        btns = heroes.filter((p) => canControl(p.id) && canWear(p.spec.cls, it.armor) && (p.pr?.gear?.armor || CLASSES[p.spec.cls].armor) !== it.armor)
+          .map((p) => `<button class="btn small" data-buy="${id}" data-hero="${p.id}" ${afford ? '' : 'disabled'}>For ${esc(p.name)}</button>`).join('') || '<span class="dim">Nobody of yours can use it.</span>';
+      }
+      html += `<div class="ware"><span>${it.emoji} <b>${esc(it.name)}</b> · ${it.price} gold<span class="sub">${esc(it.text)}</span></span><span class="ck-act">${btns}</span></div>`;
+    }
+    html += '</div>';
+    // The party's pack
+    if (inv.items.length) {
+      html += '<h4 class="kicker">The pack</h4><div class="shop">';
+      inv.items.forEach((id) => {
+        const it = ITEMS[id];
+        const slot = it.kind === 'weapon' ? 'weapon' : 'cloak';
+        const btns = heroes.filter((p) => (canControl(p.id) || isHost) && !p.pr?.gear?.[slot])
+          .map((p) => `<button class="btn small" data-equip="${id}" data-hero="${p.id}">Give to ${esc(p.name)}</button>`).join('');
+        html += `<div class="ware"><span>${it.emoji} <b>${esc(it.name)}</b><span class="sub">${esc(it.text)}</span></span><span class="ck-act">${btns}</span></div>`;
+      });
+      html += '</div>';
+    }
+    if (sc.final) {
+      html += '<div class="result good"><b>To be continued.</b> More adventures are on the way. Your heroes keep their levels and gear.</div>';
+      html += isHost ? '<button class="btn primary wide" id="s-again">Back to the lobby</button>' : '';
+    } else {
+      html += isHost ? `<button class="btn primary wide" id="s-continue">${esc(sc.continueLabel || 'Continue')}</button>` : '<p class="note">Waiting for the host to move on…</p>';
+    }
   }
 
-  html += `<h4 class="kicker">The party</h4><div class="party-strip">${heroes.map((p) =>
-    `<button class="pchip" data-sheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">${p.h.emoji} ${esc(p.name)}<span class="dim">${p.controller ? '' : ' (AI)'}</span></button>`).join('')}</div>`;
+  html += `<h4 class="kicker">The party</h4><div class="roster">${heroes.map((p) => {
+    const pr = p.pr || { level: 1, xp: 0 };
+    const next = pr.level < MAX_LEVEL ? XP_LEVELS[pr.level + 1] : null;
+    const gear = [p.pr?.gear?.weapon ? '⚔️' : '', p.pr?.gear?.cloak ? '🧥' : ''].join('');
+    return `<button class="hcard" data-sheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">
+      <span class="hc-top">${p.h.emoji} <b>${esc(p.name)}</b> <span class="lvl">Lv ${pr.level}</span>${gear}<span class="dim">${p.controller ? '' : ' AI'}</span></span>
+      <span class="meter"><i style="width:${Math.round(100 * p.h.hp / p.h.hpMax)}%"></i></span><span class="sub">HP ${p.h.hp}/${p.h.hpMax}</span>
+      <span class="meter xp"><i style="width:${next ? Math.min(100, Math.round(100 * pr.xp / next)) : 100}%"></i></span><span class="sub">${pr.xp}${next ? ` / ${next}` : ''} XP</span></button>`;
+  }).join('')}</div>`;
 
   const B = $('story-body');
   B.innerHTML = html;
@@ -3822,6 +4424,8 @@ function renderStory(ctx) {
   if ($('s-rollrest')) $('s-rollrest').onclick = () => send({ t: 'continue' });
   if ($('s-continue')) $('s-continue').onclick = () => send({ t: 'continue' });
   if ($('s-again')) $('s-again').onclick = () => send({ t: 'again' });
+  for (const el of B.querySelectorAll('[data-buy]')) el.onclick = () => send({ t: 'buy', item: el.dataset.buy, hero: el.dataset.hero });
+  for (const el of B.querySelectorAll('[data-equip]')) el.onclick = () => send({ t: 'equip', item: el.dataset.equip, hero: el.dataset.hero });
 }
 
 // The latest check roll, for a pop-up card.
@@ -3841,9 +4445,9 @@ __mods["src/ui/main.js"] = (() => {
 const { createRoom } = __mods["src/game/room.js"];
 const { Host, LocalNet, RtcNet, onlineSupported, normCode } = __mods["src/net/online.js"];
 const { buildHero, spellList } = __mods["src/rules/character.js"];
-const { CLASSES, SPELLS, MASTERIES, signed } = __mods["src/rules/data.js"];
+const { CLASSES, SPELLS, MASTERIES, ITEMS, signed } = __mods["src/rules/data.js"];
 const { previewMove, reachableSquares, attackOptions, canAttack, canCast, coneTargets, attackFactors, hitChance, hitBonus, saveChance, spellAttack, spellDC } = __mods["src/rules/combat.js"];
-const { occupantAt, cheb } = __mods["src/rules/grid.js"];
+const { occupantAt, cheb, feetBetween, canEndAt } = __mods["src/rules/grid.js"];
 const { aiNext } = __mods["src/rules/ai.js"];
 const { SCENES } = __mods["src/game/campaign.js"];
 const { createBoard } = __mods["src/ui/board.js"];
@@ -3853,7 +4457,7 @@ const { sheetHtml } = __mods["src/ui/sheet.js"];
 const { openBuilder } = __mods["src/ui/builder.js"];
 const { renderStory } = __mods["src/ui/story.js"];
 
-const K = { name: 'fr.name', save: 'fr.save2', solo: 'fr.save2.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest', spec: 'fr.lastSpec' };
+const K = { name: 'fr.name', save: 'fr.save3', solo: 'fr.save3.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest', spec: 'fr.lastSpec', hero: 'fr.myHero' };
 
 const app = {
   mode: null, room: null, host: null, net: null, code: null, timer: null,
@@ -4013,6 +4617,9 @@ function onMessage(m) {
     const prev = app.S;
     app.S = m;
     takeRecords(prev, m);
+    const mine = m.seats.find((s) => s.pid === app.me);
+    const pr = m.progress?.[app.me];
+    if (mine?.spec && pr) ls.set(K.hero, JSON.stringify({ spec: mine.spec, xp: pr.xp, level: pr.level, gear: pr.gear, name: mine.spec.name || mine.name }));
     if (prev?.control !== m.control && m.control === app.me && m.battle && !m.battle.over) {
       banner('Your turn!');
       navigator.vibrate?.(40);
@@ -4107,10 +4714,10 @@ function renderLobbyShell() {
   $('net-status').textContent = app.status;
 }
 
-function heroSummary(spec, name) {
-  const h = buildHero(spec, { name });
-  return `<div class="herosum"><span class="em">${h.emoji}</span><span><b>${esc(h.name)}</b><span class="sub">${esc(h.species)} ${esc(h.className)} · ${esc(h.background)}</span>
-    <span class="sub">AC ${h.ac} · HP ${h.hpMax} · Speed ${h.speed} ft${h.casting?.slots ? ` · ${h.casting.slots.max} spell slots` : ''}</span></span></div>`;
+function heroSummary(spec, name, pr) {
+  const h = buildHero(spec, { name, level: pr?.level || 1, gear: pr?.gear });
+  return `<div class="herosum"><span class="em">${h.emoji}</span><span><b>${esc(h.name)}</b> <span class="lvl">Lv ${h.level}</span><span class="sub">${esc(h.species)} ${esc(h.className)} · ${esc(h.background)}</span>
+    <span class="sub">AC ${h.ac} · HP ${h.hpMax} · Speed ${h.speed} ft${pr ? ` · ${pr.xp} XP` : ''}</span></span></div>`;
 }
 
 function renderLobby(S) {
@@ -4123,21 +4730,27 @@ function renderLobby(S) {
   }).join('');
 
   const full = S.party.filter((p) => p.controller).length >= 4 && !me?.spec;
+  const saved = ls.json(K.hero);
+  const myPr = S.progress?.[app.me];
   $('lobby-chapters').innerHTML = `
     <div class="chcard ${me?.spec ? 'done' : ''}"><div>
-      ${me?.spec ? heroSummary(me.spec, me.spec.name || me.name) : `<b>No hero yet</b><span class="sub">${full ? 'The party already has four heroes. You can watch.' : 'Pick a class, background and species, and place your ability scores.'}</span>`}</div>
-      <div class="col">${me?.spec ? '<button class="btn small" id="btn-edit">Edit</button><button class="btn small ghost" id="btn-mysheet">Sheet</button>' : full ? '' : '<button class="btn small primary" id="btn-build">Create hero</button>'}</div></div>`;
+      ${me?.spec ? heroSummary(me.spec, me.spec.name || me.name, myPr) : `<b>No hero yet</b><span class="sub">${full ? 'The party already has four heroes. You can watch.' : 'Pick a class, background and species, and place your ability scores.'}</span>`}</div>
+      <div class="col">${me?.spec ? '<button class="btn small" id="btn-edit">Edit</button><button class="btn small ghost" id="btn-mysheet">Sheet</button>' : full ? '' : '<button class="btn small primary" id="btn-build">Create hero</button>'}</div></div>
+    ${!me?.spec && !full && saved?.spec ? `<div class="chcard"><div><b>Bring back ${esc(saved.name)}</b><span class="sub">Level ${saved.level} ${esc(CLASSES[saved.spec.cls]?.name || '')}, ${saved.xp} XP, with their gear.</span></div>
+      <div class="col"><button class="btn small primary" id="btn-bring">Bring</button></div></div>` : ''}`;
   if ($('btn-build')) $('btn-build').onclick = () => buildMine(null);
+  if ($('btn-bring')) $('btn-bring').onclick = () => send({ t: 'hero', spec: saved.spec, xp: saved.xp, gear: saved.gear });
   if ($('btn-edit')) $('btn-edit').onclick = () => buildMine(me.spec);
-  if ($('btn-mysheet')) $('btn-mysheet').onclick = () => openSheet(sheetHtml(buildHero(me.spec, { name: me.spec.name || me.name })));
+  if ($('btn-mysheet')) $('btn-mysheet').onclick = () => openSheet(sheetHtml(buildHero(me.spec, { name: me.spec.name || me.name, level: myPr?.level, gear: myPr?.gear })));
 
   const comp = S.companions;
   $('party-list').innerHTML = S.party.length ? S.party.map((p) => {
     const c = CLASSES[p.spec.cls];
-    return `<button class="pchip" data-psheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">${c.emoji} ${esc(p.name)} <span class="dim">${c.name}${p.controller ? '' : ' · AI'}</span></button>`;
+    const lv = S.progress?.[p.id]?.level || 1;
+    return `<button class="pchip" data-psheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">${c.emoji} ${esc(p.name)} <span class="dim">Lv ${lv} ${c.name}${p.controller ? '' : ' · AI'}</span></button>`;
   }).join('') : '<span class="dim">Nobody yet: build a hero, or add AI companions.</span>';
   for (const el of document.querySelectorAll('[data-psheet]')) {
-    el.onclick = () => { const p = S.party.find((x) => x.id === el.dataset.psheet); openSheet(sheetHtml(buildHero(p.spec, { id: p.id, name: p.name }))); };
+    el.onclick = () => { const p = S.party.find((x) => x.id === el.dataset.psheet); const pr = S.progress?.[p.id]; openSheet(sheetHtml(buildHero(p.spec, { id: p.id, name: p.name, level: pr?.level, gear: pr?.gear }))); };
   }
   $('companions-row').innerHTML = isHost() ? `<span class="host-label">AI companions</span><div class="seg">${['auto', 0, 1, 2, 3].map((n) =>
     `<button data-comp="${n}" class="${String(comp) === String(n) ? 'on' : ''}">${n === 'auto' ? 'Auto' : n}</button>`).join('')}</div>` : '';
@@ -4189,7 +4802,8 @@ function onTap(x, y) {
   if (end && end.x === x && end.y === y) { doMove(x, y); return; }
   app.target = null;
   app.preview = previewMove(b, me.id, x, y);
-  if (!app.preview) send({ t: 'ping', x, y });
+  app.blink = me.casting?.known['misty-step'] && canCast(b, me, 'misty-step').ok && feetBetween(me, { x, y }) <= 30 && canEndAt(b, me, x, y) ? { x, y } : null;
+  if (!app.preview && !app.blink) send({ t: 'ping', x, y });
   renderBattle(S);
 }
 
@@ -4197,7 +4811,7 @@ function doMove(x, y) {
   send({ t: 'act', intent: { a: 'move', x, y } });
   app.preview = null;
 }
-const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; };
+const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; app.blink = null; };
 // Test hook: play one step of my turn the way an AI companion would.
 app.auto = () => { if (myTurn()) act(aiNext(app.S.battle, myHeroId()) || { a: 'end' }); };
 
@@ -4262,17 +4876,27 @@ function renderPanel(S, b, mine, mt) {
   let html = `<div class="budget">
     ${chip(canAttack(t), 'Action', 'your-turn')}${chip(t.bonus, 'Bonus Action', 'your-turn')}
     ${chip(me.reaction, 'Reaction', 'opportunity-attack')}${chip(t.moveLeft >= 5, `Move ${t.moveLeft} ft`, 'movement')}
-    ${me.casting?.slots ? `<span class="chip">Slots ${'●'.repeat(me.casting.slots.left)}${'○'.repeat(me.casting.slots.max - me.casting.slots.left)}</span>` : ''}
+    ${me.casting?.slots ? Object.entries(me.casting.slots).map(([l, sl]) => `<span class="chip">L${l} ${'●'.repeat(sl.left)}${'○'.repeat(sl.max - sl.left)}</span>`).join('') : ''}
+    ${b.potions ? `<span class="chip">🧪 ${b.potions}</span>` : ''}
     ${me.tempHp ? `<span class="chip">+${me.tempHp} temp HP</span>` : ''}</div>`;
   if (app.target) html += targetCard(b, me, b.creatures[app.target]);
-  else if (app.preview) {
-    const oa = app.preview.oas.map((id) => esc(b.creatures[id].name)).join(' and ');
-    html += `<div class="preview"><span>Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an Opportunity Attack.</b>` : ''} Tap the square again or</span>
-      <button class="btn primary" id="btn-move">Move</button><button class="btn ghost" id="btn-cancel">✕</button></div>`;
+  else if (app.preview || app.blink) {
+    const oa = app.preview ? app.preview.oas.map((id) => esc(b.creatures[id].name)).join(' and ') : '';
+    html += `<div class="preview"><span>${app.preview ? `Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an Opportunity Attack.</b>` : ''}` : 'Too far to walk.'}</span>
+      ${app.preview ? '<button class="btn primary" id="btn-move">Move</button>' : ''}
+      ${app.blink ? `<button class="btn" ${intentAttr({ a: 'cast', spell: 'misty-step', x: app.blink.x, y: app.blink.y })}>Misty Step</button>` : ''}
+      <button class="btn ghost" id="btn-cancel">✕</button></div>`;
   }
   const extra = [];
   if (me.secondWind) extra.push(`<button class="btn" data-act="second-wind" ${t.bonus && me.secondWind.uses ? '' : 'disabled'}>Second Wind (${me.secondWind.uses})</button>`);
   if (me.adrenaline) extra.push(`<button class="btn" data-act="adrenaline" ${t.bonus && me.adrenaline.uses ? '' : 'disabled'}>Adrenaline Rush (${me.adrenaline.uses})</button>`);
+  if (me.actionSurge) extra.push(`<button class="btn" data-act="action-surge" ${me.actionSurge.uses && !t.surged ? '' : 'disabled'}>Action Surge (${me.actionSurge.uses})</button>`);
+  if (me.cunning) {
+    extra.push(`<button class="btn" ${intentAttr({ a: 'cunning', what: 'dash' })} ${t.bonus ? '' : 'disabled'}>Cunning Dash</button>`);
+    extra.push(`<button class="btn" ${intentAttr({ a: 'cunning', what: 'disengage' })} ${t.bonus ? '' : 'disabled'}>Cunning Disengage</button>`);
+  }
+  if (me.steadyAim) extra.push(`<button class="btn" data-act="steady-aim" ${t.bonus && !t.moves && t.moveLeft >= me.speed ? '' : 'disabled'}>Steady Aim</button>`);
+  if (b.potions) extra.push(`<button class="btn" data-act="potion" ${t.bonus ? '' : 'disabled'}>Drink a potion</button>`);
   html += `<div class="btns">
     <button class="btn" data-act="dash" ${t.action ? '' : 'disabled'}>Dash</button>
     <button class="btn" data-act="disengage" ${t.action ? '' : 'disabled'}>Disengage</button>
@@ -4283,7 +4907,7 @@ function renderPanel(S, b, mine, mt) {
   for (const btn of P.querySelectorAll('[data-act]')) btn.onclick = () => act({ a: btn.dataset.act });
   for (const btn of P.querySelectorAll('[data-intent]')) btn.onclick = () => act(JSON.parse(btn.dataset.intent));
   if ($('btn-move')) $('btn-move').onclick = () => { const e = app.preview.path[app.preview.path.length - 1]; doMove(e.x, e.y); };
-  if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; renderBattle(app.S); };
+  if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; app.blink = null; renderBattle(app.S); };
   if ($('btn-tx')) $('btn-tx').onclick = () => { app.target = null; renderBattle(app.S); };
   if ($('btn-tinfo')) $('btn-tinfo').onclick = () => openSheet(sheetHtml(b.creatures[app.target]));
 }
@@ -4304,7 +4928,7 @@ function spellCost(b, me, sid) {
   const c = canCast(b, me, sid);
   if (s.level === 0) return { c, tag: 'cantrip' };
   if (c.pay === 'free') return { c, tag: 'free cast' };
-  return { c, tag: `spell slot${s.time === 'bonus' ? ', <b>Bonus Action</b>' : ''}` };
+  return { c, tag: `level ${c.slotLevel || s.level} slot${s.time === 'bonus' ? ', <b>Bonus Action</b>' : ''}` };
 }
 
 function targetCard(b, me, T) {
@@ -4320,6 +4944,22 @@ function targetCard(b, me, T) {
       const inR = self || cheb(me, T) * 5 <= sp.range;
       const why = !inR ? `Out of range (${sp.range === 5 ? 'touch' : `${sp.range} ft`}).` : c.ok ? `${sp.kind === 'heal' ? `Heals ${sp.dice} + your modifier` : 'Makes them Stable'} · ${tag}` : esc(c.error);
       rows += row(sp.name, { a: 'cast', spell: sp.id, target: T.id }, inR && c.ok, why);
+    }
+    if (b.potions > 0 && !T.dead) {
+      const near = self || cheb(me, T) <= 1;
+      rows += row(self ? 'Drink a potion' : 'Give a potion', { a: 'potion', target: T.id }, near && t.bonus,
+        near ? `Potion of Healing: 2d4 + 2 HP · Bonus Action · ${b.potions} left` : 'Move next to them first.');
+    }
+    if (me.channel && !T.dead) {
+      const inR = cheb(me, T) * 5 <= 30;
+      rows += row(`Divine Spark (${me.channel.uses})`, { a: 'divine-spark', target: T.id }, inR && t.action && me.channel.uses > 0,
+        inR ? `Channel Divinity: heals 1d8 ${signed(me.mods.wis)}` : 'Out of range (30 ft).');
+    }
+    if (self) {
+      for (const sp of spellList(me).filter((x) => x.kind === 'aid')) {
+        const { c, tag } = spellCost(b, me, sp.id);
+        rows += row(sp.name, { a: 'cast', spell: sp.id }, c.ok, c.ok ? `+5 HP and max HP for you and the two most hurt allies within 30 ft · ${tag}` : esc(c.error));
+      }
     }
     if (!self && T.hp <= 0 && !T.dead && !T.stable) {
       rows += row('Stabilize', { a: 'stabilize', target: T.id }, t.action && cheb(me, T) <= 1,
@@ -4337,7 +4977,7 @@ function targetCard(b, me, T) {
       rows += row(o.atk.name, { a: 'attack', target: T.id, attack: o.atk.id }, o.ok && canAttack(t), why);
     }
     for (const sp of spellList(me)) {
-      if (!['attack', 'save', 'missile', 'cone'].includes(sp.kind)) continue;
+      if (!['attack', 'save', 'missile', 'cone', 'rays'].includes(sp.kind)) continue;
       const { c, tag } = spellCost(b, me, sp.id);
       if (sp.kind === 'cone') {
         const hit = coneTargets(b, me, T.x, T.y);
@@ -4359,6 +4999,10 @@ function targetCard(b, me, T) {
       } else if (sp.kind === 'save') {
         const dc = spellDC(me, sp.id);
         why = `${Math.round((1 - saveChance(b, T, sp.save, dc)) * 100)}% it fails a DC ${dc} ${sp.save.toUpperCase()} save · ${sp.dice} ${sp.type} · ${tag}`;
+      } else if (sp.kind === 'rays') {
+        const atk = spellAttack(me, sp.id);
+        const f = attackFactors(b, me, T, atk);
+        why = [`3 rays, ${Math.round(hitChance(hitBonus(atk), T.ac, f.mode, me.luck) * 100)}% to hit each`, `${sp.dice} ${sp.type} each`, ...reasons({ ...f }), tag].join(' · ');
       } else why = `Never misses · 3 × (1d4 + 1) Force · ${tag}`;
       rows += row(sp.name, { a: 'cast', spell: sp.id, target: T.id }, inR && c.ok, why);
     }
@@ -4369,6 +5013,11 @@ function targetCard(b, me, T) {
       const dc = me.breath.dc.reduce((s, p) => s + p.value, 0);
       rows += row(`Breath Weapon (${me.breath.uses})`, { a: 'breath', x: T.x, y: T.y }, ok,
         `Replaces an attack: 15-ft Cone, catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody (get within 15 feet)'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''} · DC ${dc} DEX save, ${me.breath.dice} ${me.breath.type}`);
+    }
+    if (me.channel && cheb(me, T) * 5 <= 30) {
+      const dc = me.casting.stats.wis.dc.reduce((s2, x) => s2 + x.value, 0);
+      rows += row(`Divine Spark (${me.channel.uses})`, { a: 'divine-spark', target: T.id }, t.action && me.channel.uses > 0,
+        `Channel Divinity: ${Math.round((1 - saveChance(b, T, 'con', dc)) * 100)}% it fails a DC ${dc} CON save · 1d8 ${signed(me.mods.wis)} Radiant, half on a save`);
     }
     if (cheb(me, T) <= 1) {
       rows += row('Help', { a: 'help', target: T.id }, t.action, `Help action: your ally's next attack on ${esc(T.name)} gets Advantage.`, false);
@@ -4436,8 +5085,16 @@ function renderOver(S, b) {
   const sc = SCENES[S.battleScene];
   const hostBtns = win ? '<button class="btn primary wide" id="btn-cont">Continue the story</button>'
     : '<button class="btn primary wide" id="btn-retry">Try the fight again</button><button class="btn wide" id="btn-lobby">Back to the lobby</button>';
+  const rw = win ? S.rewards : null;
+  const loot = rw ? `<div class="loot">
+      <div><b>+${rw.xp} XP</b> each</div><div><b>+${rw.gold}</b> gold</div>
+      ${rw.potions ? `<div>🧪 <b>+${rw.potions}</b> Potion${rw.potions > 1 ? 's' : ''} of Healing</div>` : ''}
+      ${rw.items.map((i) => `<div>${ITEMS[i].emoji} <b>${esc(ITEMS[i].name)}</b></div>`).join('')}</div>
+      ${rw.levelUps.map((l) => `<p class="lvlup">⬆ ${esc(l)}</p>`).join('')}
+      ${rw.revived.length ? `<p class="dim">${rw.revived.map(esc).join(', ')} pull${rw.revived.length === 1 ? 's' : ''} through with 1 HP.</p>` : ''}` : '';
   el.innerHTML = `<div class="card"><div class="logo">${win ? '🏆' : '💀'}</div><h2>${win ? 'Victory!' : 'Defeat'}</h2>
     <p class="dim">${esc(sc?.title || 'The fight')}: ${win ? 'won' : 'lost'} after ${b.round} round${b.round === 1 ? '' : 's'}.${win ? '' : ' Everyone gets back up for another try.'}</p>
+    ${loot}
     <p>${foes.filter((c) => c.dead).length} of ${foes.length} foes defeated${fallen.length ? ` · ${fallen.map((c) => esc(c.name)).join(', ')} down` : ''}.</p>
     ${isHost() ? hostBtns : '<p class="dim">Waiting for the host…</p>'}
     <button class="btn ghost wide" id="btn-over-log">See the combat log</button></div>`;

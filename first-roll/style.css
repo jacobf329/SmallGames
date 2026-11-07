@@ -283,3 +283,21 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 .btns.two { grid-template-columns: 1fr 1fr; }
 .target.ally { border-color: var(--good); }
 .board .cone { fill: rgba(255, 138, 101, .22); stroke: #ff8a65; stroke-width: .03; }
+
+/* --------------------------------------------------------- progression -- */
+.lvl { font-size: 11px; font-weight: 800; background: var(--gold); color: #1b1205; border-radius: 999px; padding: 1px 7px; margin: 0 4px; }
+.notice { background: rgba(92, 209, 138, .08); border: 1px solid rgba(92, 209, 138, .4); border-radius: 14px; padding: 10px 12px; margin: 12px 0; font-size: 14px; display: grid; gap: 4px; }
+.notice b { color: var(--good); }
+.purse { display: flex; gap: 16px; font-size: 16px; margin: 14px 0 4px; }
+.shop { display: grid; gap: 6px; }
+.ware { display: flex; gap: 10px; align-items: center; justify-content: space-between; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; flex-wrap: wrap; }
+.ware > span:first-child { flex: 1; min-width: 180px; font-size: 14px; }
+.ware .sub { display: block; color: var(--dim); font-size: 12px; }
+.roster { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hcard { text-align: left; background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 8px 10px; color: var(--ink); font: 13px/1.3 inherit; font-family: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
+.hcard .sub { color: var(--dim); font-size: 11px; }
+.meter { height: 6px; border-radius: 3px; background: var(--bg2); overflow: hidden; display: block; }
+.meter i { display: block; height: 100%; background: var(--good); }
+.meter.xp i { background: var(--gold); }
+.loot { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; margin: 12px 0; font-size: 15px; }
+.lvlup { color: var(--gold); font-weight: 700; margin: 6px 0; }

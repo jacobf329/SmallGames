@@ -111,7 +111,9 @@ test('a group check: everyone rolls; companions roll once the players have', () 
   if (b.battle.over === 'defeat') { p.ana.say({ t: 'retry' }); finishFight(p); }
   p.ana.say({ t: 'continue' });
   assert.equal(b.story.scene, 'c2-after');
-  p.ana.say({ t: 'vote', choice: 'follow' }); p.ben.say({ t: 'vote', choice: 'follow' });
+  p.ana.say({ t: 'vote', choice: 'go' }); p.ben.say({ t: 'vote', choice: 'go' });
+  assert.equal(b.story.scene, 'c2-town');
+  p.ana.say({ t: 'continue' });
   p.ana.say({ t: 'vote', choice: 'sneak' }); p.ben.say({ t: 'vote', choice: 'sneak' });
   assert.equal(b.story.scene, 'c3-sneak');
   p.ana.say({ t: 'roll' });
@@ -182,7 +184,7 @@ test('the host saves after every change and resumes mid-story', () => {
 test('the whole campaign plays through to the end (AI fights, retry on defeat)', () => {
   const p = party({ companions: 1 });
   p.ana.say({ t: 'start' });
-  for (let step = 0; step < 60 && SCENES[p.room.story?.scene]?.kind !== 'end'; step++) {
+  for (let step = 0; step < 60 && !SCENES[p.room.story?.scene]?.final; step++) {
     const r = p.room;
     if (r.phase === 'battle') {
       finishFight(p);
@@ -198,4 +200,96 @@ test('the whole campaign plays through to the end (AI fights, retry on defeat)',
   }
   assert.equal(p.room.story.scene, 'c3-end');
   assert.equal(p.room.aiForPlayers, 0, 'the AI never played for a connected player');
+});
+
+// ------------------------------------------------------------ progression
+
+function toFight(p, route = 'river') {
+  p.ana.say({ t: 'start' });
+  p.ana.say({ t: 'vote', choice: route }); p.ben.say({ t: 'vote', choice: route });
+  if (route === 'river') { p.ana.say({ t: 'vote', choice: 'fight' }); p.ben.say({ t: 'vote', choice: 'fight' }); }
+}
+
+test('winning a fight pays XP and loot, and HP carries forward', () => {
+  const p = party({ companions: 1 });
+  toFight(p);
+  const r = p.room;
+  finishFight(p);
+  while (r.battle.over === 'defeat') { p.ana.say({ t: 'retry' }); finishFight(p); }
+  const rw = r.rewards;
+  assert.ok(rw.xp > 0 && rw.gold > 0, 'XP and gold');
+  assert.equal(r.inventory.potions, 1, 'a potion from the goblins');
+  const pr = r.progress[p.ana.pid()];
+  assert.equal(pr.xp, rw.xp);
+  const hero = r.battle.creatures[p.ana.pid()];
+  assert.equal(pr.hp, Math.max(1, hero.hp), 'HP carries over (downed heroes get up with 1)');
+});
+
+test('a Short Rest spends Hit Dice; the town pays, levels everyone up and gives a Long Rest', () => {
+  const p = party({ companions: 1 });
+  toFight(p);
+  const r = p.room;
+  finishFight(p);
+  while (r.battle.over === 'defeat') { p.ana.say({ t: 'retry' }); finishFight(p); }
+  p.ana.say({ t: 'continue' });
+  const id = p.ana.pid();
+  r.progress[id].hp = 1;
+  const gold = r.inventory.gold;
+  p.ana.say({ t: 'vote', choice: 'rest' }); p.ben.say({ t: 'vote', choice: 'rest' });
+  assert.equal(r.story.scene, 'c2-town');
+  assert.ok(p.ana.state().notice.lines.length, 'the town notice lists what happened');
+  assert.equal(r.progress[id].level, 2, '250 XP from the job + the fight = level 2');
+  assert.equal(r.inventory.gold, gold + 25 * 3);
+  const h = r.party.find((x) => x.id === id);
+  assert.equal(r.progress[id].hp, 24, 'Long Rest: full HP at level 2 (Human Fighter)');
+  void h;
+});
+
+test('the merchant sells potions and armor; magic items go to a hero', () => {
+  const p = party({ companions: 1 });
+  toFight(p);
+  const r = p.room;
+  finishFight(p);
+  while (r.battle.over === 'defeat') { p.ana.say({ t: 'retry' }); finishFight(p); }
+  p.ana.say({ t: 'continue' });
+  p.ana.say({ t: 'vote', choice: 'go' }); p.ben.say({ t: 'vote', choice: 'go' });
+  r.inventory.gold = 300;
+  p.ben.say({ t: 'buy', item: 'splint', hero: p.ben.pid() });
+  assert.match(p.ben.last('error').text, /can't wear/, 'the Rogue can\'t wear splint');
+  p.ana.say({ t: 'buy', item: 'splint', hero: p.ana.pid() });
+  assert.equal(r.progress[p.ana.pid()].gear.armor, 'splint');
+  p.ben.say({ t: 'buy', item: 'potion-healing' });
+  assert.equal(r.inventory.gold, 300 - 200 - 50);
+  assert.equal(r.inventory.potions, 2);
+  r.inventory.items.push('cloak-protection');
+  p.ben.say({ t: 'equip', item: 'cloak-protection', hero: p.ben.pid() });
+  assert.equal(r.progress[p.ben.pid()].gear.cloak, true);
+  assert.equal(r.inventory.items.length, 0);
+});
+
+test('retrying a lost fight restores the party to how it was', () => {
+  const p = party({ companions: 1 });
+  toFight(p);
+  const r = p.room;
+  const before = JSON.stringify(r.progress);
+  for (const c of Object.values(r.battle.creatures)) if (c.side === 'hero') c.hp = 0;
+  r.battle.over = 'defeat';
+  p.ana.say({ t: 'retry' });
+  assert.equal(JSON.stringify(r.progress), before);
+  assert.ok(!r.battle.over);
+});
+
+test('a newcomer joins at the party\'s level; a saved hero brings its XP and gear', () => {
+  const p = party({ companions: 0 });
+  const r = p.room;
+  r.progress[p.ana.pid()].xp = 400;
+  r.progress[p.ben.pid()].xp = 350;
+  const cy = phone(r); cy.say({ t: 'hello', name: 'Cy' });
+  cy.say({ t: 'hero', spec: defaultSpec('wizard') });
+  assert.equal(r.progress[cy.pid()].xp, 350);
+  assert.equal(r.progress[cy.pid()].level, 2);
+  const dee = phone(r); dee.say({ t: 'hello', name: 'Dee' });
+  dee.say({ t: 'hero', spec: defaultSpec('cleric'), xp: 950, gear: { armor: 'splint', cloak: true } });
+  assert.equal(r.progress[dee.pid()].level, 3);
+  assert.equal(r.progress[dee.pid()].gear.armor, 'splint');
 });

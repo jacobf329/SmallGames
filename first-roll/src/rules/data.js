@@ -48,6 +48,8 @@ export const ARMOR = {
   leather: { name: 'Leather Armor', base: 11, dex: true },
   chainShirt: { name: 'Chain Shirt', base: 13, dex: true, maxDex: 2 },
   chain: { name: 'Chain Mail', base: 16, dex: false },
+  studded: { name: 'Studded Leather Armor', base: 12, dex: true },
+  splint: { name: 'Splint Armor', base: 17, dex: false },
 };
 
 // -------------------------------------------------------------- spells ----
@@ -74,6 +76,12 @@ export const SPELLS = {
     text: 'Ranged spell attack. On a hit, 4d6 Radiant damage, and the next attack roll against the target before the end of your next turn has Advantage.' },
   'magic-missile': { name: 'Magic Missile', level: 1, time: 'action', range: 120, kind: 'missile', darts: 3, dice: '1d4', flat: 1, type: 'Force',
     text: 'Three glowing darts that always hit, each dealing 1d4 + 1 Force damage.' },
+  'aid': { name: 'Aid', level: 2, time: 'action', range: 30, kind: 'aid', amount: 5,
+    text: 'Up to three creatures within 30 feet: each one\'s Hit Point maximum and current Hit Points go up by 5 for the rest of the day.' },
+  'scorching-ray': { name: 'Scorching Ray', level: 2, time: 'action', range: 120, kind: 'rays', rays: 3, dice: '2d6', type: 'Fire',
+    text: 'Three rays of fire. Make a ranged spell attack for each; every ray that hits deals 2d6 Fire damage.' },
+  'misty-step': { name: 'Misty Step', level: 2, time: 'bonus', range: 30, kind: 'teleport',
+    text: 'Teleport up to 30 feet to an unoccupied space you can see. A Bonus Action, and it doesn\'t provoke Opportunity Attacks.' },
   'burning-hands': { name: 'Burning Hands', level: 1, time: 'action', kind: 'cone', size: 15, save: 'dex', dice: '3d6', type: 'Fire', half: true,
     text: 'A 15-foot Cone of flame. Each creature in it makes a Dexterity save: 3d6 Fire damage on a failure, half as much on a success. Careful: allies in the Cone burn too.' },
 };
@@ -105,7 +113,7 @@ export const CLASSES = {
     skillChoices: { n: 2, from: ['medicine', 'insight', 'religion', 'history', 'persuasion'] },
     armor: 'chainShirt', shield: true, weapons: ['mace'], masteries: [],
     suggested: { wis: 15, con: 14, str: 13, dex: 12, cha: 10, int: 8 },
-    spellcasting: { ability: 'wis', cantrips: ['sacred-flame', 'spare-the-dying', 'thaumaturgy'], prepared: ['healing-word', 'cure-wounds', 'guiding-bolt'], slots: 2 },
+    spellcasting: { ability: 'wis', cantrips: ['sacred-flame', 'spare-the-dying', 'thaumaturgy'], prepared: ['healing-word', 'cure-wounds', 'guiding-bolt'], byLevel: { 3: ['aid'] } },
     blurb: 'Divine magic. Keeps the party standing and burns foes with radiant light.',
     plays: 'Heal whoever is in trouble (Healing Word is a Bonus Action), then Sacred Flame or Guiding Bolt.',
   },
@@ -115,7 +123,7 @@ export const CLASSES = {
     skillChoices: { n: 2, from: ['arcana', 'investigation', 'history', 'insight', 'medicine', 'nature', 'religion'] },
     armor: 'none', shield: false, weapons: ['quarterstaff', 'dagger'], masteries: [],
     suggested: { int: 15, con: 14, dex: 13, wis: 12, cha: 10, str: 8 },
-    spellcasting: { ability: 'int', cantrips: ['fire-bolt', 'ray-of-frost', 'mage-hand'], prepared: ['magic-missile', 'burning-hands'], slots: 2 },
+    spellcasting: { ability: 'int', cantrips: ['fire-bolt', 'ray-of-frost', 'mage-hand'], prepared: ['magic-missile', 'burning-hands'], byLevel: { 3: ['scorching-ray', 'misty-step'] } },
     blurb: 'Fragile but powerful. Attacks from a distance with spells.',
     plays: 'Stay back and cast Fire Bolt. Save your spell slots for Magic Missile or Burning Hands on a crowd.',
   },
@@ -235,3 +243,59 @@ export const SKIRMISH = {
     { id: 'g3', label: 'Goblin 3', x: 4, y: 0, ai: 'archer' },
   ],
 };
+
+// ----------------------------------------------------------- progression ----
+// XP needed to reach each level (index = level).
+export const XP_LEVELS = [0, 0, 300, 900, 2700, 6500];
+export const MAX_LEVEL = 3;
+export const levelForXp = (xp) => { let l = 1; while (l < MAX_LEVEL && xp >= XP_LEVELS[l + 1]) l++; return l; };
+
+// Full casters' spell slots by character level: { spell level: count }.
+export const SPELL_SLOTS = { 1: { 1: 2 }, 2: { 1: 3 }, 3: { 1: 4, 2: 2 }, 4: { 1: 4, 2: 3 }, 5: { 1: 4, 2: 3, 3: 2 } };
+
+// What each class gains at levels 2 and 3 (shown on the level-up screen and sheet).
+export const CLASS_FEATURES = {
+  fighter: {
+    2: [{ name: 'Action Surge', rule: 'action-surge', text: 'Once per Short Rest, take one extra action on your turn.' },
+      { name: 'Tactical Mind', text: 'Spend a use of Second Wind to add 1d10 to a failed ability check.' }],
+    3: [{ name: 'Champion: Improved Critical', rule: 'improved-critical', text: 'Your attack rolls score a Critical Hit on a 19 or 20.' },
+      { name: 'Champion: Remarkable Athlete', text: 'Advantage on Initiative rolls and Strength (Athletics) checks.' }],
+  },
+  rogue: {
+    2: [{ name: 'Cunning Action', rule: 'cunning-action', text: 'Take the Dash or Disengage action as a Bonus Action.' }],
+    3: [{ name: 'Sneak Attack 2d6', rule: 'sneak-attack', text: 'Your Sneak Attack damage rises to 2d6.' },
+      { name: 'Thief: Fast Hands', text: 'Use an object, like a potion, as a Bonus Action.' },
+      { name: 'Steady Aim', text: "As a Bonus Action, if you haven't moved this turn, give yourself Advantage on your next attack roll this turn. Your Speed becomes 0 until the end of the turn." }],
+  },
+  cleric: {
+    2: [{ name: 'Channel Divinity: Divine Spark', rule: 'divine-spark', text: 'As an action, a creature within 30 feet regains 1d8 + WIS Hit Points, or takes 1d8 + WIS Radiant damage (Constitution save for half). Two uses, one back on a Short Rest.' },
+      { name: 'More spell slots', rule: 'spell-slots', text: 'Three level 1 slots.' }],
+    3: [{ name: 'Life Domain: Disciple of Life', rule: 'disciple-of-life', text: 'Your healing spells restore an extra 2 + the spell\'s level Hit Points.' },
+      { name: 'Level 2 spells', rule: 'spell-slots', text: 'Two level 2 slots, and you prepare Aid.' }],
+  },
+  wizard: {
+    2: [{ name: 'Scholar', text: 'Expertise in one of Arcana, History, Investigation, Medicine, Nature or Religion.' },
+      { name: 'More spell slots', rule: 'spell-slots', text: 'Three level 1 slots.' }],
+    3: [{ name: 'Evoker: Potent Cantrip', rule: 'potent-cantrip', text: 'When a creature succeeds on a save against your damaging cantrip, or you miss with one, it still takes half the damage.' },
+      { name: 'Level 2 spells', rule: 'spell-slots', text: 'Two level 2 slots, and you prepare Scorching Ray and Misty Step.' }],
+  },
+};
+
+// ---------------------------------------------------------------- items ----
+// kind: potion (party inventory, used in battle), and gear a hero carries:
+// armor, weapon (+1 to attack and damage with weapons), cloak (+1 AC and saves).
+export const ITEMS = {
+  'potion-healing': { name: 'Potion of Healing', kind: 'potion', dice: '2d4', flat: 2, price: 50, emoji: '🧪',
+    text: 'Regain 2d4 + 2 Hit Points. Drinking it, or giving it to someone within 5 feet, is a Bonus Action.' },
+  'studded-leather': { name: 'Studded Leather Armor', kind: 'armor', armor: 'studded', price: 45, for: ['rogue', 'cleric', 'fighter'], emoji: '🦺',
+    text: 'Light armor: AC 12 + your Dexterity modifier.' },
+  'chain-mail': { name: 'Chain Mail', kind: 'armor', armor: 'chain', price: 75, for: ['cleric', 'fighter'], emoji: '⛓️',
+    text: 'Heavy armor: AC 16. For Fighters and Protector Clerics.' },
+  'splint': { name: 'Splint Armor', kind: 'armor', armor: 'splint', price: 200, for: ['cleric', 'fighter'], emoji: '🛡️',
+    text: 'Heavy armor: AC 17. For Fighters and Protector Clerics.' },
+  'weapon-plus-1': { name: '+1 Weapon', kind: 'weapon', price: null, emoji: '⚔️',
+    text: "A magic weapon of the hero's choice: +1 to attack and damage rolls with their weapons." },
+  'cloak-protection': { name: 'Cloak of Protection', kind: 'cloak', price: null, emoji: '🧥',
+    text: '+1 to Armor Class and saving throws.' },
+};
+export const SHOP = ['potion-healing', 'studded-leather', 'chain-mail', 'splint'];

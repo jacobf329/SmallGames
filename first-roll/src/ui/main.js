@@ -7,12 +7,12 @@
 import { createRoom } from '../game/room.js';
 import { Host, LocalNet, RtcNet, onlineSupported, normCode } from '../net/online.js';
 import { buildHero, spellList } from '../rules/character.js';
-import { CLASSES, SPELLS, MASTERIES, signed } from '../rules/data.js';
+import { CLASSES, SPELLS, MASTERIES, ITEMS, signed } from '../rules/data.js';
 import {
   previewMove, reachableSquares, attackOptions, canAttack, canCast, coneTargets, attackFactors,
   hitChance, hitBonus, saveChance, spellAttack, spellDC,
 } from '../rules/combat.js';
-import { occupantAt, cheb } from '../rules/grid.js';
+import { occupantAt, cheb, feetBetween, canEndAt } from '../rules/grid.js';
 import { aiNext } from '../rules/ai.js';
 import { SCENES } from '../game/campaign.js';
 import { createBoard } from './board.js';
@@ -22,7 +22,7 @@ import { sheetHtml } from './sheet.js';
 import { openBuilder } from './builder.js';
 import { renderStory } from './story.js';
 
-const K = { name: 'fr.name', save: 'fr.save2', solo: 'fr.save2.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest', spec: 'fr.lastSpec' };
+const K = { name: 'fr.name', save: 'fr.save3', solo: 'fr.save3.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest', spec: 'fr.lastSpec', hero: 'fr.myHero' };
 
 const app = {
   mode: null, room: null, host: null, net: null, code: null, timer: null,
@@ -182,6 +182,9 @@ function onMessage(m) {
     const prev = app.S;
     app.S = m;
     takeRecords(prev, m);
+    const mine = m.seats.find((s) => s.pid === app.me);
+    const pr = m.progress?.[app.me];
+    if (mine?.spec && pr) ls.set(K.hero, JSON.stringify({ spec: mine.spec, xp: pr.xp, level: pr.level, gear: pr.gear, name: mine.spec.name || mine.name }));
     if (prev?.control !== m.control && m.control === app.me && m.battle && !m.battle.over) {
       banner('Your turn!');
       navigator.vibrate?.(40);
@@ -276,10 +279,10 @@ function renderLobbyShell() {
   $('net-status').textContent = app.status;
 }
 
-function heroSummary(spec, name) {
-  const h = buildHero(spec, { name });
-  return `<div class="herosum"><span class="em">${h.emoji}</span><span><b>${esc(h.name)}</b><span class="sub">${esc(h.species)} ${esc(h.className)} · ${esc(h.background)}</span>
-    <span class="sub">AC ${h.ac} · HP ${h.hpMax} · Speed ${h.speed} ft${h.casting?.slots ? ` · ${h.casting.slots.max} spell slots` : ''}</span></span></div>`;
+function heroSummary(spec, name, pr) {
+  const h = buildHero(spec, { name, level: pr?.level || 1, gear: pr?.gear });
+  return `<div class="herosum"><span class="em">${h.emoji}</span><span><b>${esc(h.name)}</b> <span class="lvl">Lv ${h.level}</span><span class="sub">${esc(h.species)} ${esc(h.className)} · ${esc(h.background)}</span>
+    <span class="sub">AC ${h.ac} · HP ${h.hpMax} · Speed ${h.speed} ft${pr ? ` · ${pr.xp} XP` : ''}</span></span></div>`;
 }
 
 function renderLobby(S) {
@@ -292,21 +295,27 @@ function renderLobby(S) {
   }).join('');
 
   const full = S.party.filter((p) => p.controller).length >= 4 && !me?.spec;
+  const saved = ls.json(K.hero);
+  const myPr = S.progress?.[app.me];
   $('lobby-chapters').innerHTML = `
     <div class="chcard ${me?.spec ? 'done' : ''}"><div>
-      ${me?.spec ? heroSummary(me.spec, me.spec.name || me.name) : `<b>No hero yet</b><span class="sub">${full ? 'The party already has four heroes. You can watch.' : 'Pick a class, background and species, and place your ability scores.'}</span>`}</div>
-      <div class="col">${me?.spec ? '<button class="btn small" id="btn-edit">Edit</button><button class="btn small ghost" id="btn-mysheet">Sheet</button>' : full ? '' : '<button class="btn small primary" id="btn-build">Create hero</button>'}</div></div>`;
+      ${me?.spec ? heroSummary(me.spec, me.spec.name || me.name, myPr) : `<b>No hero yet</b><span class="sub">${full ? 'The party already has four heroes. You can watch.' : 'Pick a class, background and species, and place your ability scores.'}</span>`}</div>
+      <div class="col">${me?.spec ? '<button class="btn small" id="btn-edit">Edit</button><button class="btn small ghost" id="btn-mysheet">Sheet</button>' : full ? '' : '<button class="btn small primary" id="btn-build">Create hero</button>'}</div></div>
+    ${!me?.spec && !full && saved?.spec ? `<div class="chcard"><div><b>Bring back ${esc(saved.name)}</b><span class="sub">Level ${saved.level} ${esc(CLASSES[saved.spec.cls]?.name || '')}, ${saved.xp} XP, with their gear.</span></div>
+      <div class="col"><button class="btn small primary" id="btn-bring">Bring</button></div></div>` : ''}`;
   if ($('btn-build')) $('btn-build').onclick = () => buildMine(null);
+  if ($('btn-bring')) $('btn-bring').onclick = () => send({ t: 'hero', spec: saved.spec, xp: saved.xp, gear: saved.gear });
   if ($('btn-edit')) $('btn-edit').onclick = () => buildMine(me.spec);
-  if ($('btn-mysheet')) $('btn-mysheet').onclick = () => openSheet(sheetHtml(buildHero(me.spec, { name: me.spec.name || me.name })));
+  if ($('btn-mysheet')) $('btn-mysheet').onclick = () => openSheet(sheetHtml(buildHero(me.spec, { name: me.spec.name || me.name, level: myPr?.level, gear: myPr?.gear })));
 
   const comp = S.companions;
   $('party-list').innerHTML = S.party.length ? S.party.map((p) => {
     const c = CLASSES[p.spec.cls];
-    return `<button class="pchip" data-psheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">${c.emoji} ${esc(p.name)} <span class="dim">${c.name}${p.controller ? '' : ' · AI'}</span></button>`;
+    const lv = S.progress?.[p.id]?.level || 1;
+    return `<button class="pchip" data-psheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">${c.emoji} ${esc(p.name)} <span class="dim">Lv ${lv} ${c.name}${p.controller ? '' : ' · AI'}</span></button>`;
   }).join('') : '<span class="dim">Nobody yet: build a hero, or add AI companions.</span>';
   for (const el of document.querySelectorAll('[data-psheet]')) {
-    el.onclick = () => { const p = S.party.find((x) => x.id === el.dataset.psheet); openSheet(sheetHtml(buildHero(p.spec, { id: p.id, name: p.name }))); };
+    el.onclick = () => { const p = S.party.find((x) => x.id === el.dataset.psheet); const pr = S.progress?.[p.id]; openSheet(sheetHtml(buildHero(p.spec, { id: p.id, name: p.name, level: pr?.level, gear: pr?.gear }))); };
   }
   $('companions-row').innerHTML = isHost() ? `<span class="host-label">AI companions</span><div class="seg">${['auto', 0, 1, 2, 3].map((n) =>
     `<button data-comp="${n}" class="${String(comp) === String(n) ? 'on' : ''}">${n === 'auto' ? 'Auto' : n}</button>`).join('')}</div>` : '';
@@ -358,7 +367,8 @@ function onTap(x, y) {
   if (end && end.x === x && end.y === y) { doMove(x, y); return; }
   app.target = null;
   app.preview = previewMove(b, me.id, x, y);
-  if (!app.preview) send({ t: 'ping', x, y });
+  app.blink = me.casting?.known['misty-step'] && canCast(b, me, 'misty-step').ok && feetBetween(me, { x, y }) <= 30 && canEndAt(b, me, x, y) ? { x, y } : null;
+  if (!app.preview && !app.blink) send({ t: 'ping', x, y });
   renderBattle(S);
 }
 
@@ -366,7 +376,7 @@ function doMove(x, y) {
   send({ t: 'act', intent: { a: 'move', x, y } });
   app.preview = null;
 }
-const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; };
+const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; app.blink = null; };
 // Test hook: play one step of my turn the way an AI companion would.
 app.auto = () => { if (myTurn()) act(aiNext(app.S.battle, myHeroId()) || { a: 'end' }); };
 
@@ -431,17 +441,27 @@ function renderPanel(S, b, mine, mt) {
   let html = `<div class="budget">
     ${chip(canAttack(t), 'Action', 'your-turn')}${chip(t.bonus, 'Bonus Action', 'your-turn')}
     ${chip(me.reaction, 'Reaction', 'opportunity-attack')}${chip(t.moveLeft >= 5, `Move ${t.moveLeft} ft`, 'movement')}
-    ${me.casting?.slots ? `<span class="chip">Slots ${'●'.repeat(me.casting.slots.left)}${'○'.repeat(me.casting.slots.max - me.casting.slots.left)}</span>` : ''}
+    ${me.casting?.slots ? Object.entries(me.casting.slots).map(([l, sl]) => `<span class="chip">L${l} ${'●'.repeat(sl.left)}${'○'.repeat(sl.max - sl.left)}</span>`).join('') : ''}
+    ${b.potions ? `<span class="chip">🧪 ${b.potions}</span>` : ''}
     ${me.tempHp ? `<span class="chip">+${me.tempHp} temp HP</span>` : ''}</div>`;
   if (app.target) html += targetCard(b, me, b.creatures[app.target]);
-  else if (app.preview) {
-    const oa = app.preview.oas.map((id) => esc(b.creatures[id].name)).join(' and ');
-    html += `<div class="preview"><span>Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an Opportunity Attack.</b>` : ''} Tap the square again or</span>
-      <button class="btn primary" id="btn-move">Move</button><button class="btn ghost" id="btn-cancel">✕</button></div>`;
+  else if (app.preview || app.blink) {
+    const oa = app.preview ? app.preview.oas.map((id) => esc(b.creatures[id].name)).join(' and ') : '';
+    html += `<div class="preview"><span>${app.preview ? `Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an Opportunity Attack.</b>` : ''}` : 'Too far to walk.'}</span>
+      ${app.preview ? '<button class="btn primary" id="btn-move">Move</button>' : ''}
+      ${app.blink ? `<button class="btn" ${intentAttr({ a: 'cast', spell: 'misty-step', x: app.blink.x, y: app.blink.y })}>Misty Step</button>` : ''}
+      <button class="btn ghost" id="btn-cancel">✕</button></div>`;
   }
   const extra = [];
   if (me.secondWind) extra.push(`<button class="btn" data-act="second-wind" ${t.bonus && me.secondWind.uses ? '' : 'disabled'}>Second Wind (${me.secondWind.uses})</button>`);
   if (me.adrenaline) extra.push(`<button class="btn" data-act="adrenaline" ${t.bonus && me.adrenaline.uses ? '' : 'disabled'}>Adrenaline Rush (${me.adrenaline.uses})</button>`);
+  if (me.actionSurge) extra.push(`<button class="btn" data-act="action-surge" ${me.actionSurge.uses && !t.surged ? '' : 'disabled'}>Action Surge (${me.actionSurge.uses})</button>`);
+  if (me.cunning) {
+    extra.push(`<button class="btn" ${intentAttr({ a: 'cunning', what: 'dash' })} ${t.bonus ? '' : 'disabled'}>Cunning Dash</button>`);
+    extra.push(`<button class="btn" ${intentAttr({ a: 'cunning', what: 'disengage' })} ${t.bonus ? '' : 'disabled'}>Cunning Disengage</button>`);
+  }
+  if (me.steadyAim) extra.push(`<button class="btn" data-act="steady-aim" ${t.bonus && !t.moves && t.moveLeft >= me.speed ? '' : 'disabled'}>Steady Aim</button>`);
+  if (b.potions) extra.push(`<button class="btn" data-act="potion" ${t.bonus ? '' : 'disabled'}>Drink a potion</button>`);
   html += `<div class="btns">
     <button class="btn" data-act="dash" ${t.action ? '' : 'disabled'}>Dash</button>
     <button class="btn" data-act="disengage" ${t.action ? '' : 'disabled'}>Disengage</button>
@@ -452,7 +472,7 @@ function renderPanel(S, b, mine, mt) {
   for (const btn of P.querySelectorAll('[data-act]')) btn.onclick = () => act({ a: btn.dataset.act });
   for (const btn of P.querySelectorAll('[data-intent]')) btn.onclick = () => act(JSON.parse(btn.dataset.intent));
   if ($('btn-move')) $('btn-move').onclick = () => { const e = app.preview.path[app.preview.path.length - 1]; doMove(e.x, e.y); };
-  if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; renderBattle(app.S); };
+  if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; app.blink = null; renderBattle(app.S); };
   if ($('btn-tx')) $('btn-tx').onclick = () => { app.target = null; renderBattle(app.S); };
   if ($('btn-tinfo')) $('btn-tinfo').onclick = () => openSheet(sheetHtml(b.creatures[app.target]));
 }
@@ -473,7 +493,7 @@ function spellCost(b, me, sid) {
   const c = canCast(b, me, sid);
   if (s.level === 0) return { c, tag: 'cantrip' };
   if (c.pay === 'free') return { c, tag: 'free cast' };
-  return { c, tag: `spell slot${s.time === 'bonus' ? ', <b>Bonus Action</b>' : ''}` };
+  return { c, tag: `level ${c.slotLevel || s.level} slot${s.time === 'bonus' ? ', <b>Bonus Action</b>' : ''}` };
 }
 
 function targetCard(b, me, T) {
@@ -489,6 +509,22 @@ function targetCard(b, me, T) {
       const inR = self || cheb(me, T) * 5 <= sp.range;
       const why = !inR ? `Out of range (${sp.range === 5 ? 'touch' : `${sp.range} ft`}).` : c.ok ? `${sp.kind === 'heal' ? `Heals ${sp.dice} + your modifier` : 'Makes them Stable'} · ${tag}` : esc(c.error);
       rows += row(sp.name, { a: 'cast', spell: sp.id, target: T.id }, inR && c.ok, why);
+    }
+    if (b.potions > 0 && !T.dead) {
+      const near = self || cheb(me, T) <= 1;
+      rows += row(self ? 'Drink a potion' : 'Give a potion', { a: 'potion', target: T.id }, near && t.bonus,
+        near ? `Potion of Healing: 2d4 + 2 HP · Bonus Action · ${b.potions} left` : 'Move next to them first.');
+    }
+    if (me.channel && !T.dead) {
+      const inR = cheb(me, T) * 5 <= 30;
+      rows += row(`Divine Spark (${me.channel.uses})`, { a: 'divine-spark', target: T.id }, inR && t.action && me.channel.uses > 0,
+        inR ? `Channel Divinity: heals 1d8 ${signed(me.mods.wis)}` : 'Out of range (30 ft).');
+    }
+    if (self) {
+      for (const sp of spellList(me).filter((x) => x.kind === 'aid')) {
+        const { c, tag } = spellCost(b, me, sp.id);
+        rows += row(sp.name, { a: 'cast', spell: sp.id }, c.ok, c.ok ? `+5 HP and max HP for you and the two most hurt allies within 30 ft · ${tag}` : esc(c.error));
+      }
     }
     if (!self && T.hp <= 0 && !T.dead && !T.stable) {
       rows += row('Stabilize', { a: 'stabilize', target: T.id }, t.action && cheb(me, T) <= 1,
@@ -506,7 +542,7 @@ function targetCard(b, me, T) {
       rows += row(o.atk.name, { a: 'attack', target: T.id, attack: o.atk.id }, o.ok && canAttack(t), why);
     }
     for (const sp of spellList(me)) {
-      if (!['attack', 'save', 'missile', 'cone'].includes(sp.kind)) continue;
+      if (!['attack', 'save', 'missile', 'cone', 'rays'].includes(sp.kind)) continue;
       const { c, tag } = spellCost(b, me, sp.id);
       if (sp.kind === 'cone') {
         const hit = coneTargets(b, me, T.x, T.y);
@@ -528,6 +564,10 @@ function targetCard(b, me, T) {
       } else if (sp.kind === 'save') {
         const dc = spellDC(me, sp.id);
         why = `${Math.round((1 - saveChance(b, T, sp.save, dc)) * 100)}% it fails a DC ${dc} ${sp.save.toUpperCase()} save · ${sp.dice} ${sp.type} · ${tag}`;
+      } else if (sp.kind === 'rays') {
+        const atk = spellAttack(me, sp.id);
+        const f = attackFactors(b, me, T, atk);
+        why = [`3 rays, ${Math.round(hitChance(hitBonus(atk), T.ac, f.mode, me.luck) * 100)}% to hit each`, `${sp.dice} ${sp.type} each`, ...reasons({ ...f }), tag].join(' · ');
       } else why = `Never misses · 3 × (1d4 + 1) Force · ${tag}`;
       rows += row(sp.name, { a: 'cast', spell: sp.id, target: T.id }, inR && c.ok, why);
     }
@@ -538,6 +578,11 @@ function targetCard(b, me, T) {
       const dc = me.breath.dc.reduce((s, p) => s + p.value, 0);
       rows += row(`Breath Weapon (${me.breath.uses})`, { a: 'breath', x: T.x, y: T.y }, ok,
         `Replaces an attack: 15-ft Cone, catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody (get within 15 feet)'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''} · DC ${dc} DEX save, ${me.breath.dice} ${me.breath.type}`);
+    }
+    if (me.channel && cheb(me, T) * 5 <= 30) {
+      const dc = me.casting.stats.wis.dc.reduce((s2, x) => s2 + x.value, 0);
+      rows += row(`Divine Spark (${me.channel.uses})`, { a: 'divine-spark', target: T.id }, t.action && me.channel.uses > 0,
+        `Channel Divinity: ${Math.round((1 - saveChance(b, T, 'con', dc)) * 100)}% it fails a DC ${dc} CON save · 1d8 ${signed(me.mods.wis)} Radiant, half on a save`);
     }
     if (cheb(me, T) <= 1) {
       rows += row('Help', { a: 'help', target: T.id }, t.action, `Help action: your ally's next attack on ${esc(T.name)} gets Advantage.`, false);
@@ -605,8 +650,16 @@ function renderOver(S, b) {
   const sc = SCENES[S.battleScene];
   const hostBtns = win ? '<button class="btn primary wide" id="btn-cont">Continue the story</button>'
     : '<button class="btn primary wide" id="btn-retry">Try the fight again</button><button class="btn wide" id="btn-lobby">Back to the lobby</button>';
+  const rw = win ? S.rewards : null;
+  const loot = rw ? `<div class="loot">
+      <div><b>+${rw.xp} XP</b> each</div><div><b>+${rw.gold}</b> gold</div>
+      ${rw.potions ? `<div>🧪 <b>+${rw.potions}</b> Potion${rw.potions > 1 ? 's' : ''} of Healing</div>` : ''}
+      ${rw.items.map((i) => `<div>${ITEMS[i].emoji} <b>${esc(ITEMS[i].name)}</b></div>`).join('')}</div>
+      ${rw.levelUps.map((l) => `<p class="lvlup">⬆ ${esc(l)}</p>`).join('')}
+      ${rw.revived.length ? `<p class="dim">${rw.revived.map(esc).join(', ')} pull${rw.revived.length === 1 ? 's' : ''} through with 1 HP.</p>` : ''}` : '';
   el.innerHTML = `<div class="card"><div class="logo">${win ? '🏆' : '💀'}</div><h2>${win ? 'Victory!' : 'Defeat'}</h2>
     <p class="dim">${esc(sc?.title || 'The fight')}: ${win ? 'won' : 'lost'} after ${b.round} round${b.round === 1 ? '' : 's'}.${win ? '' : ' Everyone gets back up for another try.'}</p>
+    ${loot}
     <p>${foes.filter((c) => c.dead).length} of ${foes.length} foes defeated${fallen.length ? ` · ${fallen.map((c) => esc(c.name)).join(', ')} down` : ''}.</p>
     ${isHost() ? hostBtns : '<p class="dim">Waiting for the host…</p>'}
     <button class="btn ghost wide" id="btn-over-log">See the combat log</button></div>`;

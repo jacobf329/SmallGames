@@ -1,10 +1,11 @@
 // The story screen: scene text, party votes, skill checks (one hero with
-// helpers, or the whole group), and the result that moves the story on.
+// helpers, or the whole group), town stops (rewards, the merchant, the
+// party's pack), and the party's levels, HP and XP.
 
 import { SCENES, CHAPTERS } from '../game/campaign.js';
 import { skillParts } from '../game/room.js';
-import { buildHero } from '../rules/character.js';
-import { SKILL_NAMES, SKILLS, ABILITY_NAMES, signed } from '../rules/data.js';
+import { buildHero, applyProgress, canWear } from '../rules/character.js';
+import { SKILL_NAMES, SKILLS, ABILITY_NAMES, ITEMS, SHOP, XP_LEVELS, MAX_LEVEL, CLASSES, signed } from '../rules/data.js';
 import { $ } from './dom.js';
 import { esc, short, detail } from './explain.js';
 import { sheetHtml } from './sheet.js';
@@ -15,7 +16,10 @@ export function renderStory(ctx) {
   const st = S.story;
   const sc = SCENES[st.scene];
   const ch = CHAPTERS[sc.chapter];
-  const heroes = S.party.map((p) => ({ ...p, h: buildHero(p.spec, { id: p.id, name: p.name }) }));
+  const heroes = S.party.map((p) => {
+    const pr = S.progress?.[p.id];
+    return { ...p, pr, h: applyProgress(buildHero(p.spec, { id: p.id, name: p.name, level: pr?.level, gear: pr?.gear }), pr) };
+  });
   const mine = heroes.find((p) => p.id === me);
   const canControl = (id) => id === me || (isHost && !heroes.find((p) => p.id === id)?.controller);
   const nameOf = (pid) => S.seats.find((s) => s.pid === pid)?.name || pid;
@@ -24,6 +28,9 @@ export function renderStory(ctx) {
   let html = `<div class="kicker">Chapter ${sc.chapter} · ${esc(ch.title)}</div>
     <h2 class="scene-title">${esc(sc.title)}</h2>
     ${(sc.text || []).map((p) => `<p class="story">${esc(p)}</p>`).join('')}`;
+  if (S.notice?.lines?.length) {
+    html += `<div class="notice"><b>${esc(S.notice.title)}</b>${S.notice.lines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
+  }
 
   if (sc.kind === 'story') {
     const votes = st.votes || {};
@@ -75,13 +82,52 @@ export function renderStory(ctx) {
       if (fl) html += `<p class="note">${fl === 'foes' ? 'Your foes will be surprised: they roll Initiative with Disadvantage.' : 'You are surprised: your party rolls Initiative with Disadvantage.'}</p>`;
       html += isHost ? '<button class="btn primary wide" id="s-continue">Continue</button>' : '<p class="note">Waiting for the host to continue…</p>';
     }
-  } else if (sc.kind === 'end') {
-    html += '<div class="result good"><b>To be continued.</b> More adventures are on the way.</div>';
-    html += isHost ? '<button class="btn primary wide" id="s-again">Back to the lobby</button>' : '';
+  } else if (sc.kind === 'camp') {
+    const inv = S.inventory;
+    html += `<div class="purse"><span>💰 <b>${inv.gold}</b> gold</span><span>🧪 <b>${inv.potions}</b> potion${inv.potions === 1 ? '' : 's'}</span></div>`;
+    // The merchant
+    html += '<h4 class="kicker">The merchant</h4><div class="shop">';
+    for (const id of SHOP) {
+      const it = ITEMS[id];
+      const afford = inv.gold >= it.price;
+      let btns;
+      if (it.kind === 'potion') btns = `<button class="btn small primary" data-buy="${id}" ${afford ? '' : 'disabled'}>Buy</button>`;
+      else {
+        btns = heroes.filter((p) => canControl(p.id) && canWear(p.spec.cls, it.armor) && (p.pr?.gear?.armor || CLASSES[p.spec.cls].armor) !== it.armor)
+          .map((p) => `<button class="btn small" data-buy="${id}" data-hero="${p.id}" ${afford ? '' : 'disabled'}>For ${esc(p.name)}</button>`).join('') || '<span class="dim">Nobody of yours can use it.</span>';
+      }
+      html += `<div class="ware"><span>${it.emoji} <b>${esc(it.name)}</b> · ${it.price} gold<span class="sub">${esc(it.text)}</span></span><span class="ck-act">${btns}</span></div>`;
+    }
+    html += '</div>';
+    // The party's pack
+    if (inv.items.length) {
+      html += '<h4 class="kicker">The pack</h4><div class="shop">';
+      inv.items.forEach((id) => {
+        const it = ITEMS[id];
+        const slot = it.kind === 'weapon' ? 'weapon' : 'cloak';
+        const btns = heroes.filter((p) => (canControl(p.id) || isHost) && !p.pr?.gear?.[slot])
+          .map((p) => `<button class="btn small" data-equip="${id}" data-hero="${p.id}">Give to ${esc(p.name)}</button>`).join('');
+        html += `<div class="ware"><span>${it.emoji} <b>${esc(it.name)}</b><span class="sub">${esc(it.text)}</span></span><span class="ck-act">${btns}</span></div>`;
+      });
+      html += '</div>';
+    }
+    if (sc.final) {
+      html += '<div class="result good"><b>To be continued.</b> More adventures are on the way. Your heroes keep their levels and gear.</div>';
+      html += isHost ? '<button class="btn primary wide" id="s-again">Back to the lobby</button>' : '';
+    } else {
+      html += isHost ? `<button class="btn primary wide" id="s-continue">${esc(sc.continueLabel || 'Continue')}</button>` : '<p class="note">Waiting for the host to move on…</p>';
+    }
   }
 
-  html += `<h4 class="kicker">The party</h4><div class="party-strip">${heroes.map((p) =>
-    `<button class="pchip" data-sheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">${p.h.emoji} ${esc(p.name)}<span class="dim">${p.controller ? '' : ' (AI)'}</span></button>`).join('')}</div>`;
+  html += `<h4 class="kicker">The party</h4><div class="roster">${heroes.map((p) => {
+    const pr = p.pr || { level: 1, xp: 0 };
+    const next = pr.level < MAX_LEVEL ? XP_LEVELS[pr.level + 1] : null;
+    const gear = [p.pr?.gear?.weapon ? '⚔️' : '', p.pr?.gear?.cloak ? '🧥' : ''].join('');
+    return `<button class="hcard" data-sheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">
+      <span class="hc-top">${p.h.emoji} <b>${esc(p.name)}</b> <span class="lvl">Lv ${pr.level}</span>${gear}<span class="dim">${p.controller ? '' : ' AI'}</span></span>
+      <span class="meter"><i style="width:${Math.round(100 * p.h.hp / p.h.hpMax)}%"></i></span><span class="sub">HP ${p.h.hp}/${p.h.hpMax}</span>
+      <span class="meter xp"><i style="width:${next ? Math.min(100, Math.round(100 * pr.xp / next)) : 100}%"></i></span><span class="sub">${pr.xp}${next ? ` / ${next}` : ''} XP</span></button>`;
+  }).join('')}</div>`;
 
   const B = $('story-body');
   B.innerHTML = html;
@@ -96,6 +142,8 @@ export function renderStory(ctx) {
   if ($('s-rollrest')) $('s-rollrest').onclick = () => send({ t: 'continue' });
   if ($('s-continue')) $('s-continue').onclick = () => send({ t: 'continue' });
   if ($('s-again')) $('s-again').onclick = () => send({ t: 'again' });
+  for (const el of B.querySelectorAll('[data-buy]')) el.onclick = () => send({ t: 'buy', item: el.dataset.buy, hero: el.dataset.hero });
+  for (const el of B.querySelectorAll('[data-equip]')) el.onclick = () => send({ t: 'equip', item: el.dataset.equip, hero: el.dataset.hero });
 }
 
 // The latest check roll, for a pop-up card.

@@ -1,6 +1,8 @@
 // First Roll - the party room. It runs on the host's phone (or in a test) and
-// is the single authority: seats, heroes, the campaign (story votes, skill
-// checks), battles, turn control, AI turns, reactions and saves.
+// is the single authority: seats, heroes and their progress (XP, levels, HP
+// and resources between fights), the party's gold, potions and items, the
+// campaign (votes, skill checks, rests, town stops), battles, turn control,
+// AI turns, reactions and saves.
 // Transport-free, like Skyline Hustle's room: a connection is anything with
 // send(string) and close().
 //
@@ -13,16 +15,17 @@
 //   start                    vote {choice}    decide (host)
 //   claim {hero}             help {hero}      roll {hero}          continue (host)
 //   act {intent}             react {yes}      retry (host)         again (host)
-//   ping {x, y}
+//   buy {item, hero}         equip {item, hero}                    ping {x, y}
+//   hero {spec, xp, gear}    (bringing a saved hero: only xp and gear carry over)
 // host -> phone:  welcome {pid, token}   state {...}   ping {pid, x, y}   error {text}
 
-import { buildHero, validateSpec } from '../rules/character.js';
-import { SKILLS, SKILL_NAMES } from '../rules/data.js';
+import { buildHero, validateSpec, freshProgress, applyProgress, harvestProgress, canWear } from '../rules/character.js';
+import { SKILLS, SKILL_NAMES, ITEMS, SHOP, XP_LEVELS, MAX_LEVEL, CLASS_FEATURES, levelForXp } from '../rules/data.js';
 import { createBattle, rollInitiative, perform, current, resolveReaction, rollD20 } from '../rules/combat.js';
-import { makeRng } from '../rules/rng.js';
+import { makeRng, die } from '../rules/rng.js';
 import { aiNext } from '../rules/ai.js';
 import { SCENES, FIRST_SCENE, COMPANIONS } from './campaign.js';
-import { buildEncounter } from './encounters.js';
+import { buildEncounter, ENCOUNTERS } from './encounters.js';
 
 export const MAX_HEROES = 4;
 export const MAX_SEATS = 8;            // extra people watch
@@ -52,7 +55,13 @@ export function skillParts(h, skill) {
 // store: { load() -> string|null, save(string), remove() }
 export function createRoom({ store = null, now = () => Date.now(), seed = null, log = () => {} } = {}) {
   let S = {
-    v: 2, seats: [], nextPid: 1, companions: 'auto',
+    v: 3, seats: [], nextPid: 1, companions: 'auto',
+    progress: {},              // hero id -> { level, xp, hp, hd, aid, gear, uses }
+    inventory: { gold: 0, potions: 0, items: [] },
+    claimed: {},               // scene rewards already paid
+    rewards: null,             // what the last fight paid out
+    notice: null,              // { title, lines } shown on the next scene (rests, rewards)
+    fightStart: null, settled: false,
     phase: 'lobby',            // lobby | story | battle
     story: null,               // { scene, votes, check, result }
     flags: {},
@@ -71,7 +80,7 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
       const raw = store.load();
       if (raw) {
         const s = JSON.parse(raw);
-        if (s.v === 2) S = s;
+        if (s.v === 3) S = s;
         if (S.phase === 'battle' && !S.battle) S.phase = S.story ? 'story' : 'lobby';
       }
     } catch (e) { log('bad save', e); }
@@ -97,7 +106,22 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     const comps = picks.slice(0, Math.min(want, room)).map((c) => ({ id: c.id, controller: null, spec: c.spec, name: c.name }));
     return [...players, ...comps];
   }
-  const heroOf = (p) => buildHero(p.spec, { id: p.id, name: p.name });
+  // XP a newcomer starts with: the lowest in the party, so drop-ins keep up.
+  const partyXp = () => {
+    const xs = party().map((p) => S.progress[p.id]?.xp).filter((x) => x != null);
+    return xs.length ? Math.min(...xs) : 0;
+  };
+  function progressOf(p) {
+    if (!S.progress[p.id]) {
+      const xp = partyXp();
+      S.progress[p.id] = freshProgress(buildHero(p.spec, { id: p.id, level: levelForXp(xp) }), { xp });
+    }
+    return S.progress[p.id];
+  }
+  const heroOf = (p) => {
+    const pr = progressOf(p);
+    return applyProgress(buildHero(p.spec, { id: p.id, name: p.name, level: pr.level, gear: pr.gear }), pr);
+  };
 
   // Who acts for this creature right now: a pid, or 'ai'.
   function actorFor(c, t) {
@@ -124,6 +148,8 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
       companions: S.companions,
       party: party().map((p) => ({ id: p.id, name: p.name, controller: p.controller, spec: p.spec })),
       story: S.story, flags: S.flags, battleScene: S.battleScene,
+      progress: Object.fromEntries(party().map((p) => [p.id, progressOf(p)])),
+      inventory: S.inventory, rewards: S.rewards, notice: S.notice,
       battle: b,
       control: cur && !S.battle.over ? actorFor(cur, t) : null,
       reactor: S.battle?.pending ? actorFor(S.battle.creatures[S.battle.pending.reactor], t) : null,
@@ -139,14 +165,103 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
   const sendTo = (h, msg) => h.conn.send(JSON.stringify(msg));
 
   // ----------------------------------------------------------- story ----
-  function goto(id) {
+  function goto(id, notice = null) {
     const sc = SCENES[id];
     if (!sc) throw new Error(`No scene ${id}`);
     S.battle = null;
+    S.rewards = null;
+    S.notice = notice;
     if (sc.kind === 'fight') return startFight(id);
     S.phase = 'story';
     S.story = { scene: id, votes: {}, check: null, result: null };
     if (sc.kind === 'check') S.story.check = { roller: null, helpers: [], rolls: {}, done: false };
+    if (sc.kind === 'camp') {
+      const lines = [];
+      if (sc.reward && !S.claimed[id]) { S.claimed[id] = true; lines.push(...payReward(sc.reward)); }
+      if (sc.rest === 'long') lines.push(...longRest());
+      S.notice = { title: sc.final ? 'The end of the chapter' : 'In town', lines };
+    }
+  }
+
+  // ------------------------------------------------- XP, levels, rests ----
+  function levelUp(p, to) {
+    const pr = progressOf(p);
+    const from = pr.level;
+    const before = buildHero(p.spec, { id: p.id, level: from, gear: pr.gear });
+    const after = buildHero(p.spec, { id: p.id, level: to, gear: pr.gear });
+    const fresh = freshProgress(after).uses;
+    pr.hp += after.hpMax - before.hpMax;
+    pr.hd += to - from;
+    for (const [k, v] of Object.entries(fresh)) if (pr.uses[k] == null && v != null) pr.uses[k] = v;
+    if (after.casting?.slots) {
+      pr.uses.slots ||= {};
+      for (const [l, sl] of Object.entries(after.casting.slots)) pr.uses.slots[l] = (pr.uses.slots[l] ?? 0) + sl.max - (before.casting?.slots?.[l]?.max || 0);
+    }
+    pr.level = to;
+    const feats = [];
+    for (let l = from + 1; l <= to; l++) feats.push(...(CLASS_FEATURES[p.spec.cls][l] || []).map((f) => f.name));
+    return `${p.name} reaches level ${to}: +${after.hpMax - before.hpMax} max HP${feats.length ? `, ${feats.join(', ')}` : ''}.`;
+  }
+
+  function grantXp(amount) {
+    const lines = [];
+    for (const p of party()) {
+      const pr = progressOf(p);
+      pr.xp += amount;
+      const to = levelForXp(pr.xp);
+      if (to > pr.level) lines.push(levelUp(p, to));
+    }
+    return lines;
+  }
+
+  function payReward(r) {
+    const n = party().length;
+    const lines = [];
+    if (r.gold) { S.inventory.gold += r.gold * n; lines.push(`The party is paid ${r.gold * n} gold.`); }
+    if (r.xp) { lines.push(`Everyone gains ${r.xp} XP.`); lines.push(...grantXp(r.xp)); }
+    return lines;
+  }
+
+  const d = (sides) => die(S.rng, sides);
+
+  function shortRest() {
+    const lines = [];
+    for (const p of party()) {
+      const pr = progressOf(p);
+      const h = heroOf(p);
+      let healed = 0, spent = 0;
+      while (pr.hd > 0 && h.hpMax - pr.hp >= Math.ceil(h.hitDie / 4)) {
+        const gain = Math.max(1, d(h.hitDie) + h.mods.con);
+        pr.hp = Math.min(h.hpMax, pr.hp + gain);
+        pr.hd--; spent++; healed += gain;
+      }
+      const u = pr.uses;
+      const back = [];
+      if (h.secondWind && u.secondWind < h.secondWind.max) { u.secondWind++; back.push('a Second Wind'); }
+      if (h.actionSurge && u.actionSurge < h.actionSurge.max) { u.actionSurge = h.actionSurge.max; back.push('Action Surge'); }
+      if (h.channel && u.channel < h.channel.max) { u.channel++; back.push('a Channel Divinity'); }
+      if (h.adrenaline && u.adrenaline < h.adrenaline.max) { u.adrenaline = h.adrenaline.max; back.push('Adrenaline Rush'); }
+      if (p.spec.cls === 'wizard' && !u.arcaneRecovery && h.casting?.slots) {
+        let budget = Math.ceil(pr.level / 2);
+        for (const l of Object.keys(h.casting.slots).map(Number).sort((a, b) => b - a)) {
+          while (l <= budget && (u.slots[l] ?? 0) < h.casting.slots[l].max) { u.slots[l] = (u.slots[l] ?? 0) + 1; budget -= l; back.push(`a level ${l} slot (Arcane Recovery)`); u.arcaneRecovery = true; }
+        }
+      }
+      const bits = [];
+      if (spent) bits.push(`spends ${spent} Hit ${spent === 1 ? 'Die' : 'Dice'} and regains ${healed} HP`);
+      if (back.length) bits.push(`gets back ${back.join(', ')}`);
+      lines.push(`${p.name} ${bits.length ? bits.join(' and ') : 'rests'}.`);
+    }
+    return lines;
+  }
+
+  function longRest() {
+    for (const p of party()) {
+      const pr = progressOf(p);
+      const h = buildHero(p.spec, { id: p.id, level: pr.level, gear: pr.gear });
+      S.progress[p.id] = { ...freshProgress(h, { xp: pr.xp }), gear: { ...pr.gear } };
+    }
+    return ['A Long Rest: everyone is back to full Hit Points, Hit Dice, spell slots and abilities.'];
   }
 
   function resolveVote(force = false) {
@@ -161,7 +276,8 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     const top = Math.max(...Object.values(tally));
     const tied = sc.choices.filter((c) => tally[c.id] === top);
     const pick = tied.length > 1 && tied.some((c) => c.id === S.story.votes[hostPid()]) ? S.story.votes[hostPid()] : tied[0].id;
-    goto(sc.choices.find((c) => c.id === pick).next);
+    const choice = sc.choices.find((c) => c.id === pick);
+    goto(choice.next, choice.rest === 'short' ? { title: 'Short Rest', lines: shortRest() } : null);
   }
 
   // One hero's check: d20 (Advantage if Helped) + skill modifier vs DC.
@@ -208,8 +324,11 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     const sc = SCENES[sceneId];
     const members = party();
     const enc = buildEncounter(sc.encounter, members.length);
+    S.fightStart = JSON.parse(JSON.stringify({ progress: S.progress, inventory: S.inventory }));
+    S.settled = false;
+    S.rewards = null;
     const heroes = members.map((p, i) => Object.assign(heroOf(p), enc.heroStarts[i]));
-    S.battle = createBattle({ heroes, foes: enc.foes, walls: enc.walls, seed: Math.floor(Math.random() * 2 ** 31) ^ (now() >>> 0) });
+    S.battle = createBattle({ heroes, foes: enc.foes, walls: enc.walls, seed: Math.floor(Math.random() * 2 ** 31) ^ (now() >>> 0), potions: S.inventory.potions });
     if (seed != null) S.battle.rng = makeRng(seed + S.seq + 1);
     S.battleScene = sceneId;
     S.phase = 'battle';
@@ -233,7 +352,7 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
   function act(intent) {
     const c = current(S.battle);
     const r = perform(S.battle, c.id, intent);
-    if (r.ok) onTurnChange();
+    if (r.ok) { onTurnChange(); settle(); }
     return r;
   }
 
@@ -241,6 +360,35 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     resolveReaction(S.battle, yes);
     deadline = 0;
     onTurnChange();
+    settle();
+  }
+
+  // When a fight is won: carry HP and resources forward, pay XP and loot.
+  function settle() {
+    const b = S.battle;
+    if (!b?.over || S.settled) return;
+    S.settled = true;
+    if (b.over !== 'victory') return;
+    const members = party();
+    const lines = [];
+    const revived = [];
+    for (const p of members) {
+      const c = b.creatures[p.id];
+      if (!c) continue;
+      const pr = harvestProgress(c, progressOf(p));
+      pr.aid = (pr.aid || 0) + (c.aidBonus || 0);
+      if (c.hp <= 0) { pr.hp = 1; revived.push(p.name); }
+      S.progress[p.id] = pr;
+    }
+    S.inventory.potions = b.potions;
+    const foes = Object.values(b.creatures).filter((c) => c.side === 'foe');
+    const xp = Math.floor(foes.reduce((s, f) => s + f.xp, 0) / members.length);
+    const loot = ENCOUNTERS[SCENES[S.battleScene].encounter].loot(foes, d);
+    S.inventory.gold += loot.gold;
+    S.inventory.potions += loot.potions;
+    S.inventory.items.push(...loot.items);
+    lines.push(...grantXp(xp));
+    S.rewards = { xp, gold: loot.gold, potions: loot.potions, items: loot.items, revived, levelUps: lines };
   }
 
   // ---------------------------------------------------------- messages ----
@@ -276,7 +424,16 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
         let spec;
         try { spec = validateSpec(m.spec); } catch (e) { return err(e.message); }
         if (!s.spec && playerHeroes().length >= MAX_HEROES) return err('The party already has 4 heroes. You can watch.');
+        const old = S.progress[s.pid];
+        const carried = Math.max(0, Math.min(XP_LEVELS[MAX_LEVEL] * 2, Number(m.xp) || 0));
+        const xp = Math.max(old?.xp ?? 0, carried, old ? 0 : partyXp());
+        const g = m.gear || old?.gear || {};
+        const gear = {
+          armor: ['studded', 'chain', 'splint'].includes(g.armor) && canWear(spec.cls, g.armor) ? g.armor : null,
+          weapon: g.weapon ? 1 : 0, cloak: !!g.cloak,
+        };
         s.spec = spec;
+        S.progress[s.pid] = { ...freshProgress(buildHero(spec, { id: s.pid, level: levelForXp(xp), gear }), { xp }), gear };
         return changed();
       }
       case 'companions': {
@@ -349,17 +506,49 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
           finishCheck();
         } else if (S.phase === 'battle' && S.battle?.over === 'victory') {
           goto(SCENES[S.battleScene].next);
+        } else if (S.phase === 'story' && sc?.kind === 'camp' && !sc.final) {
+          goto(sc.next);
         }
         return changed();
       }
       case 'retry': {
         if (!isHost || S.phase !== 'battle' || !S.battle?.over) return;
+        if (S.fightStart) { S.progress = S.fightStart.progress; S.inventory = S.fightStart.inventory; }
         startFight(S.battleScene);
         return changed();
       }
       case 'again': {
         if (!isHost) return;
-        S.battle = null; S.story = null; S.phase = 'lobby'; S.flags = {};
+        S.battle = null; S.story = null; S.phase = 'lobby'; S.flags = {}; S.claimed = {}; S.rewards = null; S.notice = null;
+        return changed();
+      }
+      case 'buy': {
+        if (S.phase !== 'story' || sc?.kind !== 'camp') return err('You can only shop in town.');
+        const it = ITEMS[m.item];
+        if (!it || !SHOP.includes(m.item)) return err('Not for sale.');
+        if (S.inventory.gold < it.price) return err(`That costs ${it.price} gold; the party has ${S.inventory.gold}.`);
+        if (it.kind === 'potion') { S.inventory.potions++; }
+        else if (it.kind === 'armor') {
+          const p = party().find((x) => x.id === m.hero);
+          if (!p || !mayControl(s.pid, p.id)) return err('Buy armor for your own hero.');
+          if (!canWear(p.spec.cls, it.armor)) return err(`A ${p.spec.cls} can't wear ${it.name}.`);
+          progressOf(p).gear.armor = it.armor;
+        }
+        S.inventory.gold -= it.price;
+        return changed();
+      }
+      case 'equip': {
+        if (S.phase === 'battle') return err('Not in the middle of a fight.');
+        const i = S.inventory.items.indexOf(m.item);
+        const p = party().find((x) => x.id === m.hero);
+        if (i < 0 || !p) return;
+        if (!mayControl(s.pid, p.id) && !isHost) return err('Hand items to your own hero.');
+        const it = ITEMS[m.item];
+        const gear = progressOf(p).gear;
+        const slot = it.kind === 'weapon' ? 'weapon' : 'cloak';
+        if (gear[slot]) return err(`${p.name} already has one.`);
+        gear[slot] = it.kind === 'weapon' ? 1 : true;
+        S.inventory.items.splice(i, 1);
         return changed();
       }
       case 'act': {
@@ -436,5 +625,8 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     get story() { return S.story; },
     get party() { return party(); },
     get aiForPlayers() { return aiForPlayers; },
+    get progress() { return S.progress; },
+    get inventory() { return S.inventory; },
+    get rewards() { return S.rewards; },
   };
 }

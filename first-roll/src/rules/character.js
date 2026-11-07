@@ -9,6 +9,7 @@
 import {
   ABILITIES, ABILITY_NAMES, abilityMod, WEAPONS, MASTERIES, ARMOR, SPECIES, BACKGROUNDS, FEATS,
   CLASSES, SKILLS, SPELLS, STANDARD_ARRAY, DRAGON_ANCESTRY, GOBLIN_WARRIOR,
+  SPELL_SLOTS, CLASS_FEATURES, MAX_LEVEL,
 } from './data.js';
 
 export const PB_BY_LEVEL = [0, 2, 2, 2, 2, 3];
@@ -65,7 +66,16 @@ function spellStats(m, pb, ability) {
   };
 }
 
-export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
+// gear: { armor: 'studded' | 'chain' | 'splint' | null, weapon: 0 | 1, cloak: bool }
+export const canWear = (cls, armor) => {
+  if (!armor) return true;
+  if (cls === 'wizard') return false;
+  if (armor === 'chain' || armor === 'splint') return cls === 'fighter' || cls === 'cleric';   // Protector Clerics train in heavy armor
+  return true;
+};
+
+export function buildHero(rawSpec, { id = 'hero', name, level = 1, gear = {} } = {}) {
+  level = Math.max(1, Math.min(MAX_LEVEL, level | 0));
   const spec = validateSpec(rawSpec);
   const C = CLASSES[spec.cls], S = SPECIES[spec.species], B = BACKGROUNDS[spec.background];
   const feat = FEATS[B.feat];
@@ -75,16 +85,19 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   const m = Object.fromEntries(ABILITIES.map((a) => [a, abilityMod(scores[a])]));
 
   // Armor Class
-  const armor = ARMOR[C.armor];
+  const armorId = gear.armor && ARMOR[gear.armor] && canWear(spec.cls, gear.armor) ? gear.armor : C.armor;
+  const armor = ARMOR[armorId];
   const acParts = [{ label: armor.name, value: armor.base, rule: 'armor-class' }];
   if (armor.dex) {
     const d = armor.maxDex != null ? Math.min(m.dex, armor.maxDex) : m.dex;
     acParts.push({ label: `DEX modifier${armor.maxDex != null && m.dex > armor.maxDex ? ` (max ${armor.maxDex})` : ''}`, value: d, rule: 'ability-modifier' });
   }
   if (C.shield) acParts.push({ label: 'Shield', value: 2, rule: 'armor-class' });
+  if (gear.cloak) acParts.push({ label: 'Cloak of Protection', value: 1, rule: 'armor-class' });
 
   // Hit Points at level 1: hit die maximum + CON modifier (+ species and feats).
   const hpParts = [{ label: `d${C.hitDie} maximum`, value: C.hitDie }, { label: 'CON modifier', value: m.con }];
+  if (level > 1) hpParts.push({ label: `Levels 2-${level}: ${C.hitDie / 2 + 1} + CON each`, value: (level - 1) * (C.hitDie / 2 + 1 + m.con) });
   if (spec.species === 'dwarf') hpParts.push({ label: 'Dwarven Toughness', value: level });
   if (spec.species === 'human') hpParts.push({ label: 'Tough feat (Versatile)', value: 2 * level });
   const hpMax = Math.max(1, sumParts(hpParts));
@@ -100,6 +113,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   if (spec.species === 'human') { const s = ['perception', 'insight', 'athletics', 'medicine'].find((x) => !prof.has(x)); if (s) prof.add(s); }
   if (spec.species === 'elf') { const s = ['perception', 'insight', 'survival'].find((x) => !prof.has(x)); if (s) prof.add(s); }
   const expertise = C.expertise ? C.expertise.filter((s) => prof.has(s)) : [];
+  if (spec.cls === 'wizard' && level >= 2) { const s = ['arcana', 'investigation', 'history'].find((x) => prof.has(x)); if (s) expertise.push(s); }
   const skills = {};
   for (const [s, ab] of Object.entries(SKILLS)) {
     skills[s] = m[ab] + (prof.has(s) ? (expertise.includes(s) ? 2 : 1) * pb : 0);
@@ -107,7 +121,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
 
   // Saving throws
   const saves = {};
-  for (const a of ABILITIES) saves[a] = m[a] + (C.saves.includes(a) ? pb : 0);
+  for (const a of ABILITIES) saves[a] = m[a] + (C.saves.includes(a) ? pb : 0) + (gear.cloak ? 1 : 0);
 
   // Weapons
   const attacks = C.weapons.map((wid) => {
@@ -119,6 +133,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     ];
     const dmgFlat = [{ label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'damage' }];
     if (C.style === 'dueling' && w.kind === 'melee') dmgFlat.push({ label: 'Dueling fighting style', value: 2, rule: 'dueling' });
+    if (gear.weapon) { hit.push({ label: '+1 magic weapon', value: 1, rule: 'magic-weapon' }); dmgFlat.push({ label: '+1 magic weapon', value: 1, rule: 'magic-weapon' }); }
     const mastery = C.masteries.includes(wid) && ['sap', 'vex'].includes(w.mastery) ? w.mastery : null;
     return {
       id: wid, name: w.name, kind: w.kind, dice: w.dice, type: w.type,
@@ -140,8 +155,10 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   if (C.spellcasting) {
     const sc = C.spellcasting;
     for (const s of sc.cantrips) learn(s, sc.ability, C.name);
-    for (const s of sc.prepared) learn(s, sc.ability, C.name, { slot: true });
-    slots = { max: sc.slots, left: sc.slots };
+    const prepared = [...sc.prepared, ...Object.entries(sc.byLevel || {}).filter(([l]) => +l <= level).flatMap(([, l]) => l)];
+    for (const s of prepared) learn(s, sc.ability, C.name, { slot: true });
+    slots = {};
+    for (const [sl, n] of Object.entries(SPELL_SLOTS[level])) slots[sl] = { max: n, left: n };
   }
   if (feat.list) {
     const extra = feat.cantrips.filter((s) => !known[s]).slice(0, 2);
@@ -169,13 +186,15 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     features.push({ name: 'Expertise', rule: 'expertise', text: 'Double Proficiency Bonus in Stealth and Perception.', source: 'Rogue 1' });
     features.push({ name: 'Weapon Mastery', rule: 'weapon-mastery', text: 'Use the mastery property of 2 kinds of weapons. Shortsword and Shortbow: Vex.', source: 'Rogue 1' });
   } else if (spec.cls === 'cleric') {
-    features.push({ name: 'Spellcasting', rule: 'spellcasting', text: 'Cantrips at will; 2 level 1 spell slots. Wisdom is your spellcasting ability.', source: 'Cleric 1' });
+    features.push({ name: 'Spellcasting', rule: 'spellcasting', text: 'Cantrips at will; leveled spells use spell slots. Wisdom is your spellcasting ability.', source: 'Cleric 1' });
     features.push({ name: 'Divine Order: Protector', text: 'Training with heavy armor and martial weapons.', source: 'Cleric 1' });
   } else if (spec.cls === 'wizard') {
-    features.push({ name: 'Spellcasting', rule: 'spellcasting', text: 'Cantrips at will; 2 level 1 spell slots. Intelligence is your spellcasting ability.', source: 'Wizard 1' });
+    features.push({ name: 'Spellcasting', rule: 'spellcasting', text: 'Cantrips at will; leveled spells use spell slots. Intelligence is your spellcasting ability.', source: 'Wizard 1' });
     features.push({ name: 'Ritual Adept', text: 'Cast Ritual spells from your spellbook without preparing them.', source: 'Wizard 1' });
     features.push({ name: 'Arcane Recovery', text: 'Regain some spell slots on a Short Rest, once a day.', source: 'Wizard 1' });
   }
+
+  for (let l = 2; l <= level; l++) for (const f of CLASS_FEATURES[spec.cls][l] || []) features.push({ ...f, source: `${C.name} ${l}` });
 
   const ancestry = DRAGON_ANCESTRY[spec.ancestry];
   return {
@@ -188,8 +207,18 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     luck: spec.species === 'halfling',
     mentalSaveAdv: spec.species === 'gnome',
     savage: B.feat === 'savage-attacker',
-    sneak: spec.cls === 'rogue' ? '1d6' : null,
+    sneak: spec.cls === 'rogue' ? (level >= 3 ? '2d6' : '1d6') : null,
     secondWind: spec.cls === 'fighter' ? { uses: 2, max: 2 } : null,
+    actionSurge: spec.cls === 'fighter' && level >= 2 ? { uses: 1, max: 1 } : null,
+    critOn: spec.cls === 'fighter' && level >= 3 ? 19 : 20,
+    initAdv: spec.cls === 'fighter' && level >= 3,
+    cunning: spec.cls === 'rogue' && level >= 2,
+    steadyAim: spec.cls === 'rogue' && level >= 3,
+    channel: spec.cls === 'cleric' && level >= 2 ? { uses: 2, max: 2 } : null,
+    discipleOfLife: spec.cls === 'cleric' && level >= 3,
+    potentCantrip: spec.cls === 'wizard' && level >= 3,
+    hitDie: C.hitDie, hitDice: { max: level, left: level },
+    gear: { armor: armorId === C.armor ? null : armorId, weapon: gear.weapon ? 1 : 0, cloak: !!gear.cloak },
     firesBurn: spec.species === 'goliath' ? { uses: pb, max: pb } : null,
     adrenaline: spec.species === 'orc' ? { uses: pb, max: pb } : null,
     relentless: spec.species === 'orc' ? { used: false } : null,
@@ -235,4 +264,52 @@ export const buildGoblin = (opts) => buildMonster(GOBLIN_WARRIOR, opts);
 export function spellList(c) {
   if (!c.casting) return [];
   return Object.entries(c.casting.known).map(([sid, k]) => ({ id: sid, ...SPELLS[sid], ...k }));
+}
+
+// ------------------------------------------------------------- progress ----
+// A hero's state between fights. The creature is rebuilt from spec + level +
+// gear at each fight; progress carries what was spent.
+export function freshProgress(h, { xp = 0 } = {}) {
+  const pr = { level: h.level, xp, hp: h.hpMax, hd: h.hitDice.max, aid: 0, gear: { ...h.gear }, uses: {} };
+  harvestUses(h, pr);
+  return pr;
+}
+
+function harvestUses(c, pr) {
+  const u = pr.uses;
+  u.secondWind = c.secondWind?.uses;
+  u.actionSurge = c.actionSurge?.uses;
+  u.channel = c.channel?.uses;
+  u.breath = c.breath?.uses;
+  u.firesBurn = c.firesBurn?.uses;
+  u.adrenaline = c.adrenaline?.uses;
+  u.relentlessUsed = !!c.relentless?.used;
+  u.arcaneRecovery = !!u.arcaneRecovery;
+  u.slots = c.casting?.slots ? Object.fromEntries(Object.entries(c.casting.slots).map(([l, s]) => [l, s.left])) : null;
+  u.free = c.casting ? Object.fromEntries(Object.entries(c.casting.known).filter(([, k]) => k.free != null).map(([sid, k]) => [sid, k.free])) : null;
+}
+
+// Put a saved state onto a freshly built creature.
+export function applyProgress(c, pr) {
+  if (!pr) return c;
+  if (pr.aid) { c.hpMax += pr.aid; c.hpParts.push({ label: 'Aid', value: pr.aid }); }
+  c.hp = Math.max(0, Math.min(c.hpMax, pr.hp ?? c.hpMax));
+  c.hitDice.left = Math.max(0, Math.min(c.hitDice.max, pr.hd ?? c.hitDice.max));
+  const u = pr.uses || {};
+  const set = (obj, v) => { if (obj && v != null) obj.uses = Math.max(0, Math.min(obj.max, v)); };
+  set(c.secondWind, u.secondWind); set(c.actionSurge, u.actionSurge); set(c.channel, u.channel);
+  set(c.breath, u.breath); set(c.firesBurn, u.firesBurn); set(c.adrenaline, u.adrenaline);
+  if (c.relentless) c.relentless.used = !!u.relentlessUsed;
+  if (c.casting?.slots && u.slots) for (const [l, s] of Object.entries(c.casting.slots)) if (u.slots[l] != null) s.left = Math.max(0, Math.min(s.max, u.slots[l]));
+  if (c.casting && u.free) for (const [sid, n] of Object.entries(u.free)) if (c.casting.known[sid]?.free != null && n != null) c.casting.known[sid].free = Math.max(0, Math.min(c.casting.known[sid].free, n));
+  return c;
+}
+
+// Read what a creature has left after a fight back into its progress.
+export function harvestProgress(c, pr) {
+  const out = { ...pr, uses: { ...pr.uses }, gear: { ...pr.gear } };
+  out.hp = Math.min(c.hp, c.hpMax);
+  out.hd = c.hitDice.left;
+  harvestUses(c, out);
+  return out;
 }

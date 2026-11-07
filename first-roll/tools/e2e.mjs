@@ -2,7 +2,8 @@
 // two phones) host and join a party over real WebRTC, with signalling through
 // the dev server's local Firestore stand-in. Ana hosts and builds a Fighter,
 // Ben joins by link and builds a Cleric, one AI companion joins them, and they
-// play the whole early-access campaign: votes, skill checks and both fights,
+// play the whole early-access campaign: votes, skill checks, both fights, a
+// rest and a town stop where they shop and level up,
 // each playing their own turns the way an AI companion would (window.__FR.auto). Both phones must reach
 // the end, the AI must never play for a connected player, and Ben must get
 // his seat back after a reload.
@@ -82,7 +83,7 @@ try {
   console.log('both heroes built; the story begins on both phones');
 
   const turns = { Ana: 0, Ben: 0 };
-  const done = { votes: 0, checks: 0, fights: 0, retries: 0 };
+  const done = { votes: 0, checks: 0, fights: 0, retries: 0, bought: 0 };
   let reactions = 0, shot = false;
   const state = (p) => p.evaluate(() => ({ phase: window.__FR.S?.phase, scene: window.__FR.S?.story?.scene, me: window.__FR.me }));
   for (let i = 0; i < 4000; i++) {
@@ -91,6 +92,11 @@ try {
     for (const p of [ana, ben]) {
       const st = await state(p);
       if (st.phase === 'story') {
+        if (st.scene === 'c2-town' && !done.bought && await p.$('[data-buy="potion-healing"]:not([disabled])')) {
+          await p.click('[data-buy="potion-healing"]'); done.bought++;
+          if (shotsAt) { await p.waitForTimeout(300); await p.screenshot({ path: `${shotsAt}/town-${p.label}.png`, fullPage: true }); }
+          continue;
+        }
         if (p === ana && await p.$('#s-continue')) { await p.click('#s-continue'); continue; }
         if (await p.$('#s-roll')) { await p.click('#s-roll'); done.checks++; continue; }
         const claim = await p.$(`[data-claim="${st.me}"]`);
@@ -100,6 +106,7 @@ try {
         if (!(await p.$('.choice.on')) && await p.$('[data-vote]')) { await (await p.$$('[data-vote]'))[0].click(); done.votes++; }
       } else if (st.phase === 'battle') {
         if (await p.$('#over:not(.hidden)')) {
+          if (p === ana && shotsAt && !done[`shot${done.fights}`]) { done[`shot${done.fights}`] = 1; await p.screenshot({ path: `${shotsAt}/victory-${done.fights + 1}.png` }); }
           if (p === ana) {
             if (await p.$('#btn-cont')) { done.fights++; await p.click('#btn-cont'); }
             else if (await p.$('#btn-retry')) { done.retries++; await p.click('#btn-retry'); }
@@ -121,6 +128,9 @@ try {
   console.log(`campaign finished: ${done.votes} votes, ${done.checks} check rolls, ${done.fights} fights won, ${done.retries} retries; Ana took ${turns.Ana} battle actions, Ben ${turns.Ben}; ${reactions} reaction prompts`);
   if (!turns.Ana || !turns.Ben) fail('both players should have acted in battle');
   if (done.fights !== 2) fail(`expected 2 fights won, got ${done.fights}`);
+  const prog = await ana.evaluate(() => Object.values(window.__FR.S.progress).map((x) => x.level));
+  console.log(`levels at the end: ${prog.join(', ')}; bought ${done.bought} potion(s) in town`);
+  if (prog.some((l) => l < 3)) fail('everyone should reach level 3 by the end');
   const takeovers = await ana.evaluate(() => window.__FR.room.aiForPlayers);
   if (takeovers) fail(`the AI played ${takeovers} steps for a connected player`);
   if (shotsAt) await ana.screenshot({ path: `${shotsAt}/coop-end-ana.png`, fullPage: true });
