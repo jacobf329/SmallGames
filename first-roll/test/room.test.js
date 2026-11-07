@@ -179,23 +179,38 @@ test('the host saves after every change and resumes mid-story', () => {
   assert.equal(again.seats.length, 2);
 });
 
-test('the whole campaign plays through to the end (AI fights, retry on defeat)', () => {
+test('the whole campaign plays through to the end (AI fights, rests, level-ups, retry on defeat)', () => {
   const p = party({ companions: 1 });
   p.ana.say({ t: 'start' });
-  for (let step = 0; step < 60 && SCENES[p.room.story?.scene]?.kind !== 'end'; step++) {
+  const seen = new Set();
+  let retries = 0;
+  for (let step = 0; step < 300 && SCENES[p.room.story?.scene]?.kind !== 'end'; step++) {
     const r = p.room;
     if (r.phase === 'battle') {
       finishFight(p);
+      if (r.battle.over !== 'victory') retries++;
       p.ana.say({ t: r.battle.over === 'victory' ? 'continue' : 'retry' });
       continue;
     }
     const sc = SCENES[r.story.scene];
-    if (sc.kind === 'story') { p.ana.say({ t: 'vote', choice: sc.choices[0].id }); p.ben.say({ t: 'vote', choice: sc.choices[0].id }); }
-    else if (sc.kind === 'check' && !r.story.result) {
+    seen.add(sc.chapter);
+    if (sc.kind === 'story') {
+      const ch = sc.choices.find((c) => !c.requires || r.story && p.ana.state().flags[c.requires]);
+      p.ana.say({ t: 'vote', choice: ch.id }); p.ben.say({ t: 'vote', choice: ch.id });
+    } else if (sc.kind === 'check' && !r.story.result) {
       if (sc.check.mode === 'single') { p.ana.say({ t: 'claim', hero: p.ana.pid() }); p.ana.say({ t: 'roll' }); }
       else { p.ana.say({ t: 'roll' }); p.ben.say({ t: 'roll' }); }
+    } else if (sc.kind === 'save' && !r.story.result) {
+      p.ana.say({ t: 'roll' }); p.ben.say({ t: 'roll' });
+      assert.ok(r.story.result, 'companions roll once the players have');
+    } else if (sc.kind === 'rest' && sc.rest === 'short' && !r.story.rest.results) {
+      p.ana.say({ t: 'hitdie' });
+      p.ana.say({ t: 'continue' });
     } else p.ana.say({ t: 'continue' });
   }
-  assert.equal(p.room.story.scene, 'c3-end');
+  assert.equal(p.room.story.scene, 'c8-end');
+  assert.deepEqual([...seen].sort(), [2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(p.ana.state().level, 3);
   assert.equal(p.room.aiForPlayers, 0, 'the AI never played for a connected player');
+  assert.ok(retries < 40, `retries: ${retries}`);
 });

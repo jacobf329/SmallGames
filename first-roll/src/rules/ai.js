@@ -448,15 +448,15 @@ export function aiNext(b, id) {
   const kind = style === 'archer' ? (threatened(b, me) ? null : 'ranged') : null;
   let here = canAttack(t) || t.action ? bestHere(b, me, { kind }) : null;
 
-  // Move first if a better spot is in reach.
-  if (t.moves < 2 && t.moveLeft >= 5) {
+  // Move first if a better spot is in reach (only while there's still something to do there).
+  if (t.moves < 2 && t.moveLeft >= 5 && (canAttack(t) || t.action)) {
     const mv = bestMove(b, me, style, here);
     if (mv) return { a: 'move', x: mv.x, y: mv.y };
   }
 
   if (here && here.score > 0.3) {
     // Steady Aim before a shot taken from where you stand.
-    if (here.intent.a === 'attack' && here.ranged && me.steadyAim && t.bonus && !t.moves && here.why.o.mode !== 'advantage' && !threatened(b, me)) return { a: 'aim' };
+    if (here.intent.a === 'attack' && here.ranged && me.steadyAim && t.bonus && !t.moves && t.moveLeft >= speedOf(b, me) && here.why.o.mode !== 'advantage' && !threatened(b, me)) return { a: 'aim' };
     return here.intent;
   }
 

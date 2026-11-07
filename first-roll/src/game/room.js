@@ -13,21 +13,23 @@
 //   start                    vote {choice}    decide (host)
 //   claim {hero}             help {hero}      roll {hero}          continue (host)
 //   act {intent}             react {yes}      retry (host)         again (host)
+//   hitdie {hero}  (Short Rest)                 timer {s} (host: 0 = no turn timer)
 //   ping {x, y}
 // host -> phone:  welcome {pid, token}   state {...}   ping {pid, x, y}   error {text}
 
-import { buildHero, validateSpec } from '../rules/character.js';
+import { buildHero, validateSpec, heroState, applyState, spendHitDie, finishShortRest, longRest } from '../rules/character.js';
 import { SKILLS, SKILL_NAMES } from '../rules/data.js';
 import { createBattle, rollInitiative, perform, current, resolveReaction, rollD20 } from '../rules/combat.js';
 import { makeRng } from '../rules/rng.js';
-import { aiNext } from '../rules/ai.js';
+import { aiNext, aiReact } from '../rules/ai.js';
 import { SCENES, FIRST_SCENE, COMPANIONS } from './campaign.js';
 import { buildEncounter } from './encounters.js';
 
 export const MAX_HEROES = 4;
 export const MAX_SEATS = 8;            // extra people watch
 export const COLORS = ['#4fc3f7', '#ffb74d', '#81c784', '#ba68c8', '#f06292', '#90a4ae', '#ffd54f', '#4db6ac'];
-export const REACTION_MS = 15000;      // time to answer an Opportunity Attack prompt
+export const REACTION_MS = 15000;      // time to answer a reaction prompt (Opportunity Attack, Shield)
+export const TIMER_CHOICES = [0, 30, 60, 90];   // turn timer settings, in seconds
 export const TAKEOVER_MS = 8000;       // an absent player's hero waits this long before the AI plays it
 const AI_STEP_MS = 900;
 
@@ -52,7 +54,11 @@ export function skillParts(h, skill) {
 // store: { load() -> string|null, save(string), remove() }
 export function createRoom({ store = null, now = () => Date.now(), seed = null, log = () => {} } = {}) {
   let S = {
-    v: 2, seats: [], nextPid: 1, companions: 'auto',
+    v: 3, seats: [], nextPid: 1, companions: 'auto',
+    level: 1,                  // the party's level (the campaign raises it)
+    heroes: {},                // hero id -> saved state between scenes (HP, dice, slots, uses)
+    preFight: null,            // what to put back if the party retries a fight
+    timer: 0,                  // seconds per player turn, 0 = no limit
     phase: 'lobby',            // lobby | story | battle
     story: null,               // { scene, votes, check, result }
     flags: {},
@@ -60,7 +66,7 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     rng: makeRng(seed ?? (now() >>> 0)),
     seq: 0,                    // story record counter
   };
-  let deadline = 0, aiAt = 0, takeoverAt = 0, lastTurnKey = '';
+  let deadline = 0, aiAt = 0, takeoverAt = 0, lastTurnKey = '', turnStart = 0;
   let aiForPlayers = 0;
   const online = new Map();    // pid -> set of handles
   const handles = new Set();
@@ -71,7 +77,8 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
       const raw = store.load();
       if (raw) {
         const s = JSON.parse(raw);
-        if (s.v === 2) S = s;
+        if (s.v === 3) S = s;
+        else if (s.v === 2) S = { ...s, v: 3, level: 1, heroes: {}, preFight: null, timer: 0 };
         if (S.phase === 'battle' && !S.battle) S.phase = S.story ? 'story' : 'lobby';
       }
     } catch (e) { log('bad save', e); }
@@ -97,7 +104,13 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     const comps = picks.slice(0, Math.min(want, room)).map((c) => ({ id: c.id, controller: null, spec: c.spec, name: c.name }));
     return [...players, ...comps];
   }
-  const heroOf = (p) => buildHero(p.spec, { id: p.id, name: p.name });
+  // A hero as they are now: built at the party's level, with what they've
+  // spent and taken since the last Long Rest put back on.
+  const heroOf = (p) => applyState(buildHero(p.spec, { id: p.id, name: p.name, level: S.level }), S.heroes[p.id]);
+  const keep = (h) => { S.heroes[h.id] = heroState(h); };
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  // Choices this party can pick, given what it has found out so far.
+  const choicesOf = (sc) => (sc.choices || []).filter((c) => !c.requires || S.flags[c.requires]);
 
   // Who acts for this creature right now: a pid, or 'ai'.
   function actorFor(c, t) {
@@ -123,7 +136,9 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
       seats: S.seats.map((s) => ({ pid: s.pid, name: s.name, color: s.color, online: isOnline(s.pid), host: s.pid === hostPid(), spec: s.spec || null })),
       companions: S.companions,
       party: party().map((p) => ({ id: p.id, name: p.name, controller: p.controller, spec: p.spec })),
-      story: S.story, flags: S.flags, battleScene: S.battleScene,
+      story: S.story, flags: S.flags, battleScene: S.battleScene, level: S.level, timer: S.timer,
+      heroes: Object.fromEntries(party().map((p) => [p.id, S.heroes[p.id] || null])),
+      turnEndsIn: S.timer && cur && !S.battle.over && actorFor(cur, t) !== 'ai' ? Math.max(0, turnStart + S.timer * 1000 - t) : 0,
       battle: b,
       control: cur && !S.battle.over ? actorFor(cur, t) : null,
       reactor: S.battle?.pending ? actorFor(S.battle.creatures[S.battle.pending.reactor], t) : null,
@@ -146,7 +161,36 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     if (sc.kind === 'fight') return startFight(id);
     S.phase = 'story';
     S.story = { scene: id, votes: {}, check: null, result: null };
-    if (sc.kind === 'check') S.story.check = { roller: null, helpers: [], rolls: {}, done: false };
+    if (sc.kind === 'check' || sc.kind === 'save') S.story.check = { roller: null, helpers: [], rolls: {}, done: false };
+    if (sc.kind === 'rest' && sc.rest === 'long') {
+      S.story.rest = { kind: 'long', results: party().map((p) => {
+        const h = heroOf(p);
+        const got = longRest(h);
+        keep(h);
+        return { id: p.id, name: p.name, got };
+      }) };
+    }
+    if (sc.kind === 'rest' && sc.rest === 'short') S.story.rest = { kind: 'short', log: [], results: null };
+    if (sc.kind === 'level') levelUp(sc.level);
+  }
+
+  // Everyone goes up to `level`: new Hit Points and features, nothing spent comes back.
+  function levelUp(level) {
+    const from = S.level;
+    if (level <= from) { S.story.levelUp = []; return; }
+    const before = Object.fromEntries(party().map((p) => [p.id, heroOf(p)]));
+    S.level = level;
+    S.story.levelUp = party().map((p) => {
+      const old = before[p.id];
+      const h = heroOf(p);
+      keep(h);
+      const had = new Set(old.features.map((f) => f.name));
+      return {
+        id: p.id, name: p.name, from, to: level, hpMaxBefore: old.hpMax, hpMax: h.hpMax, hp: h.hp, subclass: h.subclass || null,
+        features: h.features.filter((f) => !had.has(f.name)).map((f) => ({ name: f.name, text: f.text, rule: f.rule })),
+        slots: h.casting?.slots ? Object.fromEntries(Object.entries(h.casting.slots).map(([lv, x]) => [lv, x.max])) : null,
+      };
+    });
   }
 
   function resolveVote(force = false) {
@@ -159,21 +203,26 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     const tally = {};
     for (const p of Object.keys(S.story.votes)) tally[S.story.votes[p]] = (tally[S.story.votes[p]] || 0) + 1;
     const top = Math.max(...Object.values(tally));
-    const tied = sc.choices.filter((c) => tally[c.id] === top);
+    const tied = choicesOf(sc).filter((c) => tally[c.id] === top);
+    if (!tied.length) return;
     const pick = tied.length > 1 && tied.some((c) => c.id === S.story.votes[hostPid()]) ? S.story.votes[hostPid()] : tied[0].id;
-    goto(sc.choices.find((c) => c.id === pick).next);
+    const ch = sc.choices.find((c) => c.id === pick);
+    S.flags = { ...S.flags, ...(ch.flags || {}) };
+    goto(ch.next);
   }
 
   // One hero's check: d20 (Advantage if Helped) + skill modifier vs DC.
   function rollCheck(p, skill, dc, helpers = []) {
     const h = heroOf(p);
     const adv = helpers.map((id) => ({ text: `${party().find((x) => x.id === id)?.name} is Helping`, rule: 'help' }));
-    const d20 = rollD20({ rng: S.rng }, h, adv.length ? 'advantage' : 'normal');
+    const dis = h.conds?.some((c) => c.id === 'poisoned') ? [{ text: `${p.name} is Poisoned`, rule: 'poisoned' }] : [];
+    const d20 = rollD20({ rng: S.rng }, h, adv.length && !dis.length ? 'advantage' : dis.length && !adv.length ? 'disadvantage' : 'normal');
     const mods = skillParts(h, skill);
+    if (h.exhaustion) mods.push({ label: `Exhaustion ${h.exhaustion}`, value: -2 * h.exhaustion, rule: 'exhaustion' });
     const total = d20.kept + mods.reduce((s, m) => s + m.value, 0);
     return {
       kind: 'check', seq: ++S.seq, by: p.id, name: p.name, skill: `${SKILL_NAMES[skill]} (${SKILLS[skill].toUpperCase()})`,
-      d20: { ...d20, adv, dis: [] }, mods, total, dc, outcome: total >= dc ? 'success' : 'fail', rule: 'skills',
+      d20: { ...d20, adv, dis }, mods, total, dc, outcome: total >= dc ? 'success' : 'fail', rule: 'skills',
       text: `${p.name} rolls ${SKILL_NAMES[skill]}: ${total} vs DC ${dc}, ${total >= dc ? 'success' : 'failure'}.`,
     };
   }
@@ -203,19 +252,90 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     }
   }
 
+  // A saving throw outside of battle: d20 + ability modifier (+ Proficiency
+  // Bonus if proficient) vs DC. A failure leaves the scene's effect on the hero.
+  const ABN = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
+  function rollSave(p, { ability, dc, effect }) {
+    const h = heroOf(p);
+    const adv = effect === 'poisoned' && h.poisonSaveAdv ? [{ text: 'Dwarven Resilience', rule: 'poisoned' }] : [];
+    const d20 = rollD20({ rng: S.rng }, h, adv.length ? 'advantage' : 'normal');
+    const mods = [{ label: `${ability.toUpperCase()} modifier`, value: h.mods[ability], rule: 'ability-modifier' }];
+    if (h.saveProfs.includes(ability)) mods.push({ label: 'Proficiency Bonus (proficient save)', value: h.pb, rule: 'proficiency' });
+    if (h.exhaustion) mods.push({ label: `Exhaustion ${h.exhaustion}`, value: -2 * h.exhaustion, rule: 'exhaustion' });
+    let total = d20.kept + mods.reduce((s, m) => s + m.value, 0);
+    let inspired = false;
+    if (total < dc && h.inspiration && d20.kept < 20) {
+      const again = rollD20({ rng: S.rng }, h, 'normal');
+      d20.rolls.push(again.rolls[0]); d20.kept = again.kept;
+      h.inspiration = false; inspired = true;
+      total = d20.kept + mods.reduce((s, m) => s + m.value, 0);
+    }
+    const ok = total >= dc;
+    if (!ok && effect === 'poisoned' && !h.condImmune?.includes('poisoned')) h.conds = [...(h.conds || []).filter((c) => c.id !== 'poisoned'), { id: 'poisoned', lasting: true, rule: 'poisoned' }];
+    if (!ok && effect === 'exhaustion') h.exhaustion = Math.min(6, (h.exhaustion || 0) + 1);
+    keep(h);
+    return {
+      kind: 'save', save: 'story', seq: ++S.seq, by: p.id, name: p.name, ability, d20: { ...d20, adv, dis: [] }, mods, total, dc,
+      outcome: ok ? 'success' : 'fail', rule: 'saving-throw', inspired,
+      text: `${p.name} rolls a ${ABN[ability]} save: ${total} vs DC ${dc}, ${ok ? 'success' : `failure${effect === 'poisoned' ? ': Poisoned' : effect === 'exhaustion' ? ': one level of Exhaustion' : ''}`}.${inspired ? ' (Heroic Inspiration: rerolled.)' : ''}`,
+    };
+  }
+  function saveRoll(heroId) {
+    const sc = SCENES[S.story.scene];
+    const ck = S.story.check;
+    const p = party().find((x) => x.id === heroId);
+    if (!p || ck.rolls[heroId] || ck.done) return;
+    ck.rolls[heroId] = rollSave(p, sc.save);
+    const players = party().filter((x) => x.controller);
+    if (players.every((x) => ck.rolls[x.id])) finishSave();
+  }
+  function finishSave() {
+    const sc = SCENES[S.story.scene];
+    const ck = S.story.check;
+    for (const p of party()) if (!ck.rolls[p.id]) ck.rolls[p.id] = rollSave(p, sc.save);
+    ck.done = true;
+    const failed = Object.values(ck.rolls).filter((r) => r.outcome === 'fail').map((r) => r.by);
+    S.story.result = { failed, text: failed.length ? sc.fail : sc.pass, next: sc.next };
+  }
+
+  // Short Rest: companions spend Hit Point Dice until they're mostly healed;
+  // then everyone gets back what a Short Rest gives.
+  function finishShortRest_() {
+    const r = S.story.rest;
+    for (const p of party()) {
+      const h = heroOf(p);
+      if (!p.controller) {
+        while (h.hitDice.left > 0 && h.hp < h.hpMax - Math.ceil(h.hitDice.die / 2)) {
+          const rec = spendHitDie(h, S.rng);
+          if (!rec) break;
+          r.log.push({ ...rec, seq: ++S.seq });
+        }
+      }
+      keep(h);
+    }
+    r.results = party().map((p) => {
+      const h = heroOf(p);
+      const got = finishShortRest(h);
+      keep(h);
+      return { id: p.id, name: p.name, got };
+    });
+  }
+
   // ---------------------------------------------------------- battle ----
   function startFight(sceneId) {
     const sc = SCENES[sceneId];
     const members = party();
-    const enc = buildEncounter(sc.encounter, members.length);
+    if (!S.preFight || S.preFight.scene !== sceneId) S.preFight = { scene: sceneId, heroes: clone(S.heroes), flags: clone(S.flags) };
+    const enc = buildEncounter(sc.encounter, members.length, S.flags);
     const heroes = members.map((p, i) => Object.assign(heroOf(p), enc.heroStarts[i]));
-    S.battle = createBattle({ heroes, foes: enc.foes, walls: enc.walls, seed: Math.floor(Math.random() * 2 ** 31) ^ (now() >>> 0) });
-    if (seed != null) S.battle.rng = makeRng(seed + S.seq + 1);
+    S.battle = createBattle({ heroes, foes: enc.foes, walls: enc.walls, cover: enc.cover, seed: Math.floor(Math.random() * 2 ** 31) ^ (now() >>> 0) });
+    S.fights = (S.fights || 0) + 1;
+    if (seed != null) S.battle.rng = makeRng(seed + S.seq + S.fights);
     S.battleScene = sceneId;
     S.phase = 'battle';
     const surprised = S.flags.surprise === 'foes' ? enc.foes.map((f) => f.id) : S.flags.surprise === 'heroes' ? heroes.map((h) => h.id) : [];
     rollInitiative(S.battle, { surprised });
-    S.flags = {};
+    delete S.flags.surprise;
     onTurnChange(true);
   }
 
@@ -224,10 +344,25 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     const k = `${S.battle.round}:${S.battle.idx}`;
     if (force || k !== lastTurnKey) {
       lastTurnKey = k;
+      turnStart = now();
       aiAt = now() + AI_STEP_MS;
       takeoverAt = now() + TAKEOVER_MS;
     }
     if (S.battle.pending && !deadline) deadline = now() + REACTION_MS;
+  }
+
+  // After a win: what the fight cost each hero carries into the next scene.
+  // Anyone left at 0 Hit Points is patched up to 1 by the others.
+  function keepAfterFight() {
+    for (const p of party()) {
+      const h = S.battle.creatures[p.id];
+      if (!h) continue;
+      h.conds = (h.conds || []).filter((c) => c.lasting);
+      const st = heroState(h);
+      if (st.hp < 1) st.hp = 1;
+      S.heroes[p.id] = st;
+    }
+    S.preFight = null;
   }
 
   function act(intent) {
@@ -276,6 +411,7 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
         let spec;
         try { spec = validateSpec(m.spec); } catch (e) { return err(e.message); }
         if (!s.spec && playerHeroes().length >= MAX_HEROES) return err('The party already has 4 heroes. You can watch.');
+        if (JSON.stringify(s.spec) !== JSON.stringify(spec)) delete S.heroes[s.pid];
         s.spec = spec;
         return changed();
       }
@@ -288,14 +424,14 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
         if (!isHost) return err('Only the host can start.');
         if (S.phase !== 'lobby') return;
         if (!party().length) return err('The party needs at least one hero.');
-        S.flags = {};
+        S.flags = {}; S.level = 1; S.heroes = {}; S.preFight = null;
         goto(FIRST_SCENE);
         return changed();
       }
       case 'vote': {
         if (S.phase !== 'story' || sc?.kind !== 'story') return;
         if (!s.spec && !isHost) return err('Only players with a hero vote.');
-        if (!sc.choices.some((c) => c.id === m.choice)) return;
+        if (!choicesOf(sc).some((c) => c.id === m.choice)) return;
         S.story.votes[s.pid] = m.choice;
         resolveVote();
         return changed();
@@ -325,6 +461,13 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
       }
       case 'roll': {
         const ck = S.story?.check;
+        if (sc?.kind === 'save') {
+          if (ck.done) return;
+          const id = m.hero || s.pid;
+          if (!mayControl(s.pid, id)) return err("That isn't your hero.");
+          saveRoll(id);
+          return changed();
+        }
         if (sc?.kind !== 'check' || ck.done) return;
         if (sc.check.mode === 'single') {
           if (!ck.roller) return err('Pick who makes the check first.');
@@ -341,25 +484,33 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
       }
       case 'continue': {
         if (!isHost) return err('The host moves the story on.');
-        if (S.phase === 'story' && S.story?.result) {
-          S.flags = { ...(S.story.result.flags || {}) };
+        if (S.phase === 'story' && sc?.kind === 'save' && !S.story.check.done) {
+          finishSave();
+        } else if (S.phase === 'story' && S.story?.result) {
+          S.flags = { ...S.flags, ...(S.story.result.flags || {}) };
           goto(S.story.result.next);
+        } else if (S.phase === 'story' && sc?.kind === 'rest' && sc.rest === 'short' && !S.story.rest.results) {
+          finishShortRest_();
+        } else if (S.phase === 'story' && (sc?.kind === 'rest' || sc?.kind === 'level')) {
+          goto(sc.next);
         } else if (S.phase === 'story' && sc?.kind === 'check' && sc.check.mode === 'group' && !S.story.check.done) {
           for (const p of party()) if (!S.story.check.rolls[p.id]) S.story.check.rolls[p.id] = rollCheck(p, sc.check.skill, sc.check.dc);
           finishCheck();
         } else if (S.phase === 'battle' && S.battle?.over === 'victory') {
+          keepAfterFight();
           goto(SCENES[S.battleScene].next);
         }
         return changed();
       }
       case 'retry': {
         if (!isHost || S.phase !== 'battle' || !S.battle?.over) return;
+        if (S.preFight) { S.heroes = clone(S.preFight.heroes); S.flags = clone(S.preFight.flags); }
         startFight(S.battleScene);
         return changed();
       }
       case 'again': {
         if (!isHost) return;
-        S.battle = null; S.story = null; S.phase = 'lobby'; S.flags = {};
+        S.battle = null; S.story = null; S.phase = 'lobby'; S.flags = {}; S.level = 1; S.heroes = {}; S.preFight = null;
         return changed();
       }
       case 'act': {
@@ -375,6 +526,26 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
         const R = S.battle.creatures[S.battle.pending.reactor];
         if (actorFor(R, now()) !== s.pid) return;
         react(!!m.yes);
+        return changed();
+      }
+      case 'hitdie': {
+        const r = S.story?.rest;
+        if (sc?.kind !== 'rest' || r?.kind !== 'short' || r.results) return;
+        const id = m.hero || s.pid;
+        const p = party().find((x) => x.id === id);
+        if (!p || !mayControl(s.pid, id)) return err("That isn't your hero.");
+        const h = heroOf(p);
+        if (!h.hitDice.left) return err('No Hit Point Dice left. They come back on a Long Rest.');
+        if (h.hp >= h.hpMax) return err(`${p.name} is already at full Hit Points.`);
+        const rec = spendHitDie(h, S.rng);
+        keep(h);
+        r.log.push({ ...rec, seq: ++S.seq });
+        return changed();
+      }
+      case 'timer': {
+        if (!isHost) return err('Only the host sets the turn timer.');
+        S.timer = TIMER_CHOICES.includes(m.s | 0) ? m.s | 0 : 0;
+        turnStart = now();
         return changed();
       }
       case 'ping': {
@@ -414,11 +585,21 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     if (b.pending) {
       if (!deadline) deadline = t + REACTION_MS;
       const R = b.creatures[b.pending.reactor];
-      // AI always takes the attack; a person who doesn't answer in time takes it too.
-      if (actorFor(R, t) === 'ai' || t >= deadline) { react(true); changed(); }
+      // The AI decides for its own creatures. A person who doesn't answer in
+      // time takes an Opportunity Attack but doesn't spend a slot on Shield.
+      if (actorFor(R, t) === 'ai') { react(aiReact(b)); changed(); }
+      else if (t >= deadline) { react(b.pending.kind === 'oa'); changed(); }
       return;
     }
     const c = current(b);
+    // Turn timer: a player who runs out of time ends their turn.
+    if (S.timer && actorFor(c, t) !== 'ai' && t >= turnStart + S.timer * 1000) {
+      const who = c.name;
+      const r = act({ a: 'end' });
+      if (r.ok && r.records[0]) r.records[0].text = `${who} runs out of time and the turn ends (turn timer: ${S.timer} seconds).`;
+      changed();
+      return;
+    }
     if (actorFor(c, t) !== 'ai' || t < aiAt) return;
     if (seatOf(c.id)?.spec) aiForPlayers++;
     const intent = aiNext(b, c.id) || { a: 'end' };
