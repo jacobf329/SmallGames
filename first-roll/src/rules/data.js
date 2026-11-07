@@ -52,30 +52,59 @@ export const ARMOR = {
 
 // -------------------------------------------------------------- spells ----
 // kind: attack (spell attack roll), save (target saves), missile (always hits),
-// cone (area, everyone in it saves), heal, stabilize, utility (no battle use yet).
+// cone / cube / sphere (area, everyone in it saves), heal, stabilize, buff
+// (Bless, Shield of Faith, Aid), cure (Lesser Restoration), shield (a
+// Reaction), teleport (Misty Step), rays (several spell attacks), utility
+// (no battle use). conc: needs Concentration. up: what a higher slot adds.
 export const SPELLS = {
   'fire-bolt': { name: 'Fire Bolt', level: 0, time: 'action', range: 120, kind: 'attack', dice: '1d10', type: 'Fire',
     text: 'Hurl a mote of fire: make a ranged spell attack. On a hit, 1d10 Fire damage.' },
   'ray-of-frost': { name: 'Ray of Frost', level: 0, time: 'action', range: 60, kind: 'attack', dice: '1d8', type: 'Cold', rider: 'chill',
     text: "A frigid beam: ranged spell attack. On a hit, 1d8 Cold damage and the target's Speed drops by 10 feet until the start of your next turn." },
   'sacred-flame': { name: 'Sacred Flame', level: 0, time: 'action', range: 60, kind: 'save', save: 'dex', dice: '1d8', type: 'Radiant',
-    text: 'Flame descends on a creature you can see: it makes a Dexterity saving throw or takes 1d8 Radiant damage.' },
+    text: 'Flame descends on a creature you can see: it makes a Dexterity saving throw or takes 1d8 Radiant damage. Cover gives no bonus to this save.' },
   'spare-the-dying': { name: 'Spare the Dying', level: 0, time: 'action', range: 15, kind: 'stabilize',
     text: 'Choose a creature within 15 feet that has 0 Hit Points and is not dead. It becomes Stable.' },
   'thaumaturgy': { name: 'Thaumaturgy', level: 0, time: 'action', range: 30, kind: 'utility',
     text: 'Minor wonders: a booming voice, flickering flames, tremors. (Useful outside of fights.)' },
   'mage-hand': { name: 'Mage Hand', level: 0, time: 'action', range: 30, kind: 'utility',
     text: 'A spectral hand that can carry or open small things. (Useful outside of fights.)' },
-  'healing-word': { name: 'Healing Word', level: 1, time: 'bonus', range: 60, kind: 'heal', dice: '2d4',
-    text: 'A creature you can see within 60 feet regains 2d4 + your spellcasting modifier Hit Points. A Bonus Action.' },
-  'cure-wounds': { name: 'Cure Wounds', level: 1, time: 'action', range: 5, kind: 'heal', dice: '2d8',
-    text: 'A creature you touch regains 2d8 + your spellcasting modifier Hit Points.' },
-  'guiding-bolt': { name: 'Guiding Bolt', level: 1, time: 'action', range: 120, kind: 'attack', dice: '4d6', type: 'Radiant', rider: 'guided',
-    text: 'Ranged spell attack. On a hit, 4d6 Radiant damage, and the next attack roll against the target before the end of your next turn has Advantage.' },
-  'magic-missile': { name: 'Magic Missile', level: 1, time: 'action', range: 120, kind: 'missile', darts: 3, dice: '1d4', flat: 1, type: 'Force',
-    text: 'Three glowing darts that always hit, each dealing 1d4 + 1 Force damage.' },
-  'burning-hands': { name: 'Burning Hands', level: 1, time: 'action', kind: 'cone', size: 15, save: 'dex', dice: '3d6', type: 'Fire', half: true,
-    text: 'A 15-foot Cone of flame. Each creature in it makes a Dexterity save: 3d6 Fire damage on a failure, half as much on a success. Careful: allies in the Cone burn too.' },
+  'healing-word': { name: 'Healing Word', level: 1, time: 'bonus', range: 60, kind: 'heal', dice: '2d4', up: { dice: '2d4' },
+    text: 'A creature you can see within 60 feet regains 2d4 + your spellcasting modifier Hit Points. A Bonus Action. Higher slot: +2d4 per level.' },
+  'cure-wounds': { name: 'Cure Wounds', level: 1, time: 'action', range: 5, kind: 'heal', dice: '2d8', up: { dice: '2d8' },
+    text: 'A creature you touch regains 2d8 + your spellcasting modifier Hit Points. Higher slot: +2d8 per level.' },
+  'guiding-bolt': { name: 'Guiding Bolt', level: 1, time: 'action', range: 120, kind: 'attack', dice: '4d6', type: 'Radiant', rider: 'guided', up: { dice: '1d6' },
+    text: 'Ranged spell attack. On a hit, 4d6 Radiant damage, and the next attack roll against the target before the end of your next turn has Advantage. Higher slot: +1d6 per level.' },
+  'magic-missile': { name: 'Magic Missile', level: 1, time: 'action', range: 120, kind: 'missile', darts: 3, dice: '1d4', flat: 1, type: 'Force', up: { darts: 1 },
+    text: 'Three glowing darts that always hit, each dealing 1d4 + 1 Force damage. Higher slot: one more dart per level.' },
+  'burning-hands': { name: 'Burning Hands', level: 1, time: 'action', kind: 'cone', size: 15, save: 'dex', dice: '3d6', type: 'Fire', half: true, up: { dice: '1d6' },
+    text: 'A 15-foot Cone of flame. Each creature in it makes a Dexterity save: 3d6 Fire damage on a failure, half as much on a success. Careful: allies in the Cone burn too. Higher slot: +1d6 per level.' },
+  'bless': { name: 'Bless', level: 1, time: 'action', range: 30, kind: 'buff', buff: 'bless', targets: 3, conc: true, up: { targets: 1 },
+    text: 'Concentration, up to 1 minute. Up to three creatures within 30 feet add 1d4 to every attack roll and saving throw they make. Higher slot: one more creature per level.' },
+  'shield-of-faith': { name: 'Shield of Faith', level: 1, time: 'bonus', range: 60, kind: 'buff', buff: 'faith', targets: 1, conc: true,
+    text: 'Concentration, up to 10 minutes. A Bonus Action: a shimmering field gives one creature within 60 feet +2 to its Armor Class.' },
+  'shield': { name: 'Shield', level: 1, time: 'reaction', kind: 'shield',
+    text: 'A Reaction when an attack roll hits you: +5 to your Armor Class until the start of your next turn, which can turn that hit into a miss.' },
+  'thunderwave': { name: 'Thunderwave', level: 1, time: 'action', kind: 'cube', size: 15, save: 'con', dice: '2d8', type: 'Thunder', half: true, push: 10, up: { dice: '1d8' },
+    text: 'A 15-foot Cube of thunder bursts out from you. Each creature in it makes a Constitution save: 2d8 Thunder damage and pushed 10 feet away on a failure, half damage and no push on a success. Higher slot: +1d8 per level.' },
+  'detect-magic': { name: 'Detect Magic', level: 1, time: 'action', kind: 'utility', ritual: true, conc: true,
+    text: 'Concentration, up to 10 minutes. Sense magic within 30 feet. A Ritual: cast it in 10 extra minutes and it costs no spell slot. (Useful outside of fights.)' },
+  'scorching-ray': { name: 'Scorching Ray', level: 2, time: 'action', range: 120, kind: 'rays', rays: 3, dice: '2d6', type: 'Fire', up: { rays: 1 },
+    text: 'Three rays of fire. Make a ranged spell attack for each: 2d6 Fire damage on a hit. Aim them at one target or several. Higher slot: one more ray per level.' },
+  'misty-step': { name: 'Misty Step', level: 2, time: 'bonus', range: 30, kind: 'teleport',
+    text: 'A Bonus Action: you teleport up to 30 feet to an unoccupied space you can see. Teleporting never provokes Opportunity Attacks.' },
+  'aid': { name: 'Aid', level: 2, time: 'action', range: 30, kind: 'buff', buff: 'aid', targets: 3, amount: 5, up: { amount: 5 },
+    text: 'Up to three creatures within 30 feet: each one\'s Hit Point maximum and current Hit Points go up by 5 for 8 hours. Higher slot: +5 more per level.' },
+  // Spells only monsters use here (the Cultist Fanatic's).
+  'command': { name: 'Command', level: 1, time: 'action', range: 60, kind: 'command', save: 'wis', up: { targets: 1 },
+    text: 'Speak a one-word command to a creature you can see within 60 feet. It makes a Wisdom save or follows it on its next turn. "Grovel!": it falls Prone and its turn ends.' },
+  'hold-person': { name: 'Hold Person', level: 2, time: 'action', range: 60, kind: 'hold', save: 'wis', conc: true, only: 'humanoid', up: { targets: 1 },
+    text: 'Concentration, up to 1 minute. A Humanoid you can see within 60 feet makes a Wisdom save or is Paralyzed. It repeats the save at the end of each of its turns; a success ends the spell on it.' },
+  'spiritual-weapon': { name: 'Spiritual Weapon', level: 2, time: 'bonus', range: 60, kind: 'spiritual', dice: '1d8', type: 'Force', conc: true, up: { dice: '1d8' },
+    text: 'Concentration, up to 1 minute. A Bonus Action: a floating spectral weapon appears and makes a melee spell attack (1d8 + spellcasting modifier Force). On later turns, a Bonus Action moves it up to 20 feet and attacks again.' },
+  'light': { name: 'Light', level: 0, time: 'action', range: 5, kind: 'utility', text: 'An object glows like a torch. (Useful outside of fights.)' },
+  'lesser-restoration': { name: 'Lesser Restoration', level: 2, time: 'bonus', range: 5, kind: 'cure', cures: ['poisoned', 'blinded', 'deafened', 'paralyzed'],
+    text: 'A Bonus Action. Touch a creature and end one condition on it: Blinded, Deafened, Paralyzed or Poisoned.' },
 };
 
 // ------------------------------------------------------------- classes ----
@@ -105,7 +134,8 @@ export const CLASSES = {
     skillChoices: { n: 2, from: ['medicine', 'insight', 'religion', 'history', 'persuasion'] },
     armor: 'chainShirt', shield: true, weapons: ['mace'], masteries: [],
     suggested: { wis: 15, con: 14, str: 13, dex: 12, cha: 10, int: 8 },
-    spellcasting: { ability: 'wis', cantrips: ['sacred-flame', 'spare-the-dying', 'thaumaturgy'], prepared: ['healing-word', 'cure-wounds', 'guiding-bolt'], slots: 2 },
+    spellcasting: { ability: 'wis', cantrips: ['sacred-flame', 'spare-the-dying', 'thaumaturgy'],
+      prepared: { 1: ['healing-word', 'cure-wounds', 'guiding-bolt'], 2: ['bless', 'shield-of-faith'], 3: ['aid', 'lesser-restoration'] } },
     blurb: 'Divine magic. Keeps the party standing and burns foes with radiant light.',
     plays: 'Heal whoever is in trouble (Healing Word is a Bonus Action), then Sacred Flame or Guiding Bolt.',
   },
@@ -115,11 +145,20 @@ export const CLASSES = {
     skillChoices: { n: 2, from: ['arcana', 'investigation', 'history', 'insight', 'medicine', 'nature', 'religion'] },
     armor: 'none', shield: false, weapons: ['quarterstaff', 'dagger'], masteries: [],
     suggested: { int: 15, con: 14, dex: 13, wis: 12, cha: 10, str: 8 },
-    spellcasting: { ability: 'int', cantrips: ['fire-bolt', 'ray-of-frost', 'mage-hand'], prepared: ['magic-missile', 'burning-hands'], slots: 2 },
+    spellcasting: { ability: 'int', cantrips: ['fire-bolt', 'ray-of-frost', 'mage-hand'],
+      prepared: { 1: ['magic-missile', 'burning-hands'], 2: ['shield', 'thunderwave', 'detect-magic'], 3: ['scorching-ray', 'misty-step'] } },
     blurb: 'Fragile but powerful. Attacks from a distance with spells.',
     plays: 'Stay back and cast Fire Bolt. Save your spell slots for Magic Missile or Burning Hands on a crowd.',
   },
 };
+
+// Spell slots for a full caster (Cleric, Wizard) by character level.
+export const SLOTS_BY_LEVEL = { 1: { 1: 2 }, 2: { 1: 3 }, 3: { 1: 4, 2: 2 } };
+// Subclasses (one per class in the SRD), chosen at level 3.
+export const SUBCLASSES = { fighter: 'Champion', rogue: 'Thief', cleric: 'Life Domain', wizard: 'Evoker' };
+export const MAX_LEVEL = 3;
+// Hit Points gained per level after the first: the Hit Die's fixed value.
+export const HP_PER_LEVEL = { 6: 4, 8: 5, 10: 6, 12: 7 };
 
 // ------------------------------------------------------------- species ----
 export const DRAGON_ANCESTRY = {
@@ -204,7 +243,7 @@ export const FEATS = {
 // ------------------------------------------------------------ monsters ----
 // SRD 5.2.1 Goblin Warrior (CR 1/4, 50 XP) and Goblin Boss (CR 1, 200 XP).
 export const GOBLIN_WARRIOR = {
-  kind: 'goblin', name: 'Goblin Warrior', emoji: '👺', type: 'Small Fey (Goblinoid)',
+  kind: 'goblin', name: 'Goblin Warrior', emoji: '👺', type: 'Small Fey (Goblinoid)', size: 'small', creature: 'fey', skills: { stealth: 6 }, traits: { nimble: true },
   ac: 15, hp: 10, hpFormula: '3d6', speed: 30,
   abilities: { str: 8, dex: 15, con: 10, int: 10, wis: 8, cha: 8 },
   attacks: [
@@ -215,7 +254,7 @@ export const GOBLIN_WARRIOR = {
 };
 
 export const GOBLIN_BOSS = {
-  kind: 'goblin-boss', name: 'Goblin Boss', emoji: '👹', type: 'Small Fey (Goblinoid)',
+  kind: 'goblin-boss', name: 'Goblin Boss', emoji: '👹', type: 'Small Fey (Goblinoid)', size: 'small', creature: 'fey', skills: { stealth: 6 }, traits: { nimble: true },
   ac: 17, hp: 21, hpFormula: '6d6', speed: 30,
   abilities: { str: 10, dex: 15, con: 10, int: 10, wis: 8, cha: 10 },
   attacks: [
@@ -223,6 +262,71 @@ export const GOBLIN_BOSS = {
     { id: 'shortbow', name: 'Shortbow', kind: 'ranged', bonus: 4, dice: '1d6', flat: 2, type: 'Piercing', advDice: '1d4', range: [80, 320] },
   ],
   multiattack: 2, redirect: true, xp: 200,
+};
+
+// --- Phase 2 bestiary (SRD 5.2.1). All Proficiency Bonus +2.
+// size: tiny|small|medium|large. On this grid every creature fills one square.
+// creature: the creature type, for rules like Turn Undead and Hold Person.
+// extra: more damage of another type on a hit. rider: what a hit also does.
+export const WOLF = {
+  kind: 'wolf', name: 'Wolf', emoji: '🐺', type: 'Medium Beast', size: 'medium', creature: 'beast',
+  ac: 12, hp: 11, hpFormula: '2d8+2', speed: 40,
+  abilities: { str: 14, dex: 15, con: 12, int: 3, wis: 12, cha: 6 }, skills: { perception: 5, stealth: 4 },
+  attacks: [{ id: 'bite', name: 'Bite', kind: 'melee', bonus: 4, dice: '1d6', flat: 2, type: 'Piercing', rider: { prone: 'medium' } }],
+  traits: { packTactics: true }, xp: 50, cr: '1/4',
+};
+export const SKELETON = {
+  kind: 'skeleton', name: 'Skeleton', emoji: '💀', type: 'Medium Undead', size: 'medium', creature: 'undead',
+  ac: 14, hp: 13, hpFormula: '2d8+4', speed: 30,
+  abilities: { str: 10, dex: 16, con: 15, int: 6, wis: 8, cha: 5 },
+  vuln: ['Bludgeoning'], immune: ['Poison'], condImmune: ['exhaustion', 'poisoned'],
+  attacks: [
+    { id: 'shortsword', name: 'Shortsword', kind: 'melee', bonus: 5, dice: '1d6', flat: 3, type: 'Piercing' },
+    { id: 'shortbow', name: 'Shortbow', kind: 'ranged', bonus: 5, dice: '1d6', flat: 3, type: 'Piercing', range: [80, 320] },
+  ],
+  xp: 50, cr: '1/4',
+};
+export const ZOMBIE = {
+  kind: 'zombie', name: 'Zombie', emoji: '🧟', type: 'Medium Undead', size: 'medium', creature: 'undead',
+  ac: 8, hp: 15, hpFormula: '2d8+6', speed: 20,
+  abilities: { str: 13, dex: 6, con: 16, int: 3, wis: 6, cha: 5 }, saves: { wis: 0 },
+  immune: ['Poison'], condImmune: ['exhaustion', 'poisoned'],
+  attacks: [{ id: 'slam', name: 'Slam', kind: 'melee', bonus: 3, dice: '1d8', flat: 1, type: 'Bludgeoning' }],
+  traits: { undeadFortitude: true }, xp: 50, cr: '1/4',
+};
+export const GIANT_SPIDER = {
+  kind: 'spider', name: 'Giant Spider', emoji: '🕷️', type: 'Large Beast', size: 'large', creature: 'beast',
+  ac: 14, hp: 26, hpFormula: '4d10+4', speed: 30,
+  abilities: { str: 14, dex: 16, con: 12, int: 2, wis: 11, cha: 4 }, skills: { perception: 4, stealth: 7 },
+  attacks: [{ id: 'bite', name: 'Bite', kind: 'melee', bonus: 5, dice: '1d8', flat: 3, type: 'Piercing', extra: [{ dice: '2d6', type: 'Poison' }] }],
+  web: { dc: 13, range: 60, recharge: 5, webAc: 10, webHp: 5 },
+  traits: { spiderClimb: true }, xp: 200, cr: '1',
+};
+export const CULTIST = {
+  kind: 'cultist', name: 'Cultist', emoji: '🧎', type: 'Medium Humanoid', size: 'medium', creature: 'humanoid',
+  ac: 12, hp: 9, hpFormula: '2d8', speed: 30,
+  abilities: { str: 11, dex: 12, con: 10, int: 10, wis: 11, cha: 10 }, saves: { wis: 2 },
+  attacks: [{ id: 'sickle', name: 'Ritual Sickle', kind: 'melee', bonus: 3, dice: '1d4', flat: 1, type: 'Slashing', extra: [{ flat: 1, type: 'Necrotic' }] }],
+  xp: 25, cr: '1/8',
+};
+export const CULTIST_FANATIC = {
+  kind: 'fanatic', name: 'Cultist Fanatic', emoji: '🧙', type: 'Medium Humanoid', size: 'medium', creature: 'humanoid',
+  ac: 13, hp: 44, hpFormula: '8d8+8', speed: 30,
+  abilities: { str: 11, dex: 14, con: 12, int: 10, wis: 14, cha: 13 }, saves: { wis: 4 },
+  attacks: [{ id: 'blade', name: 'Pact Blade', kind: 'melee', bonus: 4, dice: '1d8', flat: 2, type: 'Slashing', extra: [{ dice: '2d6', type: 'Necrotic' }] }],
+  casting: { ability: 'wis', dc: 12, attack: 4, spells: { 'command': 2, 'hold-person': 1, 'spiritual-weapon': 2, 'light': 0, 'thaumaturgy': 0 } },
+  xp: 450, cr: '2',
+};
+export const BUGBEAR_WARRIOR = {
+  kind: 'bugbear', name: 'Bugbear Warrior', emoji: '🐻', type: 'Medium Fey (Goblinoid)', size: 'medium', creature: 'fey',
+  ac: 14, hp: 33, hpFormula: '6d8+6', speed: 30,
+  abilities: { str: 15, dex: 14, con: 13, int: 8, wis: 11, cha: 9 }, skills: { stealth: 6, survival: 2 },
+  attacks: [
+    { id: 'grab', name: 'Grab', kind: 'melee', bonus: 4, dice: '2d6', flat: 2, type: 'Bludgeoning', reach: 10, rider: { grapple: 12, size: 'medium' } },
+    { id: 'hammer', name: 'Light Hammer', kind: 'melee', bonus: 4, dice: '3d4', flat: 2, type: 'Bludgeoning', reach: 10, advIfGrappled: true },
+    { id: 'throw', name: 'Light Hammer (thrown)', kind: 'ranged', bonus: 4, dice: '3d4', flat: 2, type: 'Bludgeoning', range: [20, 60], advIfGrappled: true },
+  ],
+  traits: { abduct: true }, xp: 200, cr: '1',
 };
 
 // Phase 0's one-off skirmish, kept for the quick-fight mode and the tests.

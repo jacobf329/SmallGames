@@ -30,7 +30,7 @@ test('Fire Bolt: a spell attack (INT + PB), a cantrip, no slot, no Sneak Attack 
   assert.equal(a.total, 12 + 3 + 2);
   assert.equal(a.damage.total, 7);
   assert.equal(a.rule, 'spell-attack');
-  assert.equal(w.casting.slots.left, 2);
+  assert.equal(w.casting.slots[1].left, 2);
   assert.equal(last(b, 'cast').pay, null);
 });
 
@@ -44,7 +44,7 @@ test('Healing Word is a Bonus Action that gets a dying ally up; only one spell s
   assert.equal(f.hp, 3 + 2 + 2);                      // 2d4 + WIS 2 (Soldier doesn't raise WIS)
   assert.equal(b.turn.bonus, 0);
   assert.equal(b.turn.action, 1, 'the action is still free');
-  assert.equal(c.casting.slots.left, 1);
+  assert.equal(c.casting.slots[1].left, 1);
   const r = perform(b, 'cleric', { a: 'cast', spell: 'guiding-bolt', target: 'g1' });
   assert.match(r.error, /one spell slot per turn/);
   assert.ok(perform(b, 'cleric', { a: 'cast', spell: 'sacred-flame', target: 'g1' }).ok, 'a cantrip is still fine');
@@ -58,7 +58,7 @@ test('Magic Initiate: the free cast is used before a slot', () => {
   dice(b, 1, 2, 3);
   perform(b, 'wizard', { a: 'cast', spell: 'magic-missile', target: 'g1' });
   assert.equal(last(b, 'missile').total, 1 + 2 + 3 + 3);
-  assert.equal(w.casting.slots.left, 2);
+  assert.equal(w.casting.slots[1].left, 2);
   assert.equal(w.casting.known['magic-missile'].free, 0);
 });
 
