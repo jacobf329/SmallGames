@@ -2,7 +2,7 @@
 // is drawn once; overlays are redrawn on every state; tokens are persistent
 // nodes so moves slide with a CSS transition.
 
-import { W, H, onBoard } from '../rules/grid.js';
+import { W, H, onBoard, coneSquares } from '../rules/grid.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = (tag, attrs = {}, text) => {
@@ -83,6 +83,9 @@ export function createBoard(svg, onTap) {
         over.append(el('rect', { x: h.x - 0.97, y: h.y - 0.97, width: 2.94, height: 2.94, rx: 0.3, class: 'threat' }));
       }
     }
+    if (view.cone && view.mine) {
+      for (const q of coneSquares(b.creatures[view.mine], view.cone)) over.append(el('rect', { x: q.x + 0.05, y: q.y + 0.05, width: 0.9, height: 0.9, rx: 0.1, class: 'cone' }));
+    }
     if (view.target) {
       const t = b.creatures[view.target];
       over.append(el('circle', { cx: t.x + 0.5, cy: t.y + 0.5, r: 0.49, class: 'aim' }));
@@ -111,7 +114,7 @@ export function createBoard(svg, onTap) {
       hp.setAttribute('width', (0.76 * frac).toFixed(3));
       hp.setAttribute('class', `hp ${frac <= 0.5 ? 'low' : ''}`);
       fxi.textContent = (fxBy[c.id] || []).join('');
-      lbl.textContent = c.side === 'foe' ? c.name.replace('Goblin ', 'G') : '';
+      lbl.textContent = c.side === 'foe' ? (c.kind === 'goblin-boss' ? 'BOSS' : c.name.replace('Goblin ', 'G')) : '';
     }
     for (const [id, n] of nodes) if (!seen.has(id)) { n.remove(); nodes.delete(id); }
   }

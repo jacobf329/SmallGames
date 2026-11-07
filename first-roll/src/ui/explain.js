@@ -2,16 +2,16 @@
 // log, and the full "Why?" breakdown with links to the glossary.
 
 import { GLOSSARY } from '../rules/glossary.js';
-import { signed } from '../rules/data.js';
+import { signed, ABILITY_NAMES } from '../rules/data.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const R = (rule, label) => (rule && GLOSSARY[rule] ? `<a class="rl" data-rule="${rule}">${esc(label || GLOSSARY[rule].title)}</a>` : esc(label || ''));
 const sumv = (a) => a.reduce((s, x) => s + x.value, 0);
 
-const name = (b, id) => esc(b?.creatures?.[id]?.name || id);
+const name = (b, id, r) => esc(b?.creatures?.[id]?.name || r?.name || id);
 
 // Records worth a pop-up dice card.
-export const ROLLED = new Set(['attack', 'save', 'check', 'heal', 'initiative']);
+export const ROLLED = new Set(['attack', 'save', 'check', 'heal', 'initiative', 'save-spell', 'missile']);
 
 function d20Text(d) {
   if (d.rolls.length === 1) return `${d.kept}`;
@@ -28,7 +28,12 @@ export function short(r, b) {
     }
     case 'save': return `🎲 Death save: ${r.d20.kept} vs 10 · <b>${{ success: 'Success', fail: 'Failure', fail2: 'Two failures', revive: 'Back up!' }[r.outcome]}</b>`;
     case 'check': return `🎲 ${r.skill}: ${r.d20.kept} ${signed(sumv(r.mods))} = <b>${r.total}</b> vs DC ${r.dc} · <b>${r.outcome === 'success' ? 'Success' : 'Failure'}</b>`;
-    case 'heal': return `🎲 ${r.what}: ${r.roll.rolls[0]} + ${sumv(r.mods)} = <b class="good">${r.total} HP</b>`;
+    case 'heal': return `💚 ${esc(r.what)}${r.target && r.target !== r.by ? ` on ${name(b, r.target)}` : ''}: ${r.roll.rolls.join(' + ')} ${signed(sumv(r.mods))} = <b class="good">${r.total} HP</b>`;
+    case 'save-spell': {
+      const fails = r.results.filter((x) => !x.success).length;
+      return `💥 ${esc(r.what)}: DC ${r.dc} ${r.ability.toUpperCase()} save · ${r.results.length ? `${fails} failed, ${r.results.length - fails} saved · ${r.damage.total} dmg` : 'nobody caught'}`;
+    }
+    case 'missile': return `✨ ${r.darts.map((d) => d.value).join(' + ')} = <b class="good">${r.total} Force</b> · never misses`;
     case 'initiative': return `🎲 Initiative: ${r.entries.map((e) => `${name(b, e.id)} ${e.total}`).join(', ')}`;
     default: return esc(r.text);
   }
@@ -63,14 +68,35 @@ export function detail(r, b) {
       if (r.after?.deathFail) line(R('death-saves', `${r.after.deathFail} failed death save${r.after.deathFail > 1 ? 's' : ''} (hit at 0 HP)`), '', 'bad');
     }
     if (r.mastery) L.push(`<h4>${R('weapon-mastery', 'Weapon Mastery')}: ${R(r.mastery.rule, r.mastery.name)}</h4><p>${esc(r.mastery.text)}</p>`);
+  } else if (r.kind === 'save-spell') {
+    L.push(`<h4>${R(r.rule, r.what)}</h4>`);
+    line(R('spell-save-dc', 'Save DC'), '');
+    for (const m of r.dcParts) line(R(m.rule, m.label), m.label === 'Base' ? m.value : signed(m.value));
+    line('DC', r.dc, 'sum');
+    L.push(`<h4>${R('damage', 'Damage')}</h4>`);
+    for (const p of r.damage.parts) line(`${esc(p.label)} <span class="dim">🎲 ${p.rolls.join(' + ')}</span>`, p.value);
+    line(`${r.damage.type} damage${r.half ? ' (half on a successful save)' : ' (none on a successful save)'}`, r.damage.total, 'sum');
+    L.push(`<h4>${R('saving-throws', `${ABILITY_NAMES[r.ability]} saving throws`)}</h4>`);
+    if (!r.results.length) line('Nobody was in the area.');
+    for (const x of r.results) {
+      const how = x.auto ? esc(x.note) : `🎲 ${x.d20.kept}${x.d20.rolls.length > 1 ? ` (${x.d20.mode})` : ''} ${x.mods.map((m) => signed(m.value)).join(' ')} = ${x.total}`;
+      line(`${name(b, x.target)}: ${how}`, `${x.success ? 'saved' : 'failed'} · ${x.damage}`, x.success ? 'good' : 'bad');
+      if (x.after?.downed || x.after?.dead) line(`<span class="dim">${esc(x.text)}</span>`);
+    }
+  } else if (r.kind === 'missile') {
+    L.push(`<h4>${R('magic-missile', 'Magic Missile')}</h4>`);
+    r.darts.forEach((d, i) => line(`Dart ${i + 1}: 🎲 1d4 = ${d.rolls[0]}, +1`, d.value));
+    line('Force damage (every dart hits)', r.total, 'sum');
+    if (r.after) line(`${name(b, r.target)}: ${r.after.before} → ${r.after.after} HP`);
   } else if (r.kind === 'save') {
     L.push(`<h4>${R('death-saves', 'Death Saving Throw')}</h4>`);
     line(`🎲 d20${r.d20.luck ? ' (' + R('luck', 'Luck') + ' rerolled a 1)' : ''}`, r.d20.kept);
     line('Needs 10 or higher', '');
     line('Tally', `${r.tally.s} ✔ · ${r.tally.f} ✖`);
   } else if (r.kind === 'check') {
-    L.push(`<h4>${R(r.rule, 'Ability check')}</h4>`);
-    line('🎲 d20', r.d20.kept);
+    L.push(`<h4>${R(r.rule, `${r.skill} check`)}</h4>`);
+    for (const a of r.d20.adv || []) line(`Advantage: ${R(a.rule, a.text)}`);
+    line(`🎲 d20${r.d20.luck ? ' (' + R('luck', 'Luck') + ' rerolled a 1)' : ''}`, d20Text(r.d20));
     for (const m of r.mods) line(R(m.rule, m.label), signed(m.value));
     line('Total', r.total, 'sum');
     line('Difficulty Class', r.dc);
@@ -79,7 +105,7 @@ export function detail(r, b) {
     line(`🎲 ${r.roll.label}`, r.roll.rolls[0]);
     for (const m of r.mods) line(esc(m.label), signed(m.value));
     line('Healing', r.total, 'sum');
-    line(`HP ${r.before} → ${r.after}`, '');
+    line(`${r.target ? name(b, r.target) : 'HP'}: ${r.before} → ${r.after} HP`, '');
   } else if (r.kind === 'initiative') {
     L.push(`<h4>${R('initiative', 'Initiative')}</h4>`);
     for (const e of r.entries) {
@@ -109,6 +135,8 @@ export function rulesSeen(log) {
     for (const a of r.d20?.adv || []) seen.add(a.rule);
     for (const a of r.d20?.dis || []) seen.add(a.rule);
     for (const p of r.damage?.parts || []) if (p.rule) seen.add(p.rule);
+    for (const p of r.dcParts || []) if (p.rule) seen.add(p.rule);
+    if (r.kind === 'save-spell') seen.add('saving-throws');
     if (r.mastery) seen.add(r.mastery.rule);
   }
   return [...seen].filter((k) => GLOSSARY[k]);

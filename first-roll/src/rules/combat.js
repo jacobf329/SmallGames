@@ -5,9 +5,9 @@
 
 import { makeRng, die, rollDice, sum, parseDice, avgDice } from './rng.js';
 import {
-  key, cheb, feetBetween, incap, hostile, onBoard, reachMap, canEndAt, pathFrom, FT,
+  key, cheb, feetBetween, incap, hostile, onBoard, reachMap, canEndAt, pathFrom, coneSquares, FT,
 } from './grid.js';
-import { MASTERIES, signed } from './data.js';
+import { MASTERIES, SPELLS, ABILITY_NAMES, signed } from './data.js';
 
 // ------------------------------------------------------------- set-up ----
 
@@ -36,6 +36,7 @@ const turnKey = (b) => `${b.round}:${b.idx}`;
 const living = (b, side) => Object.values(b.creatures).filter((c) => c.side === side && c.hp > 0);
 const enemiesOf = (b, c) => Object.values(b.creatures).filter((o) => hostile(o, c) && onBoard(o) && !o.dead);
 const alliesOf = (b, c) => Object.values(b.creatures).filter((o) => o !== c && o.side === c.side && onBoard(o) && !o.dead);
+const sumParts = (parts) => sum(parts.map((p) => p.value));
 
 // ----------------------------------------------------------- D20 Tests ----
 
@@ -47,7 +48,7 @@ export function modeFrom(adv, dis) {
 }
 
 // Roll the d20 for a D20 Test. Halfling Luck rerolls a 1.
-function rollD20(b, who, mode) {
+export function rollD20(b, who, mode) {
   const one = () => {
     const first = die(b.rng, 20);
     if (first === 1 && who.luck) return { v: die(b.rng, 20), luck: true };
@@ -63,6 +64,36 @@ function rollD20(b, who, mode) {
   return { rolls, kept, mode, luck: luck + (c.luck ? 1 : 0) };
 }
 
+// A saving throw: d20 + ability modifier (+ PB if proficient) vs a DC.
+export function saveFactors(b, T, ability) {
+  const adv = [], dis = [];
+  if (ability === 'dex' && b.effects.some((e) => e.type === 'dodge' && e.by === T.id) && !incap(T)) adv.push({ text: `${T.name} is Dodging`, rule: 'dodge' });
+  if (T.mentalSaveAdv && ['int', 'wis', 'cha'].includes(ability)) adv.push({ text: 'Gnomish Cunning', rule: 'saving-throws' });
+  return { adv, dis, mode: modeFrom(adv, dis) };
+}
+
+export function saveChance(b, T, ability, dc) {
+  const mod = T.saves?.[ability] ?? T.mods[ability];
+  const f = saveFactors(b, T, ability);
+  let p = Math.min(20, Math.max(0, 21 - (dc - mod))) / 20;   // saves have no automatic 1/20
+  if (f.mode === 'advantage') p = 1 - (1 - p) ** 2;
+  if (f.mode === 'disadvantage') p = p * p;
+  return p;
+}
+
+function savingThrow(b, T, ability, dc) {
+  const f = saveFactors(b, T, ability);
+  // An Unconscious creature automatically fails Strength and Dexterity saves.
+  if (incap(T) && (ability === 'str' || ability === 'dex')) {
+    return { target: T.id, auto: 'fail', success: false, mods: [], total: 0, d20: null, note: 'Unconscious: automatically fails' };
+  }
+  const d20 = rollD20(b, T, f.mode);
+  const mods = [{ label: `${ability.toUpperCase()} modifier`, value: T.mods[ability], rule: 'ability-modifier' }];
+  if (T.saveProfs?.includes(ability)) mods.push({ label: 'Proficiency Bonus (proficient save)', value: T.pb, rule: 'proficiency' });
+  const total = d20.kept + sumParts(mods);
+  return { target: T.id, d20: { ...d20, adv: f.adv, dis: f.dis }, mods, total, success: total >= dc };
+}
+
 // ------------------------------------------------------------- attacks ----
 
 export function attackRangeFeet(atk) {
@@ -70,15 +101,14 @@ export function attackRangeFeet(atk) {
 }
 
 export function inRange(A, T, atk) {
-  const d = feetBetween(A, T);
-  return d <= attackRangeFeet(atk)[1];
+  return feetBetween(A, T) <= attackRangeFeet(atk)[1];
 }
 
 // Which effects give Advantage or Disadvantage on A attacking T with atk.
 // Returns reasons and which one-shot effects the roll would use up.
 export function attackFactors(b, A, T, atk) {
   const adv = [], dis = [], uses = [];
-  let helpUsed = false;
+  let helpUsed = false, guideUsed = false;
   for (const e of b.effects) {
     if (e.type === 'vex' && e.by === A.id && e.target === T.id) {
       adv.push({ text: `Vex: ${A.name} hit ${T.name} with a Vex weapon`, rule: 'mastery-vex' });
@@ -87,6 +117,10 @@ export function attackFactors(b, A, T, atk) {
       adv.push({ text: `${C(b, e.by).name} took the Help action`, rule: 'help' });
       uses.push(e);
       helpUsed = true;
+    } else if (e.type === 'guided' && e.target === T.id && !guideUsed) {
+      adv.push({ text: `Guiding Bolt's light on ${T.name}`, rule: 'guiding-bolt' });
+      uses.push(e);
+      guideUsed = true;
     } else if (e.type === 'sap' && e.target === A.id) {
       dis.push({ text: `Sap: ${C(b, e.by).name} hit ${A.name} with a Sap weapon`, rule: 'mastery-sap' });
       uses.push(e);
@@ -112,10 +146,10 @@ export function hitChance(bonus, ac, mode = 'normal', luck = false) {
   return p;
 }
 
-export const hitBonus = (atk) => sum(atk.hit.map((h) => h.value));
+export const hitBonus = (atk) => sumParts(atk.hit);
 
 function sneakAllowed(b, A, T, atk, mode) {
-  if (!A.sneak || A.sneakKey === turnKey(b)) return null;
+  if (!A.sneak || A.sneakKey === turnKey(b) || atk.spell) return null;
   if (!(atk.finesse || atk.kind === 'ranged')) return null;
   if (mode === 'advantage') return 'You had Advantage';
   if (mode === 'disadvantage') return null;
@@ -123,19 +157,21 @@ function sneakAllowed(b, A, T, atk, mode) {
   return buddy ? `${buddy.name} is next to ${T.name}` : null;
 }
 
-// Options for the UI and the AI: every attack A could make against T now.
+// Options for the UI and the AI: every weapon attack A could make against T now.
 export function attackOptions(b, A, T) {
-  return A.attacks.map((atk) => {
-    const f = attackFactors(b, A, T, atk);
-    const ok = inRange(A, T, atk);
-    const bonus = hitBonus(atk);
-    const p = hitChance(bonus, T.ac, f.mode, A.luck);
-    const sneak = sneakAllowed(b, A, T, atk, f.mode);
-    let avg = avgDice(atk.dice) + sum(atk.dmgFlat.map((d) => d.value));
-    if (sneak) avg += avgDice(A.sneak);
-    if (atk.advDice && f.mode === 'advantage') avg += avgDice(atk.advDice);
-    return { atk, ok, bonus, p, mode: f.mode, adv: f.adv, dis: f.dis, sneak, avg, expected: ok ? p * avg : 0 };
-  });
+  return A.attacks.map((atk) => optionFor(b, A, T, atk));
+}
+
+function optionFor(b, A, T, atk) {
+  const f = attackFactors(b, A, T, atk);
+  const ok = inRange(A, T, atk);
+  const bonus = hitBonus(atk);
+  const p = hitChance(bonus, T.ac, f.mode, A.luck);
+  const sneak = sneakAllowed(b, A, T, atk, f.mode);
+  let avg = avgDice(atk.dice) + sumParts(atk.dmgFlat);
+  if (sneak) avg += avgDice(A.sneak);
+  if (atk.advDice && f.mode === 'advantage') avg += avgDice(atk.advDice);
+  return { atk, ok, bonus, p, mode: f.mode, adv: f.adv, dis: f.dis, sneak, avg, expected: ok ? p * avg : 0 };
 }
 
 function rollDamage(b, A, T, atk, crit, mode) {
@@ -144,7 +180,7 @@ function rollDamage(b, A, T, atk, crit, mode) {
   const parts = [];
   let rolls = rollDice(b.rng, nd, sides);
   let savage = null;
-  if (A.savage && A.savageKey !== turnKey(b)) {
+  if (A.savage && !atk.spell && A.savageKey !== turnKey(b)) {
     const again = rollDice(b.rng, nd, sides);
     savage = { first: rolls, second: again };
     if (sum(again) > sum(rolls)) rolls = again;
@@ -156,26 +192,35 @@ function rollDamage(b, A, T, atk, crit, mode) {
     savage: savage ? `Savage Attacker: rolled ${savage.first.join('+')} and ${savage.second.join('+')}, kept the higher` : null,
   });
   for (const f of atk.dmgFlat) parts.push({ label: f.label, value: f.value, rule: f.rule });
+  const extra = (label, dice, rule) => {
+    const s = parseDice(dice);
+    const k = crit ? s.n * 2 : s.n;
+    const r = rollDice(b.rng, k, s.sides);
+    parts.push({ label: `${label} ${k}d${s.sides}`, rolls: r, value: sum(r), rule });
+  };
   const sneakWhy = sneakAllowed(b, A, T, atk, mode);
-  if (sneakWhy) {
-    const s = parseDice(A.sneak);
-    const sr = rollDice(b.rng, crit ? s.n * 2 : s.n, s.sides);
-    parts.push({ label: `Sneak Attack ${crit ? s.n * 2 : s.n}d${s.sides} (${sneakWhy})`, rolls: sr, value: sum(sr), rule: 'sneak-attack' });
-    A.sneakKey = turnKey(b);
-  }
-  if (atk.advDice && mode === 'advantage') {
-    const s = parseDice(atk.advDice);
-    const sr = rollDice(b.rng, crit ? s.n * 2 : s.n, s.sides);
-    parts.push({ label: `Extra ${crit ? s.n * 2 : s.n}d${s.sides} (attacked with Advantage)`, rolls: sr, value: sum(sr), rule: 'stat-block' });
+  if (sneakWhy) { extra(`Sneak Attack (${sneakWhy})`, A.sneak, 'sneak-attack'); A.sneakKey = turnKey(b); }
+  if (atk.advDice && mode === 'advantage') extra('Extra (attacked with Advantage)', atk.advDice, 'stat-block');
+  if (A.firesBurn?.uses > 0 && A.burnKey !== turnKey(b)) {
+    extra("Fire's Burn (Fire)", '1d10', 'fires-burn');
+    A.firesBurn.uses--;
+    A.burnKey = turnKey(b);
   }
   return { parts, total: Math.max(0, sum(parts.map((p) => p.value))), type: atk.type };
 }
 
-// Apply damage, handling 0 HP, death saves and instant death.
+// Apply damage, handling Temporary HP, 0 HP, death saves and instant death.
 function applyDamage(b, T, amount, crit) {
   const before = T.hp;
   const out = { before, after: before, downed: false, dead: false, deathFail: 0 };
   if (amount <= 0) return out;
+  if (T.tempHp > 0) {
+    const soak = Math.min(T.tempHp, amount);
+    T.tempHp -= soak;
+    amount -= soak;
+    out.temp = soak;
+    if (amount <= 0) return out;
+  }
   if (T.hp > 0) {
     const left = T.hp - amount;
     if (left > 0) { T.hp = left; out.after = left; return out; }
@@ -183,6 +228,13 @@ function applyDamage(b, T, amount, crit) {
     out.after = 0;
     if (T.side === 'foe') { T.dead = true; out.dead = true; return out; }
     if (-left >= T.hpMax) { T.dead = true; out.dead = true; out.massive = true; return out; }
+    if (T.relentless && !T.relentless.used) {
+      T.relentless.used = true;
+      T.hp = 1;
+      out.after = 1;
+      out.relentless = true;
+      return out;
+    }
     out.downed = true;
     T.deathSaves = { s: 0, f: 0 };
     T.stable = false;
@@ -199,7 +251,35 @@ function applyDamage(b, T, amount, crit) {
   return out;
 }
 
-function attack(b, A, T, atk, { reaction = false } = {}) {
+function afterText(T, after) {
+  if (!after) return '';
+  if (after.dead) return T.side === 'foe' ? ` ${T.name} is defeated.` : ` ${T.name} dies.`;
+  if (after.relentless) return ` ${T.name} drops to 1 HP instead of 0 (Relentless Endurance).`;
+  if (after.downed) return ` ${T.name} drops to 0 HP and falls Unconscious.`;
+  if (after.deathFail) return ` ${T.name} suffers ${after.deathFail} failed death save${after.deathFail > 1 ? 's' : ''}.`;
+  return '';
+}
+
+// Goblin Boss's Redirect Attack: a goblin ally next to it takes its place.
+function redirect(b, A, T) {
+  if (!T.redirect || !T.reaction || incap(T)) return T;
+  const ally = alliesOf(b, T).find((o) => !incap(o) && cheb(o, T) <= 1);
+  if (!ally) return T;
+  const tx = T.x, ty = T.y;
+  T.x = ally.x; T.y = ally.y;
+  ally.x = tx; ally.y = ty;
+  T.reaction = false;
+  emit(b, { kind: 'note', by: T.id, target: ally.id,
+    text: `${T.name} uses its Reaction, Redirect Attack: it swaps places with ${ally.name}, who becomes the target.`, rule: 'redirect-attack' });
+  return ally;
+}
+
+function attack(b, A, T0, atk, { reaction = false } = {}) {
+  const T = redirect(b, A, T0);
+  if (T !== T0 && !inRange(A, T, atk)) {
+    emit(b, { kind: 'note', by: A.id, text: `${T.name} is out of reach: the attack is lost.`, rule: 'redirect-attack' });
+    return;
+  }
   const f = attackFactors(b, A, T, atk);
   b.effects = b.effects.filter((e) => !f.uses.includes(e));
   const d20 = rollD20(b, A, f.mode);
@@ -214,11 +294,12 @@ function attack(b, A, T, atk, { reaction = false } = {}) {
     notes.push({ text: 'Any hit from within 5 feet on an Unconscious creature is a Critical Hit', rule: 'unconscious' });
   }
   const hit = outcome === 'hit' || outcome === 'crit';
-  let damage = null, after = null, mastery = null;
+  let damage = null, after = null, mastery = null, rider = null;
   if (hit) {
     damage = rollDamage(b, A, T, atk, outcome === 'crit', f.mode);
     after = applyDamage(b, T, damage.total, outcome === 'crit');
-    if (atk.mastery && !T.dead && T.hp > 0) {
+    const alive = !T.dead && T.hp > 0;
+    if (atk.mastery && alive) {
       const ms = MASTERIES[atk.mastery];
       mastery = { name: ms.name, text: ms.text, rule: ms.rule };
       if (atk.mastery === 'vex') {
@@ -230,21 +311,149 @@ function attack(b, A, T, atk, { reaction = false } = {}) {
         b.effects.push({ type: 'sap', by: A.id, target: T.id, expires: { when: 'start', who: A.id } });
       }
     }
+    if (atk.rider === 'guided' && alive) {
+      b.effects.push({ type: 'guided', by: A.id, target: T.id, expires: { when: 'end', who: A.id, skip: current(b)?.id === A.id ? 1 : 0 } });
+      rider = { text: `The next attack roll against ${T.name} before the end of ${A.name}'s next turn has Advantage.`, rule: 'guiding-bolt' };
+    }
+    if (atk.rider === 'chill' && alive) {
+      b.effects = b.effects.filter((e) => !(e.type === 'chill' && e.target === T.id));
+      b.effects.push({ type: 'chill', by: A.id, target: T.id, expires: { when: 'start', who: A.id } });
+      rider = { text: `${T.name}'s Speed drops by 10 feet until the start of ${A.name}'s next turn.`, rule: 'ray-of-frost' };
+    }
   }
   const verb = { crit: 'lands a Critical Hit on', hit: 'hits', miss: 'misses', fumble: 'misses' }[outcome];
   let text = `${A.name} ${verb} ${T.name} with ${atk.name}`;
   if (damage) text += ` for ${damage.total} ${damage.type} damage`;
   text += reaction ? ' (Opportunity Attack).' : '.';
-  if (after?.dead) text += T.side === 'foe' ? ` ${T.name} is defeated.` : ` ${T.name} dies.`;
-  else if (after?.downed) text += ` ${T.name} drops to 0 HP and falls Unconscious.`;
-  else if (after?.deathFail) text += ` ${T.name} suffers ${after.deathFail} failed death save${after.deathFail > 1 ? 's' : ''}.`;
+  text += afterText(T, after);
   emit(b, {
-    kind: 'attack', by: A.id, target: T.id, weapon: atk.name, attackKind: atk.kind, reaction,
+    kind: 'attack', by: A.id, target: T.id, weapon: atk.name, attackKind: atk.kind, spell: atk.spell || null, reaction,
     d20: { ...d20, adv: f.adv, dis: f.dis }, mods: atk.hit, total, ac: T.ac, acParts: T.acParts,
-    outcome, notes, damage, after, mastery, text,
-    rule: reaction ? 'opportunity-attack' : 'attack-roll',
+    outcome, notes, damage, after, mastery, rider, text,
+    rule: reaction ? 'opportunity-attack' : atk.spell ? 'spell-attack' : 'attack-roll',
   });
   checkOver(b);
+}
+
+// ---------------------------------------------------------------- spells ----
+
+export function spellAttack(A, sid) {
+  const s = SPELLS[sid];
+  const k = A.casting.known[sid];
+  return {
+    id: sid, name: s.name, kind: 'ranged', dice: s.dice, type: s.type, range: [s.range, s.range],
+    hit: A.casting.stats[k.ability].attack, dmgFlat: [], spell: sid, rider: s.rider || null, finesse: false,
+  };
+}
+
+export const spellDC = (A, sid) => sumParts(A.casting.stats[A.casting.known[sid].ability].dc);
+export const spellMod = (A, sid) => A.mods[A.casting.known[sid].ability];
+
+// Can A cast this spell right now? Returns { ok, error, pay: 'free'|'slot'|null }.
+export function canCast(b, A, sid) {
+  const k = A.casting?.known?.[sid];
+  const s = SPELLS[sid];
+  if (!k || !s) return { ok: false, error: "You don't know that spell." };
+  if (s.kind === 'utility') return { ok: false, error: `${s.name} is for outside of fights.` };
+  const t = b.turn;
+  if (s.time === 'bonus' ? !t.bonus : !t.action) return { ok: false, error: `You have already used your ${s.time === 'bonus' ? 'Bonus Action' : 'action'}.` };
+  if (s.level === 0) return { ok: true, pay: null };
+  if (k.free > 0) return { ok: true, pay: 'free' };
+  if (t.slotSpent) return { ok: false, error: 'You can expend only one spell slot per turn.' };
+  if (!k.slot || !A.casting.slots?.left) return { ok: false, error: 'No spell slots left.' };
+  return { ok: true, pay: 'slot' };
+}
+
+// Creatures in a 15-ft Cone from A aimed at (x, y).
+export function coneTargets(b, A, x, y, size = 3) {
+  const sq = coneSquares(A, { x, y }, size);
+  return Object.values(b.creatures).filter((c) => c !== A && onBoard(c) && !c.dead && sq.some((s) => s.x === c.x && s.y === c.y));
+}
+
+// Area damage with a saving throw (Burning Hands, Sacred Flame, Breath Weapon).
+function areaSave(b, A, targets, { name, ability, dcParts, dice, type, half, rule }) {
+  const dc = sumParts(dcParts);
+  const { n, sides } = parseDice(dice);
+  const rolls = rollDice(b.rng, n, sides);
+  const full = sum(rolls);
+  const results = [];
+  for (const T of targets) {
+    const sv = savingThrow(b, T, ability, dc);
+    const dmg = sv.success ? (half ? Math.floor(full / 2) : 0) : full;
+    const after = applyDamage(b, T, dmg, false);
+    results.push({ ...sv, damage: dmg, after, text: `${T.name} ${sv.success ? 'succeeds' : 'fails'}${sv.auto ? ' automatically' : ` (${sv.total})`}: ${dmg} damage.${afterText(T, after)}` });
+  }
+  const hits = results.map((r) => `${C(b, r.target).name} ${r.damage}`).join(', ');
+  emit(b, {
+    kind: 'save-spell', by: A.id, what: name, ability, dc, dcParts, damage: { parts: [{ label: `${name} ${dice}`, rolls, value: full, rule }], total: full, type },
+    half, results, rule,
+    text: targets.length ? `${A.name} uses ${name}: DC ${dc} ${ABILITY_NAMES[ability]} save. ${hits ? `Damage: ${hits}.` : ''}` : `${A.name} uses ${name}, but nobody is caught in it.`,
+  });
+  checkOver(b);
+}
+
+function castSpell(b, A, intent) {
+  const sid = intent.spell;
+  const s = SPELLS[sid];
+  const can = canCast(b, A, sid);
+  if (!can.ok) return can.error;
+  const T = intent.target ? C(b, intent.target) : null;
+  const inReach = (X) => X && feetBetween(A, X) <= (s.range || 0);
+  // Target checks first, so a bad tap never costs a slot.
+  if (['attack', 'save', 'missile'].includes(s.kind)) {
+    if (!T || !hostile(A, T) || !onBoard(T) || T.dead) return 'Pick an enemy.';
+    if (!inReach(T)) return `${T.name} is out of range (${s.range} ft).`;
+  } else if (s.kind === 'heal') {
+    if (!T || T.side !== A.side || T.dead) return 'Pick an ally (or yourself).';
+    if (!inReach(T) && T !== A) return `${T.name} is out of range (${s.range === 5 ? 'touch' : `${s.range} ft`}).`;
+  } else if (s.kind === 'stabilize') {
+    if (!T || T.side !== A.side || T.hp > 0 || T.dead || T.stable) return 'Pick a dying ally.';
+    if (!inReach(T)) return `${T.name} is out of range (${s.range} ft).`;
+  } else if (s.kind === 'cone') {
+    if (!Number.isInteger(intent.x) || !Number.isInteger(intent.y) || (intent.x === A.x && intent.y === A.y)) return 'Pick a direction.';
+  }
+  // Pay.
+  const t = b.turn;
+  if (s.time === 'bonus') t.bonus = 0; else t.action = 0;
+  let paid = '';
+  if (can.pay === 'free') { A.casting.known[sid].free--; paid = ' (free cast: Magic Initiate)'; }
+  if (can.pay === 'slot') { A.casting.slots.left--; t.slotSpent = true; paid = ` (spell slot, ${A.casting.slots.left} left)`; }
+  emit(b, { kind: 'cast', by: A.id, spell: sid, level: s.level, pay: can.pay, rule: s.level ? 'spell-slots' : 'cantrips',
+    text: `${A.name} casts ${s.name}${s.level === 0 ? ' (a cantrip: no slot needed)' : paid}.` });
+
+  if (s.kind === 'attack') attack(b, A, T, spellAttack(A, sid));
+  else if (s.kind === 'save') {
+    areaSave(b, A, [T], { name: s.name, ability: s.save, dcParts: A.casting.stats[A.casting.known[sid].ability].dc, dice: s.dice, type: s.type, half: !!s.half, rule: sid });
+  } else if (s.kind === 'cone') {
+    areaSave(b, A, coneTargets(b, A, intent.x, intent.y), { name: s.name, ability: s.save, dcParts: A.casting.stats[A.casting.known[sid].ability].dc, dice: s.dice, type: s.type, half: !!s.half, rule: sid });
+  } else if (s.kind === 'missile') {
+    const darts = [];
+    for (let i = 0; i < s.darts; i++) {
+      const r = rollDice(b.rng, 1, parseDice(s.dice).sides);
+      darts.push({ rolls: r, value: r[0] + s.flat });
+    }
+    const total = sum(darts.map((d) => d.value));
+    const after = applyDamage(b, T, total, false);
+    emit(b, { kind: 'missile', by: A.id, target: T.id, darts, total, type: s.type, after, rule: 'magic-missile',
+      text: `${s.darts} darts hit ${T.name} for ${total} Force damage.${afterText(T, after)}` });
+    checkOver(b);
+  } else if (s.kind === 'heal') {
+    const { n, sides } = parseDice(s.dice);
+    const rolls = rollDice(b.rng, n, sides);
+    const mod = spellMod(A, sid);
+    const amount = Math.max(0, sum(rolls) + mod);
+    const before = T.hp;
+    T.hp = Math.min(T.hpMax, T.hp + amount);
+    if (before === 0 && T.hp > 0) { T.deathSaves = { s: 0, f: 0 }; T.stable = false; }
+    emit(b, { kind: 'heal', by: A.id, target: T.id, what: s.name,
+      roll: { label: s.dice, rolls }, mods: [{ label: 'Spellcasting modifier', value: mod }], total: amount, before, after: T.hp,
+      text: `${T.name} regains ${T.hp - before} HP${before === 0 ? ' and is back on their feet' : ''}.`, rule: sid });
+  } else if (s.kind === 'stabilize') {
+    T.stable = true;
+    T.deathSaves = { s: 0, f: 0 };
+    emit(b, { kind: 'note', by: A.id, target: T.id, text: `${T.name} is Stable.`, rule: 'spare-the-dying' });
+  }
+  return null;
 }
 
 // ---------------------------------------------------------- the turn ----
@@ -257,17 +466,19 @@ function expire(b, when, who) {
   });
 }
 
-export function rollInitiative(b) {
+// opts.surprised: ids of creatures that roll Initiative with Disadvantage.
+export function rollInitiative(b, { surprised = [] } = {}) {
   const entries = Object.values(b.creatures).map((c) => {
-    const d20 = rollD20(b, c, 'normal');
-    const mod = sum(c.initParts.map((p) => p.value));
-    return { id: c.id, d20, parts: c.initParts, total: d20.kept + mod, dex: c.mods.dex };
+    const mode = surprised.includes(c.id) ? 'disadvantage' : 'normal';
+    const d20 = rollD20(b, c, mode);
+    const mod = sumParts(c.initParts);
+    return { id: c.id, d20, parts: c.initParts, total: d20.kept + mod, dex: c.mods.dex, surprised: mode === 'disadvantage' };
   });
   entries.sort((p, q) => q.total - p.total || q.dex - p.dex
     || (C(b, p.id).side === 'hero' ? -1 : 1) - (C(b, q.id).side === 'hero' ? -1 : 1) || (p.id < q.id ? -1 : 1));
   b.order = entries.map((e) => e.id);
   b.round = 1;
-  emit(b, { kind: 'initiative', entries, text: 'Everyone rolls Initiative.', rule: 'initiative' });
+  emit(b, { kind: 'initiative', entries, text: surprised.length ? 'Everyone rolls Initiative. The surprised roll with Disadvantage.' : 'Everyone rolls Initiative.', rule: surprised.length ? 'surprise' : 'initiative' });
   b.idx = -1;
   nextTurn(b);
 }
@@ -275,7 +486,8 @@ export function rollInitiative(b) {
 function startTurn(b, c) {
   expire(b, 'start', c.id);
   c.reaction = true;
-  b.turn = { who: c.id, action: 1, bonus: 1, moveLeft: c.speed, moves: 0, steps: 0 };
+  const chilled = b.effects.some((e) => e.type === 'chill' && e.target === c.id);
+  b.turn = { who: c.id, action: 1, bonus: 1, moveLeft: Math.max(0, c.speed - (chilled ? 10 : 0)), moves: 0, steps: 0, attacksLeft: 0, slotSpent: false };
   emit(b, { kind: 'turn', who: c.id, text: `${c.name}'s turn.`, rule: 'your-turn' });
 }
 
@@ -300,7 +512,7 @@ function deathSave(b, c) {
 }
 
 function nextTurn(b) {
-  for (let guard = 0; guard < 50 && !b.over; guard++) {
+  for (let guard = 0; guard < 60 && !b.over; guard++) {
     if (b.turn) expire(b, 'end', b.turn.who);
     b.idx = (b.idx + 1) % b.order.length;
     if (b.idx === 0) { if (b.begun) b.round++; b.begun = true; }
@@ -330,7 +542,7 @@ function checkOver(b) {
     b.moveCtx = null;
     emit(b, {
       kind: 'end', outcome: b.over, rule: 'combat',
-      text: b.over === 'victory' ? 'Victory! The goblins are defeated.' : 'Defeat. Every hero is down.',
+      text: b.over === 'victory' ? 'Victory! Every foe is defeated.' : 'Defeat. Every hero is down.',
     });
   }
 }
@@ -431,11 +643,22 @@ export function resolveReaction(b, accept) {
   return b.log.filter((r) => r.seq > before);
 }
 
-function bestMelee(b, A, T) {
+export function bestMelee(b, A, T) {
   const opts = attackOptions(b, A, T).filter((o) => o.atk.kind === 'melee');
   opts.sort((p, q) => q.expected - p.expected);
   return opts[0].atk;
 }
+
+// The Attack action: one attack, or several with Multiattack. Returns an
+// error string, or null after using up one attack.
+function useAttack(t, A) {
+  if (t.attacksLeft > 0) { t.attacksLeft--; return null; }
+  if (!t.action) return 'You have already used your action.';
+  t.action = 0;
+  t.attacksLeft = (A.multiattack || 1) - 1;
+  return null;
+}
+export const canAttack = (t) => !!t && (t.action > 0 || t.attacksLeft > 0);
 
 // -------------------------------------------------------------- intents ----
 
@@ -459,13 +682,27 @@ export function perform(b, id, intent) {
       break;
     }
     case 'attack': {
-      if (!t.action) return fail('You have already used your action.');
+      if (!canAttack(t)) return fail('You have already used your action.');
       if (!T || !onBoard(T) || T.dead || !hostile(A, T)) return fail('Pick an enemy to attack.');
       const atk = A.attacks.find((a) => a.id === intent.attack);
       if (!atk) return fail('Unknown attack.');
       if (!inRange(A, T, atk)) return fail(`${T.name} is out of range.`);
-      t.action = 0;
+      useAttack(t, A);
       attack(b, A, T, atk);
+      break;
+    }
+    case 'breath': {
+      if (!A.breath || A.breath.uses < 1) return fail('No Breath Weapon uses left.');
+      if (!canAttack(t)) return fail('Breath Weapon replaces an attack of your Attack action, which you have used.');
+      if (!Number.isInteger(intent.x) || !Number.isInteger(intent.y) || (intent.x === A.x && intent.y === A.y)) return fail('Pick a direction.');
+      useAttack(t, A);
+      A.breath.uses--;
+      areaSave(b, A, coneTargets(b, A, intent.x, intent.y), { name: `Breath Weapon (${A.breath.type})`, ability: 'dex', dcParts: A.breath.dc, dice: A.breath.dice, type: A.breath.type, half: true, rule: 'breath-weapon' });
+      break;
+    }
+    case 'cast': {
+      const err = castSpell(b, A, intent);
+      if (err) return fail(err);
       break;
     }
     case 'dash': {
@@ -473,6 +710,16 @@ export function perform(b, id, intent) {
       t.action = 0;
       t.moveLeft += A.speed;
       emit(b, { kind: 'action', by: id, what: 'Dash', text: `${A.name} takes the Dash action: +${A.speed} ft of movement this turn.`, rule: 'dash' });
+      break;
+    }
+    case 'adrenaline': {
+      if (!A.adrenaline || A.adrenaline.uses < 1) return fail('No Adrenaline Rush uses left.');
+      if (!t.bonus) return fail('You have already used your Bonus Action.');
+      t.bonus = 0;
+      A.adrenaline.uses--;
+      t.moveLeft += A.speed;
+      A.tempHp = Math.max(A.tempHp || 0, A.pb);
+      emit(b, { kind: 'action', by: id, what: 'Adrenaline Rush', text: `${A.name} uses Adrenaline Rush: Dash as a Bonus Action and ${A.pb} Temporary Hit Points.`, rule: 'adrenaline-rush' });
       break;
     }
     case 'disengage':
@@ -524,11 +771,11 @@ export function perform(b, id, intent) {
       A.secondWind.uses--;
       const r = die(b.rng, 10);
       const heal = r + A.level;
-      const before = A.hp;
+      const hpBefore = A.hp;
       A.hp = Math.min(A.hpMax, A.hp + heal);
-      emit(b, { kind: 'heal', by: id, what: 'Second Wind',
-        roll: { label: '1d10', rolls: [r] }, mods: [{ label: 'Fighter level', value: A.level }], total: heal, before, after: A.hp,
-        text: `${A.name} uses Second Wind and regains ${A.hp - before} HP (${A.secondWind.uses} use${A.secondWind.uses === 1 ? '' : 's'} left).`, rule: 'second-wind' });
+      emit(b, { kind: 'heal', by: id, target: id, what: 'Second Wind',
+        roll: { label: '1d10', rolls: [r] }, mods: [{ label: 'Fighter level', value: A.level }], total: heal, before: hpBefore, after: A.hp,
+        text: `${A.name} uses Second Wind and regains ${A.hp - hpBefore} HP (${A.secondWind.uses} use${A.secondWind.uses === 1 ? '' : 's'} left).`, rule: 'second-wind' });
       break;
     }
     case 'end': {

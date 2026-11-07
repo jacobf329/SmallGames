@@ -1,6 +1,8 @@
 // Plain-language rules, one entry per rule key used in battle records.
 // Paraphrased from the SRD 5.2.1 (CC-BY-4.0) for new players.
 
+import { SPELLS } from './data.js';
+
 export const GLOSSARY = {
   'd20-test': { title: 'D20 Tests', text: 'Attack rolls, ability checks and saving throws are all D20 Tests: roll a d20, add your modifiers, and compare the total to a target number (Armor Class or a Difficulty Class). Meet or beat it and you succeed.' },
   'attack-roll': { title: 'Attack Rolls', text: "To attack, roll a d20 and add your attack bonus (usually an ability modifier plus your Proficiency Bonus). If the total equals or beats the target's Armor Class, you hit and roll damage." },
@@ -38,7 +40,38 @@ export const GLOSSARY = {
   'skills': { title: 'Skills', text: 'A skill check is an ability check for a specific task: Medicine uses Wisdom, Stealth uses Dexterity. Add your Proficiency Bonus if you are proficient in the skill.' },
   'nimble-escape': { title: 'Nimble Escape (goblins)', text: 'Goblins can take the Disengage or Hide action as a Bonus Action, which is why they can slip out of a fight and still shoot.' },
   'stat-block': { title: 'Stat Blocks', text: "Monsters don't build their numbers like heroes do: their stat block lists the totals. A Goblin Warrior's Scimitar is +4 to hit and deals 1d6 + 2, plus 1d4 if it attacked with Advantage." },
+  'ability-checks': { title: 'Ability Checks', text: 'When you try something that might fail, the game asks for an ability check: roll a d20, add the modifier for the skill or ability, and compare it to the Difficulty Class (DC). Easy is DC 10, medium 15, hard 20.' },
+  'group-check': { title: 'Group Checks', text: 'When the whole party tries something together, everyone makes the check. If at least half of you succeed, the whole group succeeds.' },
+  'help-check': { title: 'Help with a Check', text: 'If you are proficient in a skill, you can Help a friend with a check using it: they roll with Advantage.' },
+  'saving-throws': { title: 'Saving Throws', text: 'A saving throw is your chance to avoid something bad, like a spell or a trap. Roll a d20 and add the ability modifier (plus your Proficiency Bonus if your class is proficient in that save), and try to meet the DC.' },
+  'surprise': { title: 'Surprise', text: 'If a creature is surprised when a fight starts, it rolls Initiative with Disadvantage, so it usually acts late.' },
+  'hit-points': { title: 'Hit Points', text: "How much punishment you can take. At level 1 you get your class's Hit Die maximum plus your Constitution modifier. At 0 Hit Points a hero falls Unconscious." },
+  'temp-hp': { title: 'Temporary Hit Points', text: 'A buffer that soaks up damage before your real Hit Points. They don\'t stack: you keep the higher amount.' },
+  'speed': { title: 'Speed', text: 'How far you can move on your turn, in feet. Most heroes have 30 feet; Wood Elves and Goliaths have 35.' },
+  'spellcasting': { title: 'Spellcasting', text: 'Casters know cantrips, which they can cast any time, and prepared spells, which need a spell slot. Each class casts with one ability: Wisdom for Clerics, Intelligence for Wizards.' },
+  'cantrips': { title: 'Cantrips', text: 'Level 0 spells. They cost no spell slot, so you can cast them every turn.' },
+  'spell-slots': { title: 'Spell Slots', text: 'Leveled spells use up a spell slot. A level 1 Cleric or Wizard has two, and gets them back after a Long Rest. You can spend only one spell slot per turn.' },
+  'spell-attack': { title: 'Spell Attack Rolls', text: "Some spells make an attack roll like a weapon: d20 + your spellcasting modifier + Proficiency Bonus, against the target's Armor Class." },
+  'spell-save-dc': { title: 'Spell Save DC', text: 'Other spells make the target roll a saving throw instead. Your spell save DC is 8 + your spellcasting modifier + your Proficiency Bonus.' },
+  'magic-initiate': { title: 'Magic Initiate (feat)', text: "Two cantrips and one level 1 spell from another class's list. You can cast that spell once per Long Rest without a spell slot. The Acolyte and Sage backgrounds give this Origin feat." },
+  'multiattack': { title: 'Multiattack', text: 'Some monsters make more than one attack when they take the Attack action. Heroes get a similar feature, Extra Attack, at level 5.' },
+  'redirect-attack': { title: 'Redirect Attack (Goblin Boss)', text: 'A Reaction: when a creature attacks the Goblin Boss, a goblin next to it swaps places with it and takes the attack instead. Reactions are not only for Opportunity Attacks.' },
+  'breath-weapon': { title: 'Breath Weapon (Dragonborn)', text: 'Instead of one attack of your Attack action, exhale a 15-foot Cone. Everything in it makes a Dexterity save (DC 8 + CON + PB): 1d10 damage, half on a success. Uses equal to your Proficiency Bonus per Long Rest.' },
+  'fires-burn': { title: "Fire's Burn (Goliath)", text: 'When you hit with an attack roll, you can add 1d10 Fire damage. Uses equal to your Proficiency Bonus per Long Rest. Here it is used automatically, once per turn.' },
+  'adrenaline-rush': { title: 'Adrenaline Rush (Orc)', text: 'Take the Dash action as a Bonus Action and gain Temporary Hit Points equal to your Proficiency Bonus. Uses equal to your Proficiency Bonus per Short or Long Rest.' },
+  'relentless-endurance': { title: 'Relentless Endurance (Orc)', text: "When you drop to 0 Hit Points but aren't killed outright, you drop to 1 instead. Once per Long Rest." },
+  'dwarven-toughness': { title: 'Dwarven Toughness', text: 'Dwarves get 1 extra Hit Point per level.' },
+  'tough': { title: 'Tough (feat)', text: 'Your Hit Point maximum goes up by 2 per level. Humans can take it with their extra Origin feat.' },
+  'class': { title: 'Classes', text: "Your class is what you do: how you fight, which armor and weapons you use, whether you cast spells. It sets your Hit Points and your best saving throws." },
+  'background': { title: 'Backgrounds', text: 'Your background is what you did before adventuring. In the 2024 rules it gives your ability score increases (+2 and +1, or +1 to three), an Origin feat and two skills.' },
+  'species': { title: 'Species', text: 'Your species gives you traits, like darkvision, extra toughness or a breath weapon. In the 2024 rules it does not change your ability scores.' },
+  'ability-scores': { title: 'Ability Scores', text: 'Six numbers describe what you are good at: Strength, Dexterity, Constitution, Intelligence, Wisdom and Charisma. The standard array gives you 15, 14, 13, 12, 10 and 8 to place.' },
   'combat': { title: 'Combat', text: 'A fight runs in rounds. In each round every creature takes one turn, in Initiative order. It ends when one side is defeated.' },
 };
+
+// Every spell gets an entry under its own id.
+for (const [id, sp] of Object.entries(SPELLS)) {
+  GLOSSARY[id] ||= { title: `${sp.name} (${sp.level ? `level ${sp.level} spell` : 'cantrip'})`, text: sp.text };
+}
 
 export const rule = (k) => GLOSSARY[k] || null;

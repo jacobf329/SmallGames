@@ -1,10 +1,10 @@
-import { buildHero, buildGoblin } from '../src/rules/character.js';
+import { buildHero, buildGoblin, defaultSpec } from '../src/rules/character.js';
 import { createBattle, rollInitiative } from '../src/rules/combat.js';
 
 // A small battle with creatures placed by hand and the turn set to `who`.
 export function setup({ fighter = { x: 3, y: 5 }, rogue = { x: 0, y: 9 }, goblins = [{ x: 3, y: 4 }], who = 'fighter', walls = [] } = {}) {
-  const f = Object.assign(buildHero('fighter', { name: 'Ana' }), fighter);
-  const r = Object.assign(buildHero('rogue', { name: 'Ben' }), rogue);
+  const f = Object.assign(buildHero(defaultSpec('fighter'), { id: 'fighter', name: 'Ana' }), fighter);
+  const r = Object.assign(buildHero(defaultSpec('rogue', { species: 'halfling' }), { id: 'rogue', name: 'Ben' }), rogue);
   const gs = goblins.map((g, i) => buildGoblin({ id: `g${i + 1}`, label: `Goblin ${i + 1}`, x: g.x, y: g.y, ai: g.ai || 'melee' }));
   const b = createBattle({ heroes: [f, r], foes: gs, walls, seed: 42 });
   b.rng.script = [];
@@ -21,3 +21,5 @@ export function setTurn(b, who) {
 
 export const dice = (b, ...vals) => { b.rng.script.push(...vals); };
 export const last = (b, kind) => [...b.log].reverse().find((r) => r.kind === kind);
+
+export const hero = (cls, opts = {}, at = {}) => Object.assign(buildHero(defaultSpec(cls, opts), { id: opts.id || cls, name: opts.name }), at);

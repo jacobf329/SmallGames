@@ -81,3 +81,23 @@ export function pathFrom(map, mover, x, y) {
 export function neighbours(x, y) {
   return DIRS.map(([dx, dy]) => ({ x: x + dx, y: y + dy })).filter((p) => inBounds(p.x, p.y));
 }
+
+// A Cone from `origin` toward `toward`, `size` squares long (15 ft = 3). Its
+// width at any distance equals that distance, so a square is in the Cone if
+// it is within reach and less than ~26.6 degrees off the aim line.
+export function coneSquares(origin, toward, size = 3) {
+  const dx = toward.x - origin.x, dy = toward.y - origin.y;
+  const dl = Math.hypot(dx, dy);
+  if (!dl) return [];
+  const out = [];
+  for (let y = origin.y - size; y <= origin.y + size; y++) {
+    for (let x = origin.x - size; x <= origin.x + size; x++) {
+      if (!inBounds(x, y) || (x === origin.x && y === origin.y)) continue;
+      const vx = x - origin.x, vy = y - origin.y;
+      const vl = Math.hypot(vx, vy);
+      if (vl > size + 0.25) continue;
+      if ((vx * dx + vy * dy) / (vl * dl) >= 0.89) out.push({ x, y });
+    }
+  }
+  return out;
+}

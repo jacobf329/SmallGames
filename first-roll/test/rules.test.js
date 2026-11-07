@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildHero } from '../src/rules/character.js';
+import { buildHero, defaultSpec } from '../src/rules/character.js';
 import { SKIRMISH } from '../src/rules/data.js';
 import { buildGoblin } from '../src/rules/character.js';
 import {
@@ -9,19 +9,19 @@ import {
 import { aiNext } from '../src/rules/ai.js';
 import { setup, setTurn, dice, last } from './helpers.js';
 
-test('pre-made Fighter: AC 18, 12 HP, Longsword +5 for 1d8+5', () => {
-  const f = buildHero('fighter');
+test('Human Soldier Fighter: AC 18, 14 HP (Tough), Longsword +5 for 1d8+5', () => {
+  const f = buildHero(defaultSpec('fighter'));
   assert.equal(f.scores.str, 17);
   assert.equal(f.ac, 18);                     // Chain Mail 16 + Shield 2
-  assert.equal(f.hpMax, 12);                  // d10 max + CON 2
+  assert.equal(f.hpMax, 14);                  // d10 max + CON 2 + Tough 2
   const ls = f.attacks[0];
   assert.equal(ls.hit.reduce((s, h) => s + h.value, 0), 5);   // STR 3 + PB 2
   assert.equal(ls.dmgFlat.reduce((s, h) => s + h.value, 0), 5); // STR 3 + Dueling 2
   assert.equal(ls.mastery, 'sap');
 });
 
-test('pre-made Rogue: AC 14, 10 HP, Alert initiative +5, Expertise in Stealth', () => {
-  const r = buildHero('rogue');
+test('Halfling Criminal Rogue: AC 14, 10 HP, Alert initiative +5, Expertise in Stealth', () => {
+  const r = buildHero(defaultSpec('rogue', { species: 'halfling' }));
   assert.equal(r.ac, 14);                     // Leather 11 + DEX 3
   assert.equal(r.hpMax, 10);
   assert.equal(r.initParts.reduce((s, p) => s + p.value, 0), 5);
@@ -176,7 +176,7 @@ test('a natural 20 on a death save brings you back with 1 HP', () => {
 
 test('same seed, same fight', () => {
   const run = () => {
-    const heroes = ['fighter', 'rogue'].map((c) => Object.assign(buildHero(c), SKIRMISH.heroStarts[c]));
+    const heroes = ['fighter', 'rogue'].map((c, i) => Object.assign(buildHero(defaultSpec(c, { species: c === 'rogue' ? 'halfling' : 'human' }), { id: c }), SKIRMISH.heroStarts[i]));
     const b = createBattle({ heroes, foes: SKIRMISH.foes.map(buildGoblin), walls: SKIRMISH.walls, seed: 99 });
     rollInitiative(b);
     for (let i = 0; i < 400 && !b.over; i++) {
@@ -194,7 +194,7 @@ test('same seed, same fight', () => {
 
 test('AI fights always finish (100 seeds)', () => {
   for (let seed = 1; seed <= 100; seed++) {
-    const heroes = ['fighter', 'rogue'].map((c) => Object.assign(buildHero(c), SKIRMISH.heroStarts[c]));
+    const heroes = ['fighter', 'rogue'].map((c, i) => Object.assign(buildHero(defaultSpec(c, { species: c === 'rogue' ? 'halfling' : 'human' }), { id: c }), SKIRMISH.heroStarts[i]));
     const b = createBattle({ heroes, foes: SKIRMISH.foes.map(buildGoblin), walls: SKIRMISH.walls, seed });
     rollInitiative(b);
     let n = 0;

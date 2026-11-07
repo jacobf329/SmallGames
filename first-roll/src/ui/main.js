@@ -1,56 +1,38 @@
-// First Roll - the app: home, lobby and battle screens, wired to a room.
-// The host's phone runs the room itself (LocalNet) and opens it to friends
-// over WebRTC (Host); a friend's phone talks to it through RtcNet. Either way
-// this file only sends intents and renders the state it is sent.
+// First Roll - the app: home, lobby (chapters 0 and 1), story and battle
+// screens, wired to a room. The host's phone runs the room itself (LocalNet)
+// and opens it to friends over WebRTC (Host); a friend's phone talks to it
+// through RtcNet. Either way this file only sends intents and renders the
+// state it is sent.
 
 import { createRoom } from '../game/room.js';
 import { Host, LocalNet, RtcNet, onlineSupported, normCode } from '../net/online.js';
-import { buildHero } from '../rules/character.js';
-import { PREMADES, ABILITIES, signed, MASTERIES } from '../rules/data.js';
-import { previewMove, reachableSquares, attackOptions } from '../rules/combat.js';
+import { buildHero, spellList } from '../rules/character.js';
+import { CLASSES, SPELLS, MASTERIES, signed } from '../rules/data.js';
+import {
+  previewMove, reachableSquares, attackOptions, canAttack, canCast, coneTargets, attackFactors,
+  hitChance, hitBonus, saveChance, spellAttack, spellDC,
+} from '../rules/combat.js';
 import { occupantAt, cheb } from '../rules/grid.js';
 import { coach } from '../rules/ai.js';
+import { SCENES } from '../game/campaign.js';
 import { createBoard } from './board.js';
 import { short, detail, glossaryHtml, rulesSeen, esc, ROLLED } from './explain.js';
 import { GLOSSARY } from '../rules/glossary.js';
+import { $, ls, showErr, openSheet, closeSheet, show } from './dom.js';
+import { sheetHtml } from './sheet.js';
+import { openBuilder } from './builder.js';
+import { openLesson, LESSON_DONE } from './lesson.js';
+import { renderStory } from './story.js';
 
-const $ = (id) => document.getElementById(id);
-const ls = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
-  del(k) { try { localStorage.removeItem(k); } catch { /* private mode */ } },
-};
-const K = { name: 'fr.name', save: 'fr.save', solo: 'fr.save.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest' };
+const K = { name: 'fr.name', save: 'fr.save2', solo: 'fr.save2.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest', spec: 'fr.lastSpec' };
 
 const app = {
   mode: null, room: null, host: null, net: null, code: null, timer: null,
   me: null, S: null, lastSeq: 0, preview: null, target: null,
   toasts: [], toastBusy: false, wake: null, status: '', reactUntil: 0,
+  overlay: null,            // 'build' | 'lesson' while one of those screens is open
 };
 window.__FR = app;   // for the console and tools/e2e.mjs
-
-// ------------------------------------------------------------ helpers ----
-function show(id) {
-  for (const s of document.querySelectorAll('.screen')) s.classList.toggle('active', s.id === `scr-${id}`);
-}
-let errTimer = null;
-function showErr(text) {
-  const e = $('err');
-  e.textContent = text;
-  e.classList.remove('hidden');
-  clearTimeout(errTimer);
-  errTimer = setTimeout(() => e.classList.add('hidden'), 3200);
-}
-function openSheet(html) {
-  $('sheet-body').innerHTML = html;
-  $('sheet').classList.remove('hidden');
-}
-const closeSheet = () => $('sheet').classList.add('hidden');
-const send = (m) => app.net?.send(m);
-const myName = () => ($('in-name').value.trim() || ls.get(K.name) || '').slice(0, 20);
-const seatMe = () => app.S?.seats.find((s) => s.pid === app.me);
-const isHost = () => app.S?.seats[0]?.pid === app.me;
-const heroColors = (S) => Object.fromEntries(S.seats.filter((s) => s.hero).map((s) => [s.hero, s.color]));
 
 // Links to glossary entries anywhere on the page.
 document.addEventListener('click', (e) => {
@@ -62,6 +44,13 @@ document.addEventListener('click', (e) => {
 });
 $('sheet-x').onclick = closeSheet;
 $('sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') closeSheet(); });
+
+const send = (m) => app.net?.send(m);
+const myName = () => ($('in-name').value.trim() || ls.get(K.name) || '').slice(0, 20);
+const seatMe = () => app.S?.seats.find((s) => s.pid === app.me);
+const isHost = () => app.S?.seats[0]?.pid === app.me;
+const colorOf = (pid) => app.S?.seats.find((s) => s.pid === pid)?.color;
+const heroColors = (S) => Object.fromEntries(S.party.filter((p) => p.controller).map((p) => [p.id, colorOf(p.controller)]));
 
 // --------------------------------------------------------------- home ----
 const params = new URLSearchParams(location.search);
@@ -102,6 +91,7 @@ $('lnk-credits').onclick = (e) => {
     Creative Commons Attribution 4.0 International License, available at
     <a href="https://creativecommons.org/licenses/by/4.0/legalcode" target="_blank" rel="noopener">https://creativecommons.org/licenses/by/4.0/legalcode</a>.</p>`);
 };
+$('btn-lesson-home').onclick = () => { app.overlay = 'lesson'; openLesson(() => { app.overlay = null; app.S ? render() : show('home'); }); };
 
 // ---------------------------------------------------------- sessions ----
 async function startHosting({ name, online, fresh }) {
@@ -117,7 +107,7 @@ async function startHosting({ name, online, fresh }) {
   show('lobby');
   if (online) {
     if (!onlineSupported()) {
-      setStatus('This browser can\'t host online games. Playing solo.');
+      setStatus("This browser can't host online games. Playing solo.");
       app.mode = 'solo';
     } else {
       setStatus('Opening your party…');
@@ -146,13 +136,13 @@ function joinParty(name, code) {
 }
 
 const GUEST_STATUS = {
-  finding: 'Finding the party…', gathering: 'Getting ready…', waiting: 'Knocking on the host\'s door…',
+  finding: 'Finding the party…', gathering: 'Getting ready…', waiting: "Knocking on the host's door…",
   linking: 'Connecting…', online: 'Connected', offline: 'Reconnecting…',
 };
 function onGuestStatus(s) {
   if (s === 'noroom') { leave(); $('home-msg').textContent = `No party with the code ${app.code || ''}. Check it with your host.`; return; }
   if (s === 'blocked') {
-    setStatus('Can\'t reach the host\'s phone from this network. Try another wifi or mobile data.');
+    setStatus("Can't reach the host's phone from this network. Try another wifi or mobile data.");
     $('net-status').insertAdjacentHTML('beforeend', ' <button class="btn small" id="btn-retry">Retry</button>');
     $('btn-retry').onclick = () => app.net?.retry();
     return;
@@ -170,7 +160,7 @@ function leave() {
   app.host?.stop();
   app.net?.close();
   app.wake?.release?.().catch(() => {});
-  Object.assign(app, { mode: null, room: null, host: null, net: null, code: null, timer: null, me: null, S: null, lastSeq: 0, preview: null, target: null, wake: null });
+  Object.assign(app, { mode: null, room: null, host: null, net: null, code: null, timer: null, me: null, S: null, lastSeq: 0, preview: null, target: null, wake: null, overlay: null });
   $('over').classList.add('hidden');
   $('react').classList.add('hidden');
   if (ls.get(K.save)) $('btn-continue').classList.remove('hidden');
@@ -201,8 +191,7 @@ function onMessage(m) {
     }
     render();
   } else if (m.t === 'ping') {
-    const s = app.S?.seats.find((x) => x.pid === m.pid);
-    board.ping(m.x, m.y, s?.color || '#fff');
+    board.ping(m.x, m.y, colorOf(m.pid) || '#fff');
   } else if (m.t === 'error') {
     showErr(m.text);
   }
@@ -211,8 +200,8 @@ function onMessage(m) {
 function takeRecords(prev, S) {
   const b = S.battle;
   if (!b) { app.lastSeq = 0; return; }
-  if (b.seq < app.lastSeq) app.lastSeq = 0;                // a new fight
-  const fresh = app.lastSeq === 0 && b.seq > 8;          // joined mid-fight: no replay
+  if (b.seq < app.lastSeq || (prev?.battle && prev.battleScene !== S.battleScene) || !prev?.battle) app.lastSeq = 0;
+  const fresh = app.lastSeq === 0 && b.seq > 12;          // joined mid-fight: no replay
   const news = b.log.filter((r) => r.seq > app.lastSeq);
   app.lastSeq = b.seq;
   if (fresh) return;
@@ -235,12 +224,13 @@ function nextToast() {
   if (!r) { app.toastBusy = false; t.classList.add('hidden'); return; }
   app.toastBusy = true;
   const b = app.S?.battle;
-  const who = b?.creatures[r.by]?.name || '';
-  t.innerHTML = `<span class="t"><span class="who">${esc(who)}${r.weapon ? ` · ${esc(r.weapon)}` : ''}${r.target && b ? ` → ${esc(b.creatures[r.target]?.name)}` : ''}</span>${short(r, b)}</span><button class="btn">Why?</button>`;
+  const who = b?.creatures[r.by]?.name || r.name || '';
+  const tgt = r.target && b ? b.creatures[r.target]?.name : null;
+  t.innerHTML = `<span class="t"><span class="who">${esc(who)}${r.weapon ? ` · ${esc(r.weapon)}` : ''}${tgt && r.target !== r.by ? ` → ${esc(tgt)}` : ''}</span>${short(r, b)}</span><button class="btn">Why?</button>`;
   t.querySelector('.btn').onclick = () => openSheet(detail(r, app.S?.battle));
   t.classList.remove('hidden');
   t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
-  setTimeout(nextToast, app.toasts.length ? 1800 : 3200);
+  setTimeout(nextToast, app.toasts.length ? 1800 : 3400);
 }
 function banner(text) {
   const el = $('banner');
@@ -255,57 +245,82 @@ function banner(text) {
 app.render = () => render();
 function render() {
   const S = app.S;
-  if (!S) return;
-  if (S.phase === 'lobby') {
-    $('over').classList.add('hidden');
-    $('react').classList.add('hidden');
-    show('lobby');
-    renderLobby(S);
-  } else {
-    show('battle');
-    renderBattle(S);
-  }
+  if (!S || app.overlay) return;
+  if (S.phase !== 'battle') { $('over').classList.add('hidden'); $('react').classList.add('hidden'); }
+  if (S.phase === 'lobby') { show('lobby'); renderLobby(S); }
+  else if (S.phase === 'story') {
+    show('story');
+    renderStoryScreen(S);
+  } else { show('battle'); renderBattle(S); }
 }
 
+function buildMine(spec) {
+  app.overlay = 'build';
+  openBuilder({
+    spec: spec || ls.json(K.spec), playerName: myName(),
+    onDone: (clean) => { send({ t: 'hero', spec: clean }); ls.set(K.spec, JSON.stringify(clean)); app.overlay = null; render(); },
+    onCancel: () => { app.overlay = null; render(); },
+  });
+}
+
+function renderStoryScreen(S) {
+  const mine = S.party.some((p) => p.id === app.me);
+  const full = S.party.filter((p) => p.controller).length >= 4;
+  $('story-join').innerHTML = !mine && !full
+    ? '<div class="joinbar">You\'re watching. <button class="btn small primary" id="btn-join-hero">Build a hero and join in</button></div>' : '';
+  if ($('btn-join-hero')) $('btn-join-hero').onclick = () => buildMine(null);
+  renderStory({ S, me: app.me, isHost: isHost(), send, openSheet });
+}
+
+// --------------------------------------------------------------- lobby ----
 function renderLobbyShell() {
   $('lobby-code').textContent = app.mode === 'solo' ? 'SOLO' : (app.code || '····');
   $('btn-share').classList.toggle('hidden', !app.code);
   $('net-status').textContent = app.status;
 }
 
-function heroCard(cls, S) {
-  const p = PREMADES[cls];
-  const h = buildHero(cls);
-  const owner = S.seats.find((s) => s.hero === cls);
-  const mine = owner?.pid === app.me;
-  const atk = h.attacks.map((a) => `${a.name} ${signed(a.hit.reduce((s, x) => s + x.value, 0))}`).join(' · ');
-  const btn = mine ? '<button class="btn wide" data-unpick>✓ Yours (tap to drop)</button>'
-    : owner ? `<button class="btn wide" disabled>Taken by ${esc(owner.name)}</button>`
-      : `<button class="btn primary wide" data-pick="${cls}">Play the ${p.className}</button>`;
-  return `<div class="hero ${mine ? 'mine' : ''}">
-    <div class="em">${p.emoji}</div>
-    <h3>${p.className}</h3>
-    <div class="sub">${h.species} · ${h.background} · level 1</div>
-    <div class="stats"><div><b>${h.ac}</b>AC</div><div><b>${h.hpMax}</b>HP</div><div><b>${h.speed}</b>ft</div></div>
-    <p>${esc(p.blurb)}</p>
-    <p class="sub">${esc(atk)}</p>
-    <button class="btn small ghost" data-sheet="${cls}">Character sheet</button>
-    ${btn}
-  </div>`;
+function heroSummary(spec, name) {
+  const h = buildHero(spec, { name });
+  return `<div class="herosum"><span class="em">${h.emoji}</span><span><b>${esc(h.name)}</b><span class="sub">${esc(h.species)} ${esc(h.className)} · ${esc(h.background)}</span>
+    <span class="sub">AC ${h.ac} · HP ${h.hpMax} · Speed ${h.speed} ft${h.casting?.slots ? ` · ${h.casting.slots.max} spell slots` : ''}</span></span></div>`;
 }
 
 function renderLobby(S) {
   renderLobbyShell();
+  const me = seatMe();
   $('seat-list').innerHTML = S.seats.map((s) => {
-    const hero = s.hero ? `${PREMADES[s.hero].emoji} ${PREMADES[s.hero].className}` : '<span class="dim">watching</span>';
+    const hero = s.spec ? `${CLASSES[s.spec.cls].emoji} ${esc(s.spec.name || s.name)} <span class="dim">${CLASSES[s.spec.cls].name}</span>` : '<span class="dim">no hero yet</span>';
     return `<li class="${s.online ? '' : 'off'}"><span class="dot" style="background:${s.color}"></span>
       <span class="who">${esc(s.name)}${s.pid === app.me ? ' <span class="dim">(you)</span>' : ''}${s.host ? ' 👑' : ''}</span>${hero}</li>`;
   }).join('');
-  $('hero-cards').innerHTML = ['fighter', 'rogue'].map((c) => heroCard(c, S)).join('');
-  for (const b of document.querySelectorAll('[data-pick]')) b.onclick = () => send({ t: 'pick', hero: b.dataset.pick });
-  for (const b of document.querySelectorAll('[data-unpick]')) b.onclick = () => send({ t: 'pick', hero: null });
-  for (const b of document.querySelectorAll('[data-sheet]')) b.onclick = () => openSheet(sheetHtml(buildHero(b.dataset.sheet)));
+
+  const lessonDone = ls.get(LESSON_DONE);
+  const full = S.party.filter((p) => p.controller).length >= 4 && !me?.spec;
+  $('lobby-chapters').innerHTML = `
+    <div class="chcard ${lessonDone ? 'done' : ''}"><div><span class="kicker">Chapter 0</span><b>Rolling the d20</b><span class="sub">Two minutes, on your own phone, while friends join.</span></div>
+      <button class="btn small ${lessonDone ? '' : 'primary'}" id="btn-lesson">${lessonDone ? 'Again' : 'Start'}</button></div>
+    <div class="chcard ${me?.spec ? 'done' : ''}"><div><span class="kicker">Chapter 1</span><b>Making your hero</b>
+      ${me?.spec ? heroSummary(me.spec, me.spec.name || me.name) : `<span class="sub">${full ? 'The party already has four heroes. You can watch, or step in later.' : 'Class, background, species and ability scores, one step at a time.'}</span>`}</div>
+      <div class="col">${me?.spec ? '<button class="btn small" id="btn-edit">Edit</button><button class="btn small ghost" id="btn-mysheet">Sheet</button>' : full ? '' : '<button class="btn small primary" id="btn-build">Build</button>'}</div></div>`;
+  if ($('btn-lesson')) $('btn-lesson').onclick = () => { app.overlay = 'lesson'; openLesson(() => { app.overlay = null; render(); }); };
+  if ($('btn-build')) $('btn-build').onclick = () => buildMine(null);
+  if ($('btn-edit')) $('btn-edit').onclick = () => buildMine(me.spec);
+  if ($('btn-mysheet')) $('btn-mysheet').onclick = () => openSheet(sheetHtml(buildHero(me.spec, { name: me.spec.name || me.name })));
+
+  const comp = S.companions;
+  $('party-list').innerHTML = S.party.length ? S.party.map((p) => {
+    const c = CLASSES[p.spec.cls];
+    return `<button class="pchip" data-psheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">${c.emoji} ${esc(p.name)} <span class="dim">${c.name}${p.controller ? '' : ' · AI'}</span></button>`;
+  }).join('') : '<span class="dim">Nobody yet: build a hero, or add AI companions.</span>';
+  for (const el of document.querySelectorAll('[data-psheet]')) {
+    el.onclick = () => { const p = S.party.find((x) => x.id === el.dataset.psheet); openSheet(sheetHtml(buildHero(p.spec, { id: p.id, name: p.name }))); };
+  }
+  $('companions-row').innerHTML = isHost() ? `<span class="host-label">AI companions</span><div class="seg">${['auto', 0, 1, 2, 3].map((n) =>
+    `<button data-comp="${n}" class="${String(comp) === String(n) ? 'on' : ''}">${n === 'auto' ? 'Auto' : n}</button>`).join('')}</div>` : '';
+  for (const el of document.querySelectorAll('[data-comp]')) el.onclick = () => send({ t: 'companions', n: el.dataset.comp === 'auto' ? 'auto' : +el.dataset.comp });
+
   $('btn-start').classList.toggle('hidden', !isHost());
+  $('btn-start').disabled = !S.party.length;
   $('lobby-wait').classList.toggle('hidden', isHost());
 }
 
@@ -318,41 +333,12 @@ $('btn-share').onclick = async () => {
 };
 $('btn-start').onclick = () => send({ t: 'start' });
 
-// A character sheet laid out like a real one: abilities, AC, HP, attacks, features.
-function sheetHtml(c) {
-  const R = (rule, label) => (rule && GLOSSARY[rule] ? `<a class="rl" data-rule="${rule}">${esc(label)}</a>` : esc(label));
-  const abil = ABILITIES.map((a) => `<div>${a.toUpperCase()}<b>${signed(c.mods[a])}</b>${c.scores[a]}</div>`).join('');
-  const ac = c.acParts.map((p) => `${esc(p.label)} ${p.value}`).join(' + ');
-  const atks = c.attacks.map((a) => {
-    const hit = a.hit.reduce((s, x) => s + x.value, 0);
-    const flat = a.dmgFlat.reduce((s, x) => s + x.value, 0);
-    const rng = a.range ? ` · range ${a.range[0]}/${a.range[1]} ft` : ' · reach 5 ft';
-    const m = a.mastery ? ` · Mastery: ${R(MASTERIES[a.mastery].rule, MASTERIES[a.mastery].name)}` : '';
-    const extra = a.advDice ? ` (+${a.advDice} with Advantage)` : '';
-    return `<div class="ln"><span><b>${esc(a.name)}</b> ${R('attack-roll', signed(hit))} to hit${rng}${m}</span><b>${a.dice}${signed(flat)}${extra} ${a.type}</b></div>`;
-  }).join('');
-  const feats = (c.features || []).map((f) => `<p class="feat"><b>${R(f.rule, f.name)}</b>${f.source ? ` <span class="dim">(${esc(f.source)})</span>` : ''}: ${esc(f.text)}</p>`).join('');
-  const subtitle = c.side === 'foe' ? `${esc(c.statName)} · Small Fey (Goblinoid)` : `${esc(c.species)} ${esc(c.className)} · ${esc(c.background)} background · level ${c.level}`;
-  return `<h3>${c.emoji} ${esc(c.name)}</h3><p class="dim">${subtitle}</p>
-    <div class="grid6">${abil}</div>
-    <h4>Defense</h4>
-    <div class="ln"><span>${R('armor-class', 'Armor Class')}: ${ac}</span><b>${c.ac}</b></div>
-    <div class="ln"><span>Hit Points${c.hpParts ? ': ' + c.hpParts.map((p) => `${esc(p.label)} ${p.value}`).join(' + ') : ''}</span><b>${c.hp} / ${c.hpMax}</b></div>
-    <div class="ln"><span>Speed</span><b>${c.speed} ft</b></div>
-    <div class="ln"><span>${R('initiative', 'Initiative')}</span><b>${signed(c.initParts.reduce((s, p) => s + p.value, 0))}</b></div>
-    ${c.pb ? `<div class="ln"><span>${R('proficiency', 'Proficiency Bonus')}</span><b>${signed(c.pb)}</b></div>` : ''}
-    <h4>Attacks</h4>${atks}
-    <h4>Features</h4>${feats}`;
-}
-
 // ------------------------------------------------------------- battle ----
 const board = createBoard($('board'), onTap);
 // After closing the end screen, tapping "Victory!" / "Defeat" brings it back.
 $('b-turn').onclick = () => { if (app.S?.battle?.over) { $('over').dataset.dismissed = ''; render(); } };
 
-function myHeroId() {
-  return seatMe()?.hero || null;
-}
+const myHeroId = () => (app.S?.battle?.creatures[app.me] ? app.me : null);
 function myTurn() {
   const S = app.S;
   return !!S?.battle && !S.battle.over && !S.battle.pending && S.control === app.me;
@@ -371,10 +357,7 @@ function onTap(x, y) {
   const me = b.creatures[myHeroId()];
   if (occ) {
     app.preview = null;
-    if (occ.id === me.id) { app.target = null; openSheet(sheetHtml(me)); }
-    else if (occ.side !== me.side) app.target = app.target === occ.id ? null : occ.id;
-    else if (occ.hp <= 0 && !occ.dead && !occ.stable && cheb(me, occ) <= 1) app.target = occ.id;
-    else openSheet(sheetHtml(occ));
+    app.target = app.target === occ.id ? null : occ.id;
     renderBattle(S);
     return;
   }
@@ -404,7 +387,7 @@ function renderBattle(S) {
   const turnEl = $('b-turn');
   turnEl.classList.toggle('me', mt);
   turnEl.textContent = b.over ? (b.over === 'victory' ? 'Victory!' : 'Defeat')
-    : mt ? 'Your turn' : `${cur?.name}'s turn${cur?.side === 'hero' && S.control === 'ai' && !/\(AI\)$/.test(cur.name) ? ' (AI)' : ''}`;
+    : mt ? 'Your turn' : `${cur?.name}'s turn${cur?.side === 'hero' && S.control === 'ai' ? ' (AI)' : ''}`;
   document.body.dataset.myturn = mt ? '1' : '';
 
   $('b-order').innerHTML = b.order.map((id) => {
@@ -419,6 +402,7 @@ function renderBattle(S) {
     reach: mt && !app.target ? reachableSquares(b, mine) : [],
     preview: mt ? app.preview : null,
     target: mt ? app.target : null,
+    cone: mt && app.target ? coneFor(b, b.creatures[mine], b.creatures[app.target]) : null,
     suggest: tip?.intent.a === 'move' && !app.preview ? tip.intent : null,
   });
 
@@ -428,14 +412,22 @@ function renderBattle(S) {
   renderOver(S, b);
 }
 
+// If the hero has a cone (Burning Hands, Breath Weapon), the squares it would cover aimed at T.
+function coneFor(b, me, T) {
+  if (!me || !T || T === me) return null;
+  const hasCone = me.breath?.uses > 0 || spellList(me).some((s) => s.kind === 'cone');
+  if (!hasCone) return null;
+  return { x: T.x, y: T.y };
+}
+
 function renderPanel(S, b, mine, mt, tip) {
   const P = $('panel');
   if (b.over) { P.innerHTML = ''; return; }
   if (!mt) {
     let text;
     if (b.pending && S.reactor === app.me) text = 'Your Reaction: decide below.';
-    else if (b.pending) text = `${esc(b.creatures[b.pending.reactor].name)} is deciding on an ${'<a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>'}…`;
-    else if (!mine) text = 'You\'re watching. Tap a token to see its sheet.';
+    else if (b.pending) text = `${esc(b.creatures[b.pending.reactor].name)} is deciding on an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>…`;
+    else if (!mine) text = "You're watching. Tap a token to see its sheet.";
     else text = `Waiting for ${esc(b.creatures[b.order[b.idx]]?.name)}… Tap a square to ping it for your party.`;
     P.innerHTML = `<div class="waiting">${text}</div>`;
     return;
@@ -444,8 +436,10 @@ function renderPanel(S, b, mine, mt, tip) {
   const t = b.turn;
   const chip = (on, label, rule) => `<span class="chip ${on ? '' : 'used'}"><a data-rule="${rule}">${label}</a></span>`;
   let html = `<div class="budget">
-    ${chip(t.action, 'Action', 'your-turn')}${chip(t.bonus && me.secondWind?.uses, 'Bonus Action', 'your-turn')}
-    ${chip(me.reaction, 'Reaction', 'opportunity-attack')}${chip(t.moveLeft >= 5, `Move ${t.moveLeft} ft`, 'movement')}</div>`;
+    ${chip(canAttack(t), 'Action', 'your-turn')}${chip(t.bonus, 'Bonus Action', 'your-turn')}
+    ${chip(me.reaction, 'Reaction', 'opportunity-attack')}${chip(t.moveLeft >= 5, `Move ${t.moveLeft} ft`, 'movement')}
+    ${me.casting?.slots ? `<span class="chip"><a data-rule="spell-slots">Slots ${'●'.repeat(me.casting.slots.left)}${'○'.repeat(me.casting.slots.max - me.casting.slots.left)}</a></span>` : ''}
+    ${me.tempHp ? `<span class="chip"><a data-rule="temp-hp">+${me.tempHp} temp HP</a></span>` : ''}</div>`;
   if (tip?.text && !app.target && !app.preview) {
     html += `<div class="coachline">💡 <span>${esc(tip.text)}</span><button class="btn" id="btn-coach">Do it</button></div>`;
   }
@@ -454,19 +448,21 @@ function renderPanel(S, b, mine, mt, tip) {
     const oa = app.preview.oas.map((id) => esc(b.creatures[id].name)).join(' and ');
     html += `<div class="preview"><span>Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>.</b>` : ''} Tap the square again or</span>
       <button class="btn primary" id="btn-move">Move</button><button class="btn ghost" id="btn-cancel">✕</button></div>`;
+  } else if (me.casting || me.breath) {
+    html += '<div class="hint">Tap an enemy for attacks and spells, an ally (or yourself) for healing.</div>';
   }
+  const extra = [];
+  if (me.secondWind) extra.push(`<button class="btn" data-act="second-wind" ${t.bonus && me.secondWind.uses ? '' : 'disabled'}>Second Wind (${me.secondWind.uses})</button>`);
+  if (me.adrenaline) extra.push(`<button class="btn" data-act="adrenaline" ${t.bonus && me.adrenaline.uses ? '' : 'disabled'}>Adrenaline Rush (${me.adrenaline.uses})</button>`);
   html += `<div class="btns">
     <button class="btn" data-act="dash" ${t.action ? '' : 'disabled'}>Dash</button>
     <button class="btn" data-act="disengage" ${t.action ? '' : 'disabled'}>Disengage</button>
     <button class="btn" data-act="dodge" ${t.action ? '' : 'disabled'}>Dodge</button>
-    ${me.secondWind ? `<button class="btn" data-act="second-wind" ${t.bonus && me.secondWind.uses ? '' : 'disabled'}>Second Wind (${me.secondWind.uses})</button>`
-    : '<button class="btn end" data-act="end">End turn</button>'}
-  </div>`;
-  if (me.secondWind) html += '<button class="btn end wide" data-act="end">End turn</button>';
+    <button class="btn end" data-act="end">End turn</button>
+  </div>${extra.length ? `<div class="btns two">${extra.join('')}</div>` : ''}`;
   P.innerHTML = html;
   for (const btn of P.querySelectorAll('[data-act]')) btn.onclick = () => act({ a: btn.dataset.act });
-  for (const btn of P.querySelectorAll('[data-attack]')) btn.onclick = () => act({ a: 'attack', target: app.target, attack: btn.dataset.attack });
-  for (const btn of P.querySelectorAll('[data-help]')) btn.onclick = () => act({ a: btn.dataset.help, target: app.target });
+  for (const btn of P.querySelectorAll('[data-intent]')) btn.onclick = () => act(JSON.parse(btn.dataset.intent));
   if ($('btn-coach')) $('btn-coach').onclick = () => act(tip.intent);
   if ($('btn-move')) $('btn-move').onclick = () => { const e = app.preview.path[app.preview.path.length - 1]; doMove(e.x, e.y); };
   if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; renderBattle(app.S); };
@@ -474,33 +470,97 @@ function renderPanel(S, b, mine, mt, tip) {
   if ($('btn-tinfo')) $('btn-tinfo').onclick = () => openSheet(sheetHtml(b.creatures[app.target]));
 }
 
+const reasons = (o) => {
+  const bits = [];
+  if (o.mode === 'advantage') bits.push(`<b class="good">Advantage</b>: ${o.adv.map((a) => `<a class="rl" data-rule="${a.rule}">${esc(a.text)}</a>`).join(', ')}`);
+  if (o.mode === 'disadvantage') bits.push(`<b class="bad">Disadvantage</b>: ${o.dis.map((a) => `<a class="rl" data-rule="${a.rule}">${esc(a.text)}</a>`).join(', ')}`);
+  if (o.adv.length && o.dis.length) bits.push('<a class="rl" data-rule="advantage">Advantage and Disadvantage cancel</a>');
+  return bits;
+};
+const intentAttr = (i) => `data-intent='${esc(JSON.stringify(i))}'`;
+const row = (label, intent, ok, why, primary = true) =>
+  `<div class="opt"><button class="btn ${primary ? 'primary' : ''}" ${intentAttr(intent)} ${ok ? '' : 'disabled'}>${esc(label)}</button><span class="why">${why}</span></div>`;
+
+function spellCost(b, me, sid) {
+  const s = SPELLS[sid];
+  const c = canCast(b, me, sid);
+  if (s.level === 0) return { c, tag: '<a class="rl" data-rule="cantrips">cantrip</a>' };
+  if (c.pay === 'free') return { c, tag: '<a class="rl" data-rule="magic-initiate">free cast</a>' };
+  return { c, tag: `<a class="rl" data-rule="spell-slots">spell slot</a>${s.time === 'bonus' ? ', <b>Bonus Action</b>' : ''}` };
+}
+
 function targetCard(b, me, T) {
   const t = b.turn;
   let rows = '';
+  const self = T.id === me.id;
   if (T.side === me.side) {
-    rows = `<div class="opt"><button class="btn primary" data-help="stabilize" ${t.action ? '' : 'disabled'}>Stabilize</button>
-      <span class="why"><a class="rl" data-rule="stabilize">Help action</a>: DC 10 Wisdom (Medicine) check, you have ${signed(me.skills.medicine)}.</span></div>`;
+    // Healing and saving friends (or yourself).
+    for (const sp of spellList(me)) {
+      if (sp.kind !== 'heal' && sp.kind !== 'stabilize') continue;
+      if (sp.kind === 'stabilize' && (T.hp > 0 || T.dead || T.stable)) continue;
+      const { c, tag } = spellCost(b, me, sp.id);
+      const inR = self || cheb(me, T) * 5 <= sp.range;
+      const why = !inR ? `Out of range (${sp.range === 5 ? 'touch' : `${sp.range} ft`}).` : c.ok ? `${sp.kind === 'heal' ? `Heals ${sp.dice} + your modifier` : 'Makes them Stable'} · ${tag}` : esc(c.error);
+      rows += row(sp.name, { a: 'cast', spell: sp.id, target: T.id }, inR && c.ok, why);
+    }
+    if (!self && T.hp <= 0 && !T.dead && !T.stable) {
+      rows += row('Stabilize', { a: 'stabilize', target: T.id }, t.action && cheb(me, T) <= 1,
+        cheb(me, T) <= 1 ? `<a class="rl" data-rule="stabilize">Help action</a>: DC 10 Wisdom (Medicine) check, you have ${signed(me.skills.medicine)}.` : 'Move next to them first.');
+    }
+    if (!rows) rows = `<div class="why dim">${self ? 'Nothing to do on yourself right now.' : `${esc(T.name)} is fine.`}</div>`;
+    rows += `<div class="opt"><button class="btn small ghost" id="btn-tinfo">${self ? 'My character sheet' : 'Character sheet'}</button></div>`;
   } else {
     for (const o of attackOptions(b, me, T)) {
       const flat = o.atk.dmgFlat.reduce((s, x) => s + x.value, 0);
-      const bits = [`${Math.round(o.p * 100)}% to hit`, `${o.atk.dice}${signed(flat)} ${o.atk.type}`];
-      if (o.mode === 'advantage') bits.push(`<b class="good">Advantage</b>: ${o.adv.map((a) => `<a class="rl" data-rule="${a.rule}">${esc(a.text)}</a>`).join(', ')}`);
-      if (o.mode === 'disadvantage') bits.push(`<b class="bad">Disadvantage</b>: ${o.dis.map((a) => `<a class="rl" data-rule="${a.rule}">${esc(a.text)}</a>`).join(', ')}`);
-      if (o.adv.length && o.dis.length) bits.push('<a class="rl" data-rule="advantage">Advantage and Disadvantage cancel</a>');
+      const bits = [`${Math.round(o.p * 100)}% to hit`, `${o.atk.dice}${signed(flat)} ${o.atk.type}`, ...reasons(o)];
       if (o.sneak) bits.push(`<b class="good">+${me.sneak} <a class="rl" data-rule="sneak-attack">Sneak Attack</a></b>`);
       if (o.atk.mastery) bits.push(`<a class="rl" data-rule="${MASTERIES[o.atk.mastery].rule}">${MASTERIES[o.atk.mastery].name}</a>`);
       const why = o.ok ? bits.join(' · ') : `Out of ${o.atk.kind === 'melee' ? 'reach: move next to it first' : 'range'}.`;
-      rows += `<div class="opt"><button class="btn primary" data-attack="${o.atk.id}" ${o.ok && t.action ? '' : 'disabled'}>${esc(o.atk.name)}</button><span class="why">${why}</span></div>`;
+      rows += row(o.atk.name, { a: 'attack', target: T.id, attack: o.atk.id }, o.ok && canAttack(t), why);
+    }
+    for (const sp of spellList(me)) {
+      if (!['attack', 'save', 'missile', 'cone'].includes(sp.kind)) continue;
+      const { c, tag } = spellCost(b, me, sp.id);
+      if (sp.kind === 'cone') {
+        const hit = coneTargets(b, me, T.x, T.y);
+        const pals = hit.filter((x) => x.side === me.side);
+        const foes = hit.filter((x) => x.side !== me.side);
+        const why = !foes.length ? `Too far: a 15-ft Cone toward ${esc(T.name)} wouldn't reach it. Get within 15 feet.`
+          : `15-ft Cone toward ${esc(T.name)}: catches ${hit.map((x) => esc(x.name)).join(', ')}${pals.length ? ` <b class="bad">(including your ally!)</b>` : ''} · DC ${spellDC(me, sp.id)} DEX save, ${sp.dice} ${sp.type}, half on a save · ${tag}`;
+        rows += row(sp.name, { a: 'cast', spell: sp.id, x: T.x, y: T.y }, c.ok && foes.length > 0, c.ok ? why : esc(c.error));
+        continue;
+      }
+      const inR = cheb(me, T) * 5 <= sp.range;
+      let why;
+      if (!inR) why = `Out of range (${sp.range} ft).`;
+      else if (!c.ok) why = esc(c.error);
+      else if (sp.kind === 'attack') {
+        const atk = spellAttack(me, sp.id);
+        const f = attackFactors(b, me, T, atk);
+        why = [`${Math.round(hitChance(hitBonus(atk), T.ac, f.mode, me.luck) * 100)}% to hit`, `${sp.dice} ${sp.type}`, ...reasons({ ...f, adv: f.adv, dis: f.dis }), tag].join(' · ');
+      } else if (sp.kind === 'save') {
+        const dc = spellDC(me, sp.id);
+        why = `${Math.round((1 - saveChance(b, T, sp.save, dc)) * 100)}% it fails a DC ${dc} ${sp.save.toUpperCase()} save · ${sp.dice} ${sp.type} · ${tag}`;
+      } else why = `Never misses · 3 × (1d4 + 1) Force · ${tag}`;
+      rows += row(sp.name, { a: 'cast', spell: sp.id, target: T.id }, inR && c.ok, why);
+    }
+    if (me.breath) {
+      const hit = coneTargets(b, me, T.x, T.y);
+      const pals = hit.filter((x) => x.side === me.side);
+      const ok = me.breath.uses > 0 && canAttack(t) && hit.some((x) => x.side !== me.side);
+      const dc = me.breath.dc.reduce((s, p) => s + p.value, 0);
+      rows += row(`Breath Weapon (${me.breath.uses})`, { a: 'breath', x: T.x, y: T.y }, ok,
+        `<a class="rl" data-rule="breath-weapon">Replaces an attack</a>: 15-ft Cone, catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody (get within 15 feet)'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''} · DC ${dc} DEX save, ${me.breath.dice} ${me.breath.type}`);
     }
     if (cheb(me, T) <= 1) {
-      rows += `<div class="opt"><button class="btn" data-help="help" ${t.action ? '' : 'disabled'}>Help</button>
-        <span class="why"><a class="rl" data-rule="help">Help action</a>: your ally's next attack on ${esc(T.name)} gets Advantage.</span></div>`;
+      rows += row('Help', { a: 'help', target: T.id }, t.action, `<a class="rl" data-rule="help">Help action</a>: your ally's next attack on ${esc(T.name)} gets Advantage.`, false);
     }
-    if (!t.action) rows += '<div class="why dim">You have already used your action this turn.</div>';
+    if (!canAttack(t)) rows += '<div class="why dim">You have already used your action this turn.</div>';
   }
-  return `<div class="target"><div class="th"><b>${T.emoji} ${esc(T.name)}</b>
-    <span>AC ${T.ac} · HP ${T.hp}/${T.hpMax} <button class="btn small ghost" id="btn-tinfo">ⓘ</button><button class="btn small ghost" id="btn-tx">✕</button></span></div>${rows}</div>`;
+  return `<div class="target ${T.side === me.side ? 'ally' : ''}"><div class="th"><b>${T.emoji} ${esc(T.name)}</b>
+    <span>AC ${T.ac} · HP ${T.hp}/${T.hpMax}${T.side !== me.side || !self ? ' <button class="btn small ghost" id="btn-tinfo2">ⓘ</button>' : ''}<button class="btn small ghost" id="btn-tx">✕</button></span></div>${rows}</div>`;
 }
+document.addEventListener('click', (e) => { if (e.target.id === 'btn-tinfo2' && app.target) openSheet(sheetHtml(app.S.battle.creatures[app.target])); });
 
 function renderLog(b) {
   const L = $('log');
@@ -554,13 +614,19 @@ function renderOver(S, b) {
   el.dataset.seq = String(b.seq);
   const rules = rulesSeen(b.log).map((k) => `<a class="chip rl" data-rule="${k}">${esc(GLOSSARY[k].title)}</a>`).join('');
   const win = b.over === 'victory';
+  const sc = SCENES[S.battleScene];
+  const hostBtns = win ? '<button class="btn primary wide" id="btn-cont">Continue the story</button>'
+    : '<button class="btn primary wide" id="btn-retry">Try the fight again</button><button class="btn wide" id="btn-lobby">Back to the lobby</button>';
   el.innerHTML = `<div class="card"><div class="logo">${win ? '🏆' : '💀'}</div><h2>${win ? 'Victory!' : 'Defeat'}</h2>
-    <p class="dim">${win ? 'The goblins are beaten' : 'The goblins win this time'} after ${b.round} round${b.round === 1 ? '' : 's'}.</p>
+    <p class="dim">${esc(sc?.title || 'The fight')}: ${win ? 'won' : 'lost'} after ${b.round} round${b.round === 1 ? '' : 's'}.${win ? '' : ' Everyone gets back up for another try.'}</p>
     <h4 class="kicker">Rules you used: tap one to read it again</h4>
     <div class="chips">${rules}</div>
-    ${isHost() ? '<button class="btn primary wide" id="btn-again">Back to the lobby</button>' : '<p class="dim">Waiting for the host…</p>'}
+    ${isHost() ? hostBtns : '<p class="dim">Waiting for the host…</p>'}
     <button class="btn ghost wide" id="btn-over-log">See the combat log</button></div>`;
   el.classList.remove('hidden');
-  if ($('btn-again')) $('btn-again').onclick = () => send({ t: 'again' });
+  if ($('btn-cont')) $('btn-cont').onclick = () => send({ t: 'continue' });
+  if ($('btn-retry')) $('btn-retry').onclick = () => send({ t: 'retry' });
+  if ($('btn-lobby')) $('btn-lobby').onclick = () => send({ t: 'again' });
   $('btn-over-log').onclick = () => { el.classList.add('hidden'); el.dataset.dismissed = String(b.seq); };
 }
+
