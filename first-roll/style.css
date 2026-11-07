@@ -154,9 +154,6 @@ input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
 .chip { font-size: 12px; font-weight: 800; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); }
 .chip.used { opacity: .35; text-decoration: line-through; }
 .chip a { color: inherit; text-decoration: none; }
-.coachline { display: flex; gap: 8px; align-items: center; background: rgba(240, 181, 74, .1); border: 1px solid rgba(240, 181, 74, .35); border-radius: 12px; padding: 7px 10px; font-size: 13px; }
-.coachline span { flex: 1; }
-.coachline .btn { padding: 7px 10px; font-size: 12px; }
 .btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .btns .btn { padding: 10px 4px; font-size: 13px; }
 .btns .btn.end { background: #3a3150; }
@@ -224,7 +221,7 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 .dots i.on { background: var(--gold); }
 .footbar { position: sticky; bottom: 0; display: flex; gap: 10px; padding: 10px 16px calc(10px + var(--safe-b)); background: rgba(21, 17, 29, .96); border-top: 1px solid var(--line); max-width: 520px; margin: 0 auto; }
 .footbar .btn { flex: 1; }
-#scr-build .panel, #scr-lesson .panel, #scr-story .panel { padding-bottom: 20px; }
+#scr-build .panel, #scr-story .panel { padding-bottom: 20px; }
 .pick { display: flex; gap: 12px; width: 100%; text-align: left; background: var(--panel); border: 2px solid var(--line); border-radius: 16px; padding: 12px; margin: 8px 0; color: var(--ink); font: inherit; cursor: pointer; }
 .pick.on { border-color: var(--gold); background: #2b2338; }
 .pick .em { font-size: 30px; line-height: 1; }
@@ -259,10 +256,6 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 .pchip { background: var(--panel); border: 2px solid var(--line); border-radius: 999px; padding: 6px 12px; color: var(--ink); font: 600 13px/1.2 inherit; font-family: inherit; cursor: pointer; }
 .host-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .host-label { color: var(--dim); font-size: 13px; }
-.bigroll { font-size: 26px; text-align: center; margin: 14px 0 6px; }
-.bigroll b { font-size: 40px; color: var(--gold); }
-.lesson-out { min-height: 110px; text-align: center; }
-.lesson-btns .btn { flex: 1; }
 .scene-title { font-size: 26px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 2px 0 10px; }
 .story { font-size: 16px; line-height: 1.6; margin: 0 0 12px; }
 .choices { display: grid; gap: 8px; margin: 16px 0 6px; }
@@ -287,7 +280,6 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 .joinbar { background: var(--panel); border: 1px dashed var(--gold); border-radius: 12px; padding: 8px 10px; margin-bottom: 12px; display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 14px; }
 .toast-float { position: fixed; left: 12px; right: 12px; bottom: calc(12px + var(--safe-b)); z-index: 15; pointer-events: none; }
 .toast-float .toast { pointer-events: auto; }
-.hint { color: var(--mute); font-size: 12px; text-align: center; }
 .btns.two { grid-template-columns: 1fr 1fr; }
 .target.ally { border-color: var(--good); }
 .board .cone { fill: rgba(255, 138, 101, .22); stroke: #ff8a65; stroke-width: .03; }

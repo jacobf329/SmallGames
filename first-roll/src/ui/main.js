@@ -1,4 +1,4 @@
-// First Roll - the app: home, lobby (chapters 0 and 1), story and battle
+// First Roll - the app: home, lobby (hero creation), story and battle
 // screens, wired to a room. The host's phone runs the room itself (LocalNet)
 // and opens it to friends over WebRTC (Host); a friend's phone talks to it
 // through RtcNet. Either way this file only sends intents and renders the
@@ -13,15 +13,13 @@ import {
   hitChance, hitBonus, saveChance, spellAttack, spellDC,
 } from '../rules/combat.js';
 import { occupantAt, cheb } from '../rules/grid.js';
-import { coach } from '../rules/ai.js';
+import { aiNext } from '../rules/ai.js';
 import { SCENES } from '../game/campaign.js';
 import { createBoard } from './board.js';
-import { short, detail, glossaryHtml, rulesSeen, esc, ROLLED } from './explain.js';
-import { GLOSSARY } from '../rules/glossary.js';
+import { short, detail, glossaryHtml, esc, ROLLED } from './explain.js';
 import { $, ls, showErr, openSheet, closeSheet, show } from './dom.js';
 import { sheetHtml } from './sheet.js';
 import { openBuilder } from './builder.js';
-import { openLesson, LESSON_DONE } from './lesson.js';
 import { renderStory } from './story.js';
 
 const K = { name: 'fr.name', save: 'fr.save2', solo: 'fr.save2.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest', spec: 'fr.lastSpec' };
@@ -30,7 +28,7 @@ const app = {
   mode: null, room: null, host: null, net: null, code: null, timer: null,
   me: null, S: null, lastSeq: 0, preview: null, target: null,
   toasts: [], toastBusy: false, wake: null, status: '', reactUntil: 0,
-  overlay: null,            // 'build' | 'lesson' while one of those screens is open
+  overlay: null,            // 'build' while the hero builder is open
 };
 window.__FR = app;   // for the console and tools/e2e.mjs
 
@@ -91,7 +89,6 @@ $('lnk-credits').onclick = (e) => {
     Creative Commons Attribution 4.0 International License, available at
     <a href="https://creativecommons.org/licenses/by/4.0/legalcode" target="_blank" rel="noopener">https://creativecommons.org/licenses/by/4.0/legalcode</a>.</p>`);
 };
-$('btn-lesson-home').onclick = () => { app.overlay = 'lesson'; openLesson(() => { app.overlay = null; app.S ? render() : show('home'); }); };
 
 // ---------------------------------------------------------- sessions ----
 async function startHosting({ name, online, fresh }) {
@@ -294,15 +291,11 @@ function renderLobby(S) {
       <span class="who">${esc(s.name)}${s.pid === app.me ? ' <span class="dim">(you)</span>' : ''}${s.host ? ' 👑' : ''}</span>${hero}</li>`;
   }).join('');
 
-  const lessonDone = ls.get(LESSON_DONE);
   const full = S.party.filter((p) => p.controller).length >= 4 && !me?.spec;
   $('lobby-chapters').innerHTML = `
-    <div class="chcard ${lessonDone ? 'done' : ''}"><div><span class="kicker">Chapter 0</span><b>Rolling the d20</b><span class="sub">Two minutes, on your own phone, while friends join.</span></div>
-      <button class="btn small ${lessonDone ? '' : 'primary'}" id="btn-lesson">${lessonDone ? 'Again' : 'Start'}</button></div>
-    <div class="chcard ${me?.spec ? 'done' : ''}"><div><span class="kicker">Chapter 1</span><b>Making your hero</b>
-      ${me?.spec ? heroSummary(me.spec, me.spec.name || me.name) : `<span class="sub">${full ? 'The party already has four heroes. You can watch, or step in later.' : 'Class, background, species and ability scores, one step at a time.'}</span>`}</div>
-      <div class="col">${me?.spec ? '<button class="btn small" id="btn-edit">Edit</button><button class="btn small ghost" id="btn-mysheet">Sheet</button>' : full ? '' : '<button class="btn small primary" id="btn-build">Build</button>'}</div></div>`;
-  if ($('btn-lesson')) $('btn-lesson').onclick = () => { app.overlay = 'lesson'; openLesson(() => { app.overlay = null; render(); }); };
+    <div class="chcard ${me?.spec ? 'done' : ''}"><div>
+      ${me?.spec ? heroSummary(me.spec, me.spec.name || me.name) : `<b>No hero yet</b><span class="sub">${full ? 'The party already has four heroes. You can watch.' : 'Pick a class, background and species, and place your ability scores.'}</span>`}</div>
+      <div class="col">${me?.spec ? '<button class="btn small" id="btn-edit">Edit</button><button class="btn small ghost" id="btn-mysheet">Sheet</button>' : full ? '' : '<button class="btn small primary" id="btn-build">Create hero</button>'}</div></div>`;
   if ($('btn-build')) $('btn-build').onclick = () => buildMine(null);
   if ($('btn-edit')) $('btn-edit').onclick = () => buildMine(me.spec);
   if ($('btn-mysheet')) $('btn-mysheet').onclick = () => openSheet(sheetHtml(buildHero(me.spec, { name: me.spec.name || me.name })));
@@ -374,6 +367,8 @@ function doMove(x, y) {
   app.preview = null;
 }
 const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; };
+// Test hook: play one step of my turn the way an AI companion would.
+app.auto = () => { if (myTurn()) act(aiNext(app.S.battle, myHeroId()) || { a: 'end' }); };
 
 function renderBattle(S) {
   const b = S.battle;
@@ -396,17 +391,15 @@ function renderBattle(S) {
     return `<span class="${id === cur?.id ? 'cur' : ''} ${out ? 'out' : ''}" style="${colors[id] ? `border-color:${colors[id]}` : ''}">${c.emoji} ${esc(c.name)}</span>`;
   }).join('');
 
-  const tip = mt ? coach(b, mine) : null;
   board.render({
     b, colors, curId: cur?.id, mine,
     reach: mt && !app.target ? reachableSquares(b, mine) : [],
     preview: mt ? app.preview : null,
     target: mt ? app.target : null,
     cone: mt && app.target ? coneFor(b, b.creatures[mine], b.creatures[app.target]) : null,
-    suggest: tip?.intent.a === 'move' && !app.preview ? tip.intent : null,
   });
 
-  renderPanel(S, b, mine, mt, tip);
+  renderPanel(S, b, mine, mt);
   renderLog(b);
   renderReact(S, b);
   renderOver(S, b);
@@ -420,13 +413,13 @@ function coneFor(b, me, T) {
   return { x: T.x, y: T.y };
 }
 
-function renderPanel(S, b, mine, mt, tip) {
+function renderPanel(S, b, mine, mt) {
   const P = $('panel');
   if (b.over) { P.innerHTML = ''; return; }
   if (!mt) {
     let text;
     if (b.pending && S.reactor === app.me) text = 'Your Reaction: decide below.';
-    else if (b.pending) text = `${esc(b.creatures[b.pending.reactor].name)} is deciding on an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>…`;
+    else if (b.pending) text = `${esc(b.creatures[b.pending.reactor].name)} is deciding on an Opportunity Attack…`;
     else if (!mine) text = "You're watching. Tap a token to see its sheet.";
     else text = `Waiting for ${esc(b.creatures[b.order[b.idx]]?.name)}… Tap a square to ping it for your party.`;
     P.innerHTML = `<div class="waiting">${text}</div>`;
@@ -434,22 +427,17 @@ function renderPanel(S, b, mine, mt, tip) {
   }
   const me = b.creatures[mine];
   const t = b.turn;
-  const chip = (on, label, rule) => `<span class="chip ${on ? '' : 'used'}"><a data-rule="${rule}">${label}</a></span>`;
+  const chip = (on, label, rule) => `<span class="chip ${on ? '' : 'used'}">${label}</span>`;
   let html = `<div class="budget">
     ${chip(canAttack(t), 'Action', 'your-turn')}${chip(t.bonus, 'Bonus Action', 'your-turn')}
     ${chip(me.reaction, 'Reaction', 'opportunity-attack')}${chip(t.moveLeft >= 5, `Move ${t.moveLeft} ft`, 'movement')}
-    ${me.casting?.slots ? `<span class="chip"><a data-rule="spell-slots">Slots ${'●'.repeat(me.casting.slots.left)}${'○'.repeat(me.casting.slots.max - me.casting.slots.left)}</a></span>` : ''}
-    ${me.tempHp ? `<span class="chip"><a data-rule="temp-hp">+${me.tempHp} temp HP</a></span>` : ''}</div>`;
-  if (tip?.text && !app.target && !app.preview) {
-    html += `<div class="coachline">💡 <span>${esc(tip.text)}</span><button class="btn" id="btn-coach">Do it</button></div>`;
-  }
+    ${me.casting?.slots ? `<span class="chip">Slots ${'●'.repeat(me.casting.slots.left)}${'○'.repeat(me.casting.slots.max - me.casting.slots.left)}</span>` : ''}
+    ${me.tempHp ? `<span class="chip">+${me.tempHp} temp HP</span>` : ''}</div>`;
   if (app.target) html += targetCard(b, me, b.creatures[app.target]);
   else if (app.preview) {
     const oa = app.preview.oas.map((id) => esc(b.creatures[id].name)).join(' and ');
-    html += `<div class="preview"><span>Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>.</b>` : ''} Tap the square again or</span>
+    html += `<div class="preview"><span>Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an Opportunity Attack.</b>` : ''} Tap the square again or</span>
       <button class="btn primary" id="btn-move">Move</button><button class="btn ghost" id="btn-cancel">✕</button></div>`;
-  } else if (me.casting || me.breath) {
-    html += '<div class="hint">Tap an enemy for attacks and spells, an ally (or yourself) for healing.</div>';
   }
   const extra = [];
   if (me.secondWind) extra.push(`<button class="btn" data-act="second-wind" ${t.bonus && me.secondWind.uses ? '' : 'disabled'}>Second Wind (${me.secondWind.uses})</button>`);
@@ -463,7 +451,6 @@ function renderPanel(S, b, mine, mt, tip) {
   P.innerHTML = html;
   for (const btn of P.querySelectorAll('[data-act]')) btn.onclick = () => act({ a: btn.dataset.act });
   for (const btn of P.querySelectorAll('[data-intent]')) btn.onclick = () => act(JSON.parse(btn.dataset.intent));
-  if ($('btn-coach')) $('btn-coach').onclick = () => act(tip.intent);
   if ($('btn-move')) $('btn-move').onclick = () => { const e = app.preview.path[app.preview.path.length - 1]; doMove(e.x, e.y); };
   if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; renderBattle(app.S); };
   if ($('btn-tx')) $('btn-tx').onclick = () => { app.target = null; renderBattle(app.S); };
@@ -472,9 +459,9 @@ function renderPanel(S, b, mine, mt, tip) {
 
 const reasons = (o) => {
   const bits = [];
-  if (o.mode === 'advantage') bits.push(`<b class="good">Advantage</b>: ${o.adv.map((a) => `<a class="rl" data-rule="${a.rule}">${esc(a.text)}</a>`).join(', ')}`);
-  if (o.mode === 'disadvantage') bits.push(`<b class="bad">Disadvantage</b>: ${o.dis.map((a) => `<a class="rl" data-rule="${a.rule}">${esc(a.text)}</a>`).join(', ')}`);
-  if (o.adv.length && o.dis.length) bits.push('<a class="rl" data-rule="advantage">Advantage and Disadvantage cancel</a>');
+  if (o.mode === 'advantage') bits.push(`<b class="good">Advantage</b>: ${o.adv.map((a) => `${esc(a.text)}`).join(', ')}`);
+  if (o.mode === 'disadvantage') bits.push(`<b class="bad">Disadvantage</b>: ${o.dis.map((a) => `${esc(a.text)}`).join(', ')}`);
+  if (o.adv.length && o.dis.length) bits.push('Advantage and Disadvantage cancel');
   return bits;
 };
 const intentAttr = (i) => `data-intent='${esc(JSON.stringify(i))}'`;
@@ -484,9 +471,9 @@ const row = (label, intent, ok, why, primary = true) =>
 function spellCost(b, me, sid) {
   const s = SPELLS[sid];
   const c = canCast(b, me, sid);
-  if (s.level === 0) return { c, tag: '<a class="rl" data-rule="cantrips">cantrip</a>' };
-  if (c.pay === 'free') return { c, tag: '<a class="rl" data-rule="magic-initiate">free cast</a>' };
-  return { c, tag: `<a class="rl" data-rule="spell-slots">spell slot</a>${s.time === 'bonus' ? ', <b>Bonus Action</b>' : ''}` };
+  if (s.level === 0) return { c, tag: 'cantrip' };
+  if (c.pay === 'free') return { c, tag: 'free cast' };
+  return { c, tag: `spell slot${s.time === 'bonus' ? ', <b>Bonus Action</b>' : ''}` };
 }
 
 function targetCard(b, me, T) {
@@ -505,7 +492,7 @@ function targetCard(b, me, T) {
     }
     if (!self && T.hp <= 0 && !T.dead && !T.stable) {
       rows += row('Stabilize', { a: 'stabilize', target: T.id }, t.action && cheb(me, T) <= 1,
-        cheb(me, T) <= 1 ? `<a class="rl" data-rule="stabilize">Help action</a>: DC 10 Wisdom (Medicine) check, you have ${signed(me.skills.medicine)}.` : 'Move next to them first.');
+        cheb(me, T) <= 1 ? `Help action: DC 10 Wisdom (Medicine) check, you have ${signed(me.skills.medicine)}.` : 'Move next to them first.');
     }
     if (!rows) rows = `<div class="why dim">${self ? 'Nothing to do on yourself right now.' : `${esc(T.name)} is fine.`}</div>`;
     rows += `<div class="opt"><button class="btn small ghost" id="btn-tinfo">${self ? 'My character sheet' : 'Character sheet'}</button></div>`;
@@ -513,8 +500,8 @@ function targetCard(b, me, T) {
     for (const o of attackOptions(b, me, T)) {
       const flat = o.atk.dmgFlat.reduce((s, x) => s + x.value, 0);
       const bits = [`${Math.round(o.p * 100)}% to hit`, `${o.atk.dice}${signed(flat)} ${o.atk.type}`, ...reasons(o)];
-      if (o.sneak) bits.push(`<b class="good">+${me.sneak} <a class="rl" data-rule="sneak-attack">Sneak Attack</a></b>`);
-      if (o.atk.mastery) bits.push(`<a class="rl" data-rule="${MASTERIES[o.atk.mastery].rule}">${MASTERIES[o.atk.mastery].name}</a>`);
+      if (o.sneak) bits.push(`<b class="good">+${me.sneak} Sneak Attack</b>`);
+      if (o.atk.mastery) bits.push(`${MASTERIES[o.atk.mastery].name}`);
       const why = o.ok ? bits.join(' · ') : `Out of ${o.atk.kind === 'melee' ? 'reach: move next to it first' : 'range'}.`;
       rows += row(o.atk.name, { a: 'attack', target: T.id, attack: o.atk.id }, o.ok && canAttack(t), why);
     }
@@ -550,10 +537,10 @@ function targetCard(b, me, T) {
       const ok = me.breath.uses > 0 && canAttack(t) && hit.some((x) => x.side !== me.side);
       const dc = me.breath.dc.reduce((s, p) => s + p.value, 0);
       rows += row(`Breath Weapon (${me.breath.uses})`, { a: 'breath', x: T.x, y: T.y }, ok,
-        `<a class="rl" data-rule="breath-weapon">Replaces an attack</a>: 15-ft Cone, catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody (get within 15 feet)'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''} · DC ${dc} DEX save, ${me.breath.dice} ${me.breath.type}`);
+        `Replaces an attack: 15-ft Cone, catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody (get within 15 feet)'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''} · DC ${dc} DEX save, ${me.breath.dice} ${me.breath.type}`);
     }
     if (cheb(me, T) <= 1) {
-      rows += row('Help', { a: 'help', target: T.id }, t.action, `<a class="rl" data-rule="help">Help action</a>: your ally's next attack on ${esc(T.name)} gets Advantage.`, false);
+      rows += row('Help', { a: 'help', target: T.id }, t.action, `Help action: your ally's next attack on ${esc(T.name)} gets Advantage.`, false);
     }
     if (!canAttack(t)) rows += '<div class="why dim">You have already used your action this turn.</div>';
   }
@@ -587,7 +574,7 @@ function renderReact(S, b) {
   app.reactUntil = Date.now() + S.reactIn;
   const opt = attackOptions(b, R, M).filter((o) => o.atk.kind === 'melee').sort((p, q) => q.expected - p.expected)[0];
   el.innerHTML = `<h3>⚡ Reaction!</h3>
-    <p>${esc(M.name)} is leaving your reach. Use your Reaction for an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>
+    <p>${esc(M.name)} is leaving your reach. Use your Reaction for an Opportunity Attack
     with your ${esc(opt.atk.name)} (${Math.round(opt.p * 100)}% to hit)?</p>
     <div class="row"><button class="btn primary" id="btn-react-yes">Attack!</button><button class="btn" id="btn-react-no">Let it go</button></div>
     <div class="timer" id="react-timer"></div>`;
@@ -612,15 +599,15 @@ function renderOver(S, b) {
   if (el.dataset.dismissed === String(b.seq)) return;
   if (!el.classList.contains('hidden') && el.dataset.seq === String(b.seq)) return;
   el.dataset.seq = String(b.seq);
-  const rules = rulesSeen(b.log).map((k) => `<a class="chip rl" data-rule="${k}">${esc(GLOSSARY[k].title)}</a>`).join('');
+  const foes = Object.values(b.creatures).filter((c) => c.side === 'foe');
+  const fallen = Object.values(b.creatures).filter((c) => c.side === 'hero' && c.hp <= 0);
   const win = b.over === 'victory';
   const sc = SCENES[S.battleScene];
   const hostBtns = win ? '<button class="btn primary wide" id="btn-cont">Continue the story</button>'
     : '<button class="btn primary wide" id="btn-retry">Try the fight again</button><button class="btn wide" id="btn-lobby">Back to the lobby</button>';
   el.innerHTML = `<div class="card"><div class="logo">${win ? '🏆' : '💀'}</div><h2>${win ? 'Victory!' : 'Defeat'}</h2>
     <p class="dim">${esc(sc?.title || 'The fight')}: ${win ? 'won' : 'lost'} after ${b.round} round${b.round === 1 ? '' : 's'}.${win ? '' : ' Everyone gets back up for another try.'}</p>
-    <h4 class="kicker">Rules you used: tap one to read it again</h4>
-    <div class="chips">${rules}</div>
+    <p>${foes.filter((c) => c.dead).length} of ${foes.length} foes defeated${fallen.length ? ` · ${fallen.map((c) => esc(c.name)).join(', ')} down` : ''}.</p>
     ${isHost() ? hostBtns : '<p class="dim">Waiting for the host…</p>'}
     <button class="btn ghost wide" id="btn-over-log">See the combat log</button></div>`;
   el.classList.remove('hidden');

@@ -170,9 +170,6 @@ input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
 .chip { font-size: 12px; font-weight: 800; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); }
 .chip.used { opacity: .35; text-decoration: line-through; }
 .chip a { color: inherit; text-decoration: none; }
-.coachline { display: flex; gap: 8px; align-items: center; background: rgba(240, 181, 74, .1); border: 1px solid rgba(240, 181, 74, .35); border-radius: 12px; padding: 7px 10px; font-size: 13px; }
-.coachline span { flex: 1; }
-.coachline .btn { padding: 7px 10px; font-size: 12px; }
 .btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .btns .btn { padding: 10px 4px; font-size: 13px; }
 .btns .btn.end { background: #3a3150; }
@@ -240,7 +237,7 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 .dots i.on { background: var(--gold); }
 .footbar { position: sticky; bottom: 0; display: flex; gap: 10px; padding: 10px 16px calc(10px + var(--safe-b)); background: rgba(21, 17, 29, .96); border-top: 1px solid var(--line); max-width: 520px; margin: 0 auto; }
 .footbar .btn { flex: 1; }
-#scr-build .panel, #scr-lesson .panel, #scr-story .panel { padding-bottom: 20px; }
+#scr-build .panel, #scr-story .panel { padding-bottom: 20px; }
 .pick { display: flex; gap: 12px; width: 100%; text-align: left; background: var(--panel); border: 2px solid var(--line); border-radius: 16px; padding: 12px; margin: 8px 0; color: var(--ink); font: inherit; cursor: pointer; }
 .pick.on { border-color: var(--gold); background: #2b2338; }
 .pick .em { font-size: 30px; line-height: 1; }
@@ -275,10 +272,6 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 .pchip { background: var(--panel); border: 2px solid var(--line); border-radius: 999px; padding: 6px 12px; color: var(--ink); font: 600 13px/1.2 inherit; font-family: inherit; cursor: pointer; }
 .host-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .host-label { color: var(--dim); font-size: 13px; }
-.bigroll { font-size: 26px; text-align: center; margin: 14px 0 6px; }
-.bigroll b { font-size: 40px; color: var(--gold); }
-.lesson-out { min-height: 110px; text-align: center; }
-.lesson-btns .btn { flex: 1; }
 .scene-title { font-size: 26px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 2px 0 10px; }
 .story { font-size: 16px; line-height: 1.6; margin: 0 0 12px; }
 .choices { display: grid; gap: 8px; margin: 16px 0 6px; }
@@ -303,7 +296,6 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 .joinbar { background: var(--panel); border: 1px dashed var(--gold); border-radius: 12px; padding: 8px 10px; margin-bottom: 12px; display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 14px; }
 .toast-float { position: fixed; left: 12px; right: 12px; bottom: calc(12px + var(--safe-b)); z-index: 15; pointer-events: none; }
 .toast-float .toast { pointer-events: auto; }
-.hint { color: var(--mute); font-size: 12px; text-align: center; }
 .btns.two { grid-template-columns: 1fr 1fr; }
 .target.ally { border-color: var(--good); }
 .board .cone { fill: rgba(255, 138, 101, .22); stroke: #ff8a65; stroke-width: .03; }
@@ -316,7 +308,7 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
   <div class="panel narrow">
     <div class="logo">🎲</div>
     <h1>First Roll</h1>
-    <p class="tag">Learn the 2024 fifth-edition rules by playing them with friends.</p>
+    <p class="tag">A co-op, turn-based fantasy RPG on the 2024 fifth-edition rules.</p>
 
     <label class="fld">Your name
       <input id="in-name" maxlength="20" autocomplete="nickname" placeholder="Name">
@@ -338,8 +330,7 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
       <button id="btn-join" class="btn">Join</button>
     </div>
     <p id="home-msg" class="msg"></p>
-    <button id="btn-lesson-home" class="btn ghost small">New to the d20? Try the dice lesson</button>
-    <p class="fine">Early access: chapters 0 to 3. Play solo with AI companions, or co-op with up to 4 friends.
+    <p class="fine">Early access: two chapters. Play solo with AI companions, or co-op with up to 4 friends.
       Rules from the SRD 5.2.1 (CC-BY-4.0). <a href="#" id="lnk-credits">Credits</a></p>
   </div>
 </section>
@@ -359,13 +350,13 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
     </div>
     <h2>Who's here</h2>
     <ul id="seat-list" class="seats"></ul>
-    <h2>Before you set out</h2>
+    <h2>Your hero</h2>
     <div id="lobby-chapters" class="chapters"></div>
     <h2>The party</h2>
     <div id="party-list" class="party-strip"></div>
     <div id="companions-row" class="host-row"></div>
     <p class="note">AI companions fill out the party. On Auto there are always at least three heroes; fights scale to the party's size.</p>
-    <button id="btn-start" class="btn primary wide">Set out: Chapter 2</button>
+    <button id="btn-start" class="btn primary wide">Set out</button>
     <p id="lobby-wait" class="msg hidden">Waiting for the host to start…</p>
     <button id="btn-leave" class="btn ghost small">Leave</button>
   </div>
@@ -375,12 +366,6 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 <section id="scr-build" class="screen">
   <div class="panel"><div id="build-body"></div></div>
   <div class="footbar"><button id="build-back" class="btn">Back</button><button id="build-next" class="btn primary">Next</button></div>
-</section>
-
-<!-- ============================================================== lesson -->
-<section id="scr-lesson" class="screen">
-  <div class="panel"><div id="lesson-body"></div></div>
-  <div class="footbar"><button id="lesson-back" class="btn">Back</button><button id="lesson-next" class="btn primary">Next</button></div>
 </section>
 
 <!-- =============================================================== story -->
@@ -1863,7 +1848,7 @@ return { signed, enemiesOf, alliesOf, createBattle, current, modeFrom, rollD20, 
 
 /* ===== src/rules/ai.js ===== */
 __mods["src/rules/ai.js"] = (() => {
-// Decision-making for monsters, AI companions and the Coach. aiNext returns
+// Decision-making for monsters and AI companions. aiNext returns
 // one intent at a time; it plays by exactly the same rules as a person
 // because its intents go through combat.perform like anyone else's.
 //
@@ -2116,74 +2101,24 @@ function aiNext(b, id) {
   return { a: 'end' };
 }
 
-// The Coach: the same choice, explained in plain words for a player.
-function coach(b, id) {
-  const intent = aiNext(b, id);
-  if (!intent) return null;
-  const me = b.creatures[id];
-  const T = intent.target ? b.creatures[intent.target] : null;
-  let text;
-  switch (intent.a) {
-    case 'attack': {
-      const o = attackOptions(b, me, T).find((x) => x.atk.id === intent.attack);
-      const pct = Math.round(o.p * 100);
-      text = `Attack ${T.name} with your ${o.atk.name}: ${pct}% to hit`;
-      if (o.mode === 'advantage') text += ', with Advantage';
-      if (o.mode === 'disadvantage') text += ', but with Disadvantage';
-      if (o.sneak) text += ', and Sneak Attack applies';
-      text += '.';
-      break;
-    }
-    case 'cast': {
-      const s = SPELLS[intent.spell];
-      const o = specialOptions(b, me).find((x) => x.intent.spell === intent.spell && x.intent.target === intent.target && x.intent.x === intent.x);
-      const lvl = s.level === 0 ? 'a cantrip, free to cast' : canCast(b, me, intent.spell).pay === 'free' ? 'your free Magic Initiate cast' : 'uses a spell slot';
-      if (s.kind === 'heal') text = `${T.name} needs help: cast ${s.name} (${lvl}${s.time === 'bonus' ? ', a Bonus Action' : ''}).`;
-      else if (s.kind === 'stabilize') text = `${T.name} is dying! Cast ${s.name} to make them Stable (${lvl}).`;
-      else if (s.kind === 'cone') text = `Cast ${s.name} at the group: it catches ${o?.why.foes.map((c) => c.name).join(' and ')} (${lvl}).`;
-      else if (s.kind === 'save') text = `Cast ${s.name} on ${T.name}: it must beat DC ${o?.why.dc} on a ${s.save.toUpperCase()} save, so ${Math.round((o?.why.pFail || 0) * 100)}% it takes damage (${lvl}).`;
-      else if (s.kind === 'missile') text = `Cast ${s.name} at ${T.name}: it never misses (${lvl}).`;
-      else text = `Cast ${s.name} at ${T.name}: ${Math.round((o?.why.p || 0) * 100)}% to hit (${lvl}).`;
-      break;
-    }
-    case 'breath': text = 'Use your Breath Weapon: it replaces one attack and catches everything in the cone.'; break;
-    case 'move': {
-      const near = enemiesOf(b, me).filter((e) => !incap(e)).sort((p, q) => cheb(p, intent) - cheb(q, intent))[0];
-      const pv = previewMove(b, id, intent.x, intent.y);
-      text = near && cheb(near, intent) <= 1 ? `Move next to ${near.name} (${pv?.feet ?? '?'} ft).` : `Move to the marked square (${pv?.feet ?? '?'} ft).`;
-      if (me.ai === 'skirmisher' && near) text += ' A friend is next to it, so Sneak Attack will work.';
-      break;
-    }
-    case 'second-wind': text = "You're badly hurt: use Second Wind (Bonus Action) to heal."; break;
-    case 'stabilize': text = `${T.name} is dying! Use your action to stabilize them (DC 10 Medicine).`; break;
-    case 'nimble': text = 'Disengage, then move away.'; break;
-    case 'dash': text = 'Dash to cover more ground.'; break;
-    case 'end': text = "You've done what you can: end your turn."; break;
-    default: text = '';
-  }
-  return { intent, text };
-}
 
 
-
-return { onBoard, key, pathFrom, specialOptions, aiNext, coach };
+return { onBoard, key, pathFrom, specialOptions, aiNext };
 })();
 
 /* ===== src/game/campaign.js ===== */
 __mods["src/game/campaign.js"] = (() => {
-// The campaign: scenes for chapters 2 and 3 (chapter 0, the dice lesson, and
-// chapter 1, making your hero, happen in the lobby). Scene kinds:
+// The campaign: scenes for chapters 1 and 2. Scene kinds:
 //   story  text + choices the party votes on
 //   check  text + a skill check; success and failure lead on with flags
 //   fight  an encounter from encounters.js; victory goes to `next`
 //   end    the end of what's built so far
-// `lesson` lines are the rules the scene teaches, shown beside the story.
 
 const { defaultSpec } = __mods["src/rules/character.js"];
 
 const CHAPTERS = {
-  2: { title: 'Your First Fight', teaches: ['initiative', 'your-turn', 'attack-roll', 'damage'] },
-  3: { title: 'Weapon Mastery and Teamwork', teaches: ['weapon-mastery', 'help', 'multiattack', 'group-check'] },
+  1: { title: 'The Flour Road' },
+  2: { title: 'The Goblin Camp' },
 };
 
 // AI companions fill empty seats. Each has a fixed build.
@@ -2198,7 +2133,7 @@ const FIRST_SCENE = 'c2-mill';
 
 const SCENES = {
   'c2-mill': {
-    chapter: 2, kind: 'story', title: 'The Mill at Dunmarket',
+    chapter: 1, kind: 'story', title: 'The Mill at Dunmarket',
     text: [
       "Agnes Pell runs the mill on the edge of Dunmarket, and she is two flour carts short. Goblins took them on the road to market, one last week and one three days ago, mules and all.",
       'She drops a purse of silver on a barrel. "Twelve silver each if tomorrow\'s cart reaches the market square before the noon bell. The bakers buy from whoever gets there first. If it isn\'t me again, I\'m finished."',
@@ -2208,10 +2143,9 @@ const SCENES = {
       { id: 'woods', label: "Cut through Hagger Woods. It's faster, but it's where both carts were taken.", next: 'c2-woods' },
       { id: 'river', label: 'Take the river road. It adds an hour, but it runs through open country.', next: 'c2-river' },
     ],
-    lesson: "The party decides together. Everyone with a hero votes; if it's a tie, the host's vote wins.",
   },
   'c2-woods': {
-    chapter: 2, kind: 'check', title: 'Hagger Woods',
+    chapter: 1, kind: 'check', title: 'Hagger Woods',
     text: [
       'The road through Hagger Woods narrows until the cart scrapes bark on both sides. Biscuit keeps stopping with his ears up. Ahead of you a branch cracks, louder than any bird could make it.',
       'Somebody needs to look hard at those trees before you roll the cart past them.',
@@ -2225,10 +2159,9 @@ const SCENES = {
       text: 'You see leaves and more leaves until an arrow thunks into the cart a hand\'s width from your fingers. Goblins come shrieking out of the brambles.',
       next: 'c2-fight', flags: { surprise: 'heroes' },
     },
-    lesson: 'An ability check: roll a d20 and add the skill modifier. Meet the Difficulty Class (DC) to succeed. A friend who is proficient in the skill can Help, which gives Advantage.',
   },
   'c2-river': {
-    chapter: 2, kind: 'story', title: 'The River Road',
+    chapter: 1, kind: 'story', title: 'The River Road',
     text: [
       'The river road is wide and muddy, and the extra hour feels like three. Near the old ford, the reeds part and small figures with rusty blades step onto the road between you and Dunmarket.',
       "They want the flour. The biggest one points at Biscuit and licks its lips, and you're fairly sure it means the mule too.",
@@ -2236,20 +2169,18 @@ const SCENES = {
     choices: [{ id: 'fight', label: 'Draw your weapons.', next: 'c2-fight' }],
   },
   'c2-fight': {
-    chapter: 2, kind: 'fight', title: 'Goblin Ambush', encounter: 'road', next: 'c2-after',
-    lesson: 'Your first fight. On your turn you can move and take one action, usually an attack. Tap a goblin to see your chance to hit, and tap any roll to see why it came out that way.',
+    chapter: 1, kind: 'fight', title: 'Goblin Ambush', encounter: 'road', next: 'c2-after',
   },
   'c2-after': {
-    chapter: 2, kind: 'story', title: 'Spilled Flour',
+    chapter: 1, kind: 'story', title: 'Spilled Flour',
     text: [
       'When the last goblin falls, Biscuit goes back to eating his sack. In the mud where the fight was, you find an empty flour bag stamped AGNES PELL in blue ink. It came off one of the stolen carts.',
       'A line of spilled flour runs off the road and up into the hills, white on the dark ground and easy to follow. If her flour is up there, Agnes could have three carts at market tomorrow instead of one.',
     ],
     choices: [{ id: 'follow', label: 'Follow the flour into the hills.', next: 'c3-camp' }],
-    lesson: 'Chapter 2 done: you rolled Initiative, took turns, and made attack rolls. Next: teamwork.',
   },
   'c3-camp': {
-    chapter: 3, kind: 'story', title: 'The Goblin Camp',
+    chapter: 2, kind: 'story', title: 'The Goblin Camp',
     text: [
       "The flour trail climbs into a ravine and ends at a goblin camp: a ring of hide tents, a smoky cookfire, and both of Agnes's stolen carts with the sacks still piled in the back.",
       "A goblin in a dented helmet two sizes too big is shouting at the others to hurry up and eat. That's the boss. It has a scimitar on its belt and a bow across its back.",
@@ -2258,10 +2189,9 @@ const SCENES = {
       { id: 'sneak', label: 'Creep up together. (Everyone makes a Stealth check.)', next: 'c3-sneak' },
       { id: 'demand', label: 'Walk straight in and order them to hand it back. (One hero makes an Intimidation check.)', next: 'c3-demand' },
     ],
-    lesson: 'Different plans need different skills. Check who in the party is good at what: tap a hero to see their sheet.',
   },
   'c3-sneak': {
-    chapter: 3, kind: 'check', title: 'Creeping Up',
+    chapter: 2, kind: 'check', title: 'Creeping Up',
     text: ['You spread out and pick your way down the ravine, one careful step at a time, toward the edge of the firelight.'],
     check: { skill: 'stealth', dc: 12, mode: 'group', prompt: 'Everyone rolls Stealth.' },
     success: {
@@ -2272,10 +2202,9 @@ const SCENES = {
       text: 'Somebody kicks a loose stone. It clatters all the way down to the cookfire, and every goblin in camp grabs a weapon.',
       next: 'c3-fight', flags: {},
     },
-    lesson: 'A group check: everyone rolls, and the group succeeds if at least half of you do. The sneaky can carry the clumsy.',
   },
   'c3-demand': {
-    chapter: 3, kind: 'check', title: 'Making Demands',
+    chapter: 2, kind: 'check', title: 'Making Demands',
     text: ['You stride into the firelight. Every goblin freezes with its spoon halfway to its mouth. One of you steps forward to do the talking.'],
     check: { skill: 'intimidation', dc: 13, mode: 'single', prompt: 'Who does the talking?' },
     success: {
@@ -2286,19 +2215,16 @@ const SCENES = {
       text: 'The boss bangs its helmet with a ladle and laughs. Goblins pour out of every tent, and the first arrows are already in the air.',
       next: 'c3-fight', flags: { surprise: 'heroes' },
     },
-    lesson: 'Intimidation is a Charisma check. Proficiency makes a big difference: compare your party\'s modifiers before you pick.',
   },
   'c3-fight': {
-    chapter: 3, kind: 'fight', title: 'The Goblin Boss', encounter: 'camp', next: 'c3-end',
-    lesson: 'Teamwork. Weapon Mastery adds an effect to each hit, Help gives a friend Advantage, and healing keeps people standing. Watch the Boss: it attacks twice, and it can pull a goblin in front of itself.',
+    chapter: 2, kind: 'fight', title: 'The Goblin Boss', encounter: 'camp', next: 'c3-end',
   },
   'c3-end': {
-    chapter: 3, kind: 'end', title: 'Market Day',
+    chapter: 2, kind: 'end', title: 'Market Day',
     text: [
       "The Goblin Boss's helmet rolls into the cookfire, and the rest of the morning is hauling. You hitch the stolen carts behind Biscuit's and get down the hill as the noon bell starts to ring.",
       "Agnes Pell is standing in the market square with her arms folded. When she counts three carts instead of one, she unfolds them. She pays the twelve silver each, then adds a second purse for the flour you brought back.",
     ],
-    lesson: "That's the end of the early-access chapters. Coming next: positioning, skills, magic in depth, conditions, and resting.",
   },
 };
 
@@ -3619,17 +3545,15 @@ return { ruleLink, sheetHtml };
 
 /* ===== src/ui/builder.js ===== */
 __mods["src/ui/builder.js"] = (() => {
-// Chapter 1: Making your hero. A six-step builder that teaches the 2024
-// character-creation order: class, background, species, ability scores,
-// the background's increases, then a name and the finished sheet. Every
-// step starts on a sensible recommendation, so "Next" all the way works.
+// Hero creation, in the 2024 order: class, background, species, ability
+// scores, the background's increases, then a name and the finished sheet.
+// Every step starts on a sensible pick, so "Next" all the way works.
 
 const { CLASSES, BACKGROUNDS, SPECIES, FEATS, SKILL_NAMES, ABILITIES, ABILITY_NAMES, STANDARD_ARRAY, DRAGON_ANCESTRY, abilityMod, signed } = __mods["src/rules/data.js"];
 const { buildHero, defaultSpec, suggestPlus, validateSpec, DEFAULT_BACKGROUND } = __mods["src/rules/character.js"];
-const { GLOSSARY } = __mods["src/rules/glossary.js"];
 const { $, show } = __mods["src/ui/dom.js"];
 const { esc } = __mods["src/ui/explain.js"];
-const { sheetHtml, ruleLink: R } = __mods["src/ui/sheet.js"];
+const { sheetHtml } = __mods["src/ui/sheet.js"];
 
 const ABILITY_USES = {
   str: 'Melee attacks, Athletics', dex: 'AC, ranged and Finesse attacks, Stealth, Initiative',
@@ -3672,13 +3596,13 @@ function openBuilder({ spec = null, playerName = '', onDone, onCancel }) {
   }
 
   const views = {
-    class: () => `<p class="lead">Your class is what you do in a fight. You can change anything later.</p>
+    class: () => `
       ${Object.entries(CLASSES).map(([id, c]) => card({
         on: d.cls === id, emoji: c.emoji, title: `${c.name} · ${c.role}`,
         sub: `d${c.hitDie} Hit Die · main ability ${ABILITY_NAMES[c.primary]}${c.spellcasting ? ' · casts spells' : ''}`,
         body: `<span>${esc(c.blurb)}</span><span class="dim">${esc(c.plays)}</span>`, attr: `data-cls="${id}"`,
       })).join('')}`,
-    background: () => `<p class="lead">What did your hero do before adventuring? In the 2024 rules your background gives your ability increases, an ${R('alert', 'Origin feat')} and two skills.</p>
+    background: () => `<p class="lead">Your background raises three abilities and gives you an Origin feat and two skills.</p>
       ${Object.entries(BACKGROUNDS).map(([id, b]) => {
         const f = FEATS[b.feat];
         return card({
@@ -3689,7 +3613,7 @@ function openBuilder({ spec = null, playerName = '', onDone, onCancel }) {
           attr: `data-bg="${id}"`,
         });
       }).join('')}`,
-    species: () => `<p class="lead">Your species gives you traits. In the 2024 rules it doesn't change your ability scores, so pick whatever you like the sound of.</p>
+    species: () => `
       ${Object.entries(SPECIES).map(([id, s]) => card({
         on: d.species === id, emoji: s.emoji, title: s.name, sub: `Speed ${s.speed} ft`,
         body: `<span>${s.traits.slice(0, 3).map((t) => `<b>${esc(t.name)}</b>: ${esc(t.text)}`).join('<br>')}</span>`,
@@ -3704,7 +3628,7 @@ function openBuilder({ spec = null, playerName = '', onDone, onCancel }) {
         <div class="scores">${ABILITIES.map((a) => `<div class="srow"><span><b>${ABILITY_NAMES[a]}</b><span class="dim">${ABILITY_USES[a]}</span></span>
           <select data-ab="${a}">${STANDARD_ARRAY.map((v) => `<option ${d.scores[a] === v ? 'selected' : ''}>${v}</option>`).join('')}</select>
           <b class="mod">${signed(abilityMod(d.scores[a]))}</b></div>`).join('')}</div>
-        <p class="note">Picking a number another ability already has swaps the two. The modifier on the right is what you add to rolls: ${R('ability-modifier', 'score − 10, halved, rounded down')}.</p>`;
+        <p class="note">Picking a number another ability already has swaps the two.</p>`;
     },
     plus: () => {
       const b = BACKGROUNDS[d.background];
@@ -3716,7 +3640,7 @@ function openBuilder({ spec = null, playerName = '', onDone, onCancel }) {
           return `<div class="srow"><span><b>${ABILITY_NAMES[a]}</b><span class="dim">${d.scores[a]} → ${d.scores[a] + v} (${signed(abilityMod(d.scores[a] + v))})</span></span>
             ${three ? '<b>+1</b>' : `<span class="seg">${[2, 1, 0].map((n) => `<button data-plus="${a}:${n}" class="${v === n ? 'on' : ''}">+${n}</button>`).join('')}</span>`}</div>`;
         }).join('')}</div>
-        <p class="note">Tip: raising an odd score to an even one bumps its modifier. 15 → 17 gives +3.</p>`;
+        `;
     },
     review: () => {
       let h;
@@ -3728,13 +3652,12 @@ function openBuilder({ spec = null, playerName = '', onDone, onCancel }) {
 
   function render() {
     const st = STEPS[step];
-    const g = st.rule && GLOSSARY[st.rule];
     $('build-body').innerHTML = `
-      <div class="build-head"><span class="kicker">Chapter 1 · Making your hero · step ${step + 1} of ${STEPS.length}</span>
+      <div class="build-head"><span class="kicker">Create your hero · step ${step + 1} of ${STEPS.length}</span>
         <h2 class="bt">${st.title}</h2>
         <div class="dots">${STEPS.map((_, i) => `<i class="${i <= step ? 'on' : ''}"></i>`).join('')}</div></div>
       ${views[st.id]()}
-      ${g ? `<p class="rulebox"><b>${esc(g.title)}.</b> ${esc(g.text)}</p>` : ''}`;
+      `;
     $('build-back').textContent = step ? 'Back' : 'Cancel';
     $('build-next').textContent = step === STEPS.length - 1 ? 'Done: this is my hero' : 'Next';
     bind();
@@ -3799,112 +3722,6 @@ function openBuilder({ spec = null, playerName = '', onDone, onCancel }) {
 return { openBuilder };
 })();
 
-/* ===== src/ui/lesson.js ===== */
-__mods["src/ui/lesson.js"] = (() => {
-// Chapter 0: Rolling the d20. A short hands-on lesson each phone runs on its
-// own while the party gathers. Nothing here touches the room.
-
-const { $, show, ls } = __mods["src/ui/dom.js"];
-const { GLOSSARY } = __mods["src/rules/glossary.js"];
-const { esc } = __mods["src/ui/explain.js"];
-
-const d20 = () => 1 + Math.floor(Math.random() * 20);
-const LESSON_DONE = 'fr.lesson0';
-
-const STEPS = [
-  {
-    title: 'The d20',
-    text: 'Most things that can go wrong in this game come down to one roll of a twenty-sided die: the d20. High is good. Give it a go.',
-    rule: 'd20-test',
-    play: (st) => ({
-      button: 'Roll the d20',
-      roll() { st.r = d20(); },
-      show: () => st.r ? `<div class="bigroll">🎲 <b>${st.r}</b></div><p>${st.r === 20 ? 'A natural 20, the best roll there is!' : st.r === 1 ? 'A natural 1. Ouch.' : st.r >= 11 ? 'That would beat most simple tasks.' : 'Low, but modifiers can help.'}</p>` : '',
-    }),
-  },
-  {
-    title: 'Add your modifier, beat the DC',
-    text: "You're climbing a slippery wall. That's a Strength (Athletics) check against a Difficulty Class (DC) of 12. Your hero is strong and trained, so you add +5. Meet or beat 12 and you're up.",
-    rule: 'ability-checks',
-    play: (st) => ({
-      button: 'Roll Athletics',
-      roll() { st.r = d20(); },
-      show: () => st.r ? `<div class="bigroll">🎲 ${st.r} + 5 = <b>${st.r + 5}</b> vs DC 12</div><p class="${st.r + 5 >= 12 ? 'good' : 'bad'}"><b>${st.r + 5 >= 12 ? 'Success: you haul yourself over the top.' : 'Failure: you slide back down. Maybe a friend can Help.'}</b></p>` : '',
-    }),
-  },
-  {
-    title: 'Advantage and Disadvantage',
-    text: 'When things are on your side you have Advantage: roll two d20s and keep the higher. When they are against you, Disadvantage: keep the lower. Try both.',
-    rule: 'advantage',
-    play: (st) => ({
-      button: 'Roll with Advantage',
-      button2: 'Roll with Disadvantage',
-      roll(which) { st.a = d20(); st.b = d20(); st.mode = which; },
-      show: () => st.a ? `<div class="bigroll">🎲 ${st.a} and ${st.b} → <b>${st.mode === 2 ? Math.min(st.a, st.b) : Math.max(st.a, st.b)}</b></div><p>${st.mode === 2 ? 'Disadvantage keeps the lower die.' : 'Advantage keeps the higher die.'} If you have both at once, they cancel out and you roll just one.</p>` : '',
-    }),
-  },
-  {
-    title: 'Three kinds of d20 roll',
-    text: "Every d20 roll is one of three things. An attack roll tries to beat a target's Armor Class (AC). An ability check tries to beat a DC, like the wall. A saving throw is your defense: you roll to shrug off a spell or a trap. Attack a goblin (AC 15) with a +5 sword.",
-    rule: 'attack-roll',
-    play: (st) => ({
-      button: 'Attack the goblin',
-      roll() { st.r = d20(); },
-      show: () => {
-        if (!st.r) return '';
-        const t = st.r + 5;
-        const res = st.r === 20 ? 'A natural 20 always hits, and it is a Critical Hit: double damage dice!' : st.r === 1 ? 'A natural 1 always misses.' : t >= 15 ? 'Hit! Now you would roll damage.' : 'Miss. The goblin dodges.';
-        return `<div class="bigroll">🎲 ${st.r} + 5 = <b>${t}</b> vs AC 15</div><p>${res}</p>`;
-      },
-    }),
-  },
-  {
-    title: 'Heroic Inspiration',
-    text: "Sometimes you'll have Heroic Inspiration: spend it to reroll any die you just rolled and use the new result. Humans start each day with it. Roll, and if you don't like it, reroll.",
-    rule: 'heroic-inspiration',
-    play: (st) => ({
-      button: st.r && !st.used ? 'Spend Inspiration: reroll' : 'Roll the d20',
-      roll() { if (st.r && !st.used) { st.old = st.r; st.r = d20(); st.used = true; } else { st.r = d20(); st.used = false; st.old = null; } },
-      show: () => st.r ? `<div class="bigroll">🎲 <b>${st.r}</b>${st.old ? ` <span class="dim">(was ${st.old})</span>` : ''}</div><p>${st.used ? 'Inspiration spent. You must use the new roll, even if it is worse.' : 'Happy with it? If not, spend your Heroic Inspiration.'}</p>` : '',
-    }),
-  },
-];
-
-function openLesson(onDone) {
-  let step = 0;
-  const states = STEPS.map(() => ({}));
-  show('lesson');
-
-  function render() {
-    const S = STEPS[step];
-    const st = states[step];
-    const p = S.play(st);
-    const g = GLOSSARY[S.rule];
-    $('lesson-body').innerHTML = `
-      <div class="build-head"><span class="kicker">Chapter 0 · Rolling the d20 · ${step + 1} of ${STEPS.length}</span>
-        <h2 class="bt">${esc(S.title)}</h2>
-        <div class="dots">${STEPS.map((_, i) => `<i class="${i <= step ? 'on' : ''}"></i>`).join('')}</div></div>
-      <p class="lead">${esc(S.text)}</p>
-      <div class="row lesson-btns"><button class="btn primary" id="l-roll">${esc(p.button)}</button>${p.button2 ? `<button class="btn" id="l-roll2">${esc(p.button2)}</button>` : ''}</div>
-      <div class="lesson-out">${p.show()}</div>
-      ${g ? `<p class="rulebox"><b>${esc(g.title)}.</b> ${esc(g.text)}</p>` : ''}`;
-    $('l-roll').onclick = () => { p.roll(1); render(); };
-    if ($('l-roll2')) $('l-roll2').onclick = () => { p.roll(2); render(); };
-    $('lesson-back').textContent = step ? 'Back' : 'Close';
-    $('lesson-next').textContent = step === STEPS.length - 1 ? 'Done' : 'Next';
-  }
-  $('lesson-back').onclick = () => { if (step) { step--; render(); } else onDone(); };
-  $('lesson-next').onclick = () => {
-    if (step < STEPS.length - 1) { step++; render(); return; }
-    ls.set(LESSON_DONE, '1');
-    onDone();
-  };
-  render();
-}
-
-return { LESSON_DONE, openLesson };
-})();
-
 /* ===== src/ui/story.js ===== */
 __mods["src/ui/story.js"] = (() => {
 // The story screen: scene text, party votes, skill checks (one hero with
@@ -3916,7 +3733,7 @@ const { buildHero } = __mods["src/rules/character.js"];
 const { SKILL_NAMES, SKILLS, ABILITY_NAMES, signed } = __mods["src/rules/data.js"];
 const { $ } = __mods["src/ui/dom.js"];
 const { esc, short, detail } = __mods["src/ui/explain.js"];
-const { sheetHtml, ruleLink: R } = __mods["src/ui/sheet.js"];
+const { sheetHtml } = __mods["src/ui/sheet.js"];
 
 // ctx: { S, me, isHost, send, openSheet, colors }
 function renderStory(ctx) {
@@ -3948,7 +3765,7 @@ function renderStory(ctx) {
     const ck = st.check;
     const sk = sc.check.skill;
     const label = `${SKILL_NAMES[sk]} (${ABILITY_NAMES[SKILLS[sk]]})`;
-    html += `<div class="checkbox"><div class="ck-head">${R(sc.check.mode === 'group' ? 'group-check' : 'ability-checks', sc.check.mode === 'group' ? 'Group check' : 'Ability check')}: <b>${label}</b>, DC ${sc.check.dc}</div>
+    html += `<div class="checkbox"><div class="ck-head">${sc.check.mode === 'group' ? 'Group check' : 'Check'}: <b>${label}</b>, DC ${sc.check.dc}</div>
       <p class="dim">${esc(sc.check.prompt)}</p>`;
     html += `<div class="ck-list">${heroes.map((p) => {
       const parts = skillParts(p.h, sk);
@@ -3981,14 +3798,13 @@ function renderStory(ctx) {
     if (st.result) {
       html += `<div class="result ${st.result.success ? 'good' : 'bad'}"><b>${st.result.success ? 'Success!' : 'Failure.'}</b> ${esc(st.result.text)}</div>`;
       const fl = st.result.flags?.surprise;
-      if (fl) html += `<p class="note">${fl === 'foes' ? 'Your foes will be surprised: they roll Initiative with Disadvantage.' : 'You are surprised: your party rolls Initiative with Disadvantage.'} ${R('surprise', 'Surprise')}</p>`;
+      if (fl) html += `<p class="note">${fl === 'foes' ? 'Your foes will be surprised: they roll Initiative with Disadvantage.' : 'You are surprised: your party rolls Initiative with Disadvantage.'}</p>`;
       html += isHost ? '<button class="btn primary wide" id="s-continue">Continue</button>' : '<p class="note">Waiting for the host to continue…</p>';
     }
   } else if (sc.kind === 'end') {
-    html += `<div class="result good"><b>The End of Chapter ${sc.chapter}.</b></div>`;
+    html += '<div class="result good"><b>To be continued.</b> More adventures are on the way.</div>';
     html += isHost ? '<button class="btn primary wide" id="s-again">Back to the lobby</button>' : '';
   }
-  if (sc.lesson) html += `<p class="rulebox"><b>Rules in this scene.</b> ${esc(sc.lesson)}</p>`;
 
   html += `<h4 class="kicker">The party</h4><div class="party-strip">${heroes.map((p) =>
     `<button class="pchip" data-sheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">${p.h.emoji} ${esc(p.name)}<span class="dim">${p.controller ? '' : ' (AI)'}</span></button>`).join('')}</div>`;
@@ -4016,7 +3832,7 @@ return { renderStory, checkShort };
 
 /* ===== src/ui/main.js ===== */
 __mods["src/ui/main.js"] = (() => {
-// First Roll - the app: home, lobby (chapters 0 and 1), story and battle
+// First Roll - the app: home, lobby (hero creation), story and battle
 // screens, wired to a room. The host's phone runs the room itself (LocalNet)
 // and opens it to friends over WebRTC (Host); a friend's phone talks to it
 // through RtcNet. Either way this file only sends intents and renders the
@@ -4028,15 +3844,13 @@ const { buildHero, spellList } = __mods["src/rules/character.js"];
 const { CLASSES, SPELLS, MASTERIES, signed } = __mods["src/rules/data.js"];
 const { previewMove, reachableSquares, attackOptions, canAttack, canCast, coneTargets, attackFactors, hitChance, hitBonus, saveChance, spellAttack, spellDC } = __mods["src/rules/combat.js"];
 const { occupantAt, cheb } = __mods["src/rules/grid.js"];
-const { coach } = __mods["src/rules/ai.js"];
+const { aiNext } = __mods["src/rules/ai.js"];
 const { SCENES } = __mods["src/game/campaign.js"];
 const { createBoard } = __mods["src/ui/board.js"];
-const { short, detail, glossaryHtml, rulesSeen, esc, ROLLED } = __mods["src/ui/explain.js"];
-const { GLOSSARY } = __mods["src/rules/glossary.js"];
+const { short, detail, glossaryHtml, esc, ROLLED } = __mods["src/ui/explain.js"];
 const { $, ls, showErr, openSheet, closeSheet, show } = __mods["src/ui/dom.js"];
 const { sheetHtml } = __mods["src/ui/sheet.js"];
 const { openBuilder } = __mods["src/ui/builder.js"];
-const { openLesson, LESSON_DONE } = __mods["src/ui/lesson.js"];
 const { renderStory } = __mods["src/ui/story.js"];
 
 const K = { name: 'fr.name', save: 'fr.save2', solo: 'fr.save2.solo', hostToken: 'fr.token.host', guestToken: 'fr.token.guest', spec: 'fr.lastSpec' };
@@ -4045,7 +3859,7 @@ const app = {
   mode: null, room: null, host: null, net: null, code: null, timer: null,
   me: null, S: null, lastSeq: 0, preview: null, target: null,
   toasts: [], toastBusy: false, wake: null, status: '', reactUntil: 0,
-  overlay: null,            // 'build' | 'lesson' while one of those screens is open
+  overlay: null,            // 'build' while the hero builder is open
 };
 window.__FR = app;   // for the console and tools/e2e.mjs
 
@@ -4106,7 +3920,6 @@ $('lnk-credits').onclick = (e) => {
     Creative Commons Attribution 4.0 International License, available at
     <a href="https://creativecommons.org/licenses/by/4.0/legalcode" target="_blank" rel="noopener">https://creativecommons.org/licenses/by/4.0/legalcode</a>.</p>`);
 };
-$('btn-lesson-home').onclick = () => { app.overlay = 'lesson'; openLesson(() => { app.overlay = null; app.S ? render() : show('home'); }); };
 
 // ---------------------------------------------------------- sessions ----
 async function startHosting({ name, online, fresh }) {
@@ -4309,15 +4122,11 @@ function renderLobby(S) {
       <span class="who">${esc(s.name)}${s.pid === app.me ? ' <span class="dim">(you)</span>' : ''}${s.host ? ' 👑' : ''}</span>${hero}</li>`;
   }).join('');
 
-  const lessonDone = ls.get(LESSON_DONE);
   const full = S.party.filter((p) => p.controller).length >= 4 && !me?.spec;
   $('lobby-chapters').innerHTML = `
-    <div class="chcard ${lessonDone ? 'done' : ''}"><div><span class="kicker">Chapter 0</span><b>Rolling the d20</b><span class="sub">Two minutes, on your own phone, while friends join.</span></div>
-      <button class="btn small ${lessonDone ? '' : 'primary'}" id="btn-lesson">${lessonDone ? 'Again' : 'Start'}</button></div>
-    <div class="chcard ${me?.spec ? 'done' : ''}"><div><span class="kicker">Chapter 1</span><b>Making your hero</b>
-      ${me?.spec ? heroSummary(me.spec, me.spec.name || me.name) : `<span class="sub">${full ? 'The party already has four heroes. You can watch, or step in later.' : 'Class, background, species and ability scores, one step at a time.'}</span>`}</div>
-      <div class="col">${me?.spec ? '<button class="btn small" id="btn-edit">Edit</button><button class="btn small ghost" id="btn-mysheet">Sheet</button>' : full ? '' : '<button class="btn small primary" id="btn-build">Build</button>'}</div></div>`;
-  if ($('btn-lesson')) $('btn-lesson').onclick = () => { app.overlay = 'lesson'; openLesson(() => { app.overlay = null; render(); }); };
+    <div class="chcard ${me?.spec ? 'done' : ''}"><div>
+      ${me?.spec ? heroSummary(me.spec, me.spec.name || me.name) : `<b>No hero yet</b><span class="sub">${full ? 'The party already has four heroes. You can watch.' : 'Pick a class, background and species, and place your ability scores.'}</span>`}</div>
+      <div class="col">${me?.spec ? '<button class="btn small" id="btn-edit">Edit</button><button class="btn small ghost" id="btn-mysheet">Sheet</button>' : full ? '' : '<button class="btn small primary" id="btn-build">Create hero</button>'}</div></div>`;
   if ($('btn-build')) $('btn-build').onclick = () => buildMine(null);
   if ($('btn-edit')) $('btn-edit').onclick = () => buildMine(me.spec);
   if ($('btn-mysheet')) $('btn-mysheet').onclick = () => openSheet(sheetHtml(buildHero(me.spec, { name: me.spec.name || me.name })));
@@ -4389,6 +4198,8 @@ function doMove(x, y) {
   app.preview = null;
 }
 const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; };
+// Test hook: play one step of my turn the way an AI companion would.
+app.auto = () => { if (myTurn()) act(aiNext(app.S.battle, myHeroId()) || { a: 'end' }); };
 
 function renderBattle(S) {
   const b = S.battle;
@@ -4411,17 +4222,15 @@ function renderBattle(S) {
     return `<span class="${id === cur?.id ? 'cur' : ''} ${out ? 'out' : ''}" style="${colors[id] ? `border-color:${colors[id]}` : ''}">${c.emoji} ${esc(c.name)}</span>`;
   }).join('');
 
-  const tip = mt ? coach(b, mine) : null;
   board.render({
     b, colors, curId: cur?.id, mine,
     reach: mt && !app.target ? reachableSquares(b, mine) : [],
     preview: mt ? app.preview : null,
     target: mt ? app.target : null,
     cone: mt && app.target ? coneFor(b, b.creatures[mine], b.creatures[app.target]) : null,
-    suggest: tip?.intent.a === 'move' && !app.preview ? tip.intent : null,
   });
 
-  renderPanel(S, b, mine, mt, tip);
+  renderPanel(S, b, mine, mt);
   renderLog(b);
   renderReact(S, b);
   renderOver(S, b);
@@ -4435,13 +4244,13 @@ function coneFor(b, me, T) {
   return { x: T.x, y: T.y };
 }
 
-function renderPanel(S, b, mine, mt, tip) {
+function renderPanel(S, b, mine, mt) {
   const P = $('panel');
   if (b.over) { P.innerHTML = ''; return; }
   if (!mt) {
     let text;
     if (b.pending && S.reactor === app.me) text = 'Your Reaction: decide below.';
-    else if (b.pending) text = `${esc(b.creatures[b.pending.reactor].name)} is deciding on an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>…`;
+    else if (b.pending) text = `${esc(b.creatures[b.pending.reactor].name)} is deciding on an Opportunity Attack…`;
     else if (!mine) text = "You're watching. Tap a token to see its sheet.";
     else text = `Waiting for ${esc(b.creatures[b.order[b.idx]]?.name)}… Tap a square to ping it for your party.`;
     P.innerHTML = `<div class="waiting">${text}</div>`;
@@ -4449,22 +4258,17 @@ function renderPanel(S, b, mine, mt, tip) {
   }
   const me = b.creatures[mine];
   const t = b.turn;
-  const chip = (on, label, rule) => `<span class="chip ${on ? '' : 'used'}"><a data-rule="${rule}">${label}</a></span>`;
+  const chip = (on, label, rule) => `<span class="chip ${on ? '' : 'used'}">${label}</span>`;
   let html = `<div class="budget">
     ${chip(canAttack(t), 'Action', 'your-turn')}${chip(t.bonus, 'Bonus Action', 'your-turn')}
     ${chip(me.reaction, 'Reaction', 'opportunity-attack')}${chip(t.moveLeft >= 5, `Move ${t.moveLeft} ft`, 'movement')}
-    ${me.casting?.slots ? `<span class="chip"><a data-rule="spell-slots">Slots ${'●'.repeat(me.casting.slots.left)}${'○'.repeat(me.casting.slots.max - me.casting.slots.left)}</a></span>` : ''}
-    ${me.tempHp ? `<span class="chip"><a data-rule="temp-hp">+${me.tempHp} temp HP</a></span>` : ''}</div>`;
-  if (tip?.text && !app.target && !app.preview) {
-    html += `<div class="coachline">💡 <span>${esc(tip.text)}</span><button class="btn" id="btn-coach">Do it</button></div>`;
-  }
+    ${me.casting?.slots ? `<span class="chip">Slots ${'●'.repeat(me.casting.slots.left)}${'○'.repeat(me.casting.slots.max - me.casting.slots.left)}</span>` : ''}
+    ${me.tempHp ? `<span class="chip">+${me.tempHp} temp HP</span>` : ''}</div>`;
   if (app.target) html += targetCard(b, me, b.creatures[app.target]);
   else if (app.preview) {
     const oa = app.preview.oas.map((id) => esc(b.creatures[id].name)).join(' and ');
-    html += `<div class="preview"><span>Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>.</b>` : ''} Tap the square again or</span>
+    html += `<div class="preview"><span>Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an Opportunity Attack.</b>` : ''} Tap the square again or</span>
       <button class="btn primary" id="btn-move">Move</button><button class="btn ghost" id="btn-cancel">✕</button></div>`;
-  } else if (me.casting || me.breath) {
-    html += '<div class="hint">Tap an enemy for attacks and spells, an ally (or yourself) for healing.</div>';
   }
   const extra = [];
   if (me.secondWind) extra.push(`<button class="btn" data-act="second-wind" ${t.bonus && me.secondWind.uses ? '' : 'disabled'}>Second Wind (${me.secondWind.uses})</button>`);
@@ -4478,7 +4282,6 @@ function renderPanel(S, b, mine, mt, tip) {
   P.innerHTML = html;
   for (const btn of P.querySelectorAll('[data-act]')) btn.onclick = () => act({ a: btn.dataset.act });
   for (const btn of P.querySelectorAll('[data-intent]')) btn.onclick = () => act(JSON.parse(btn.dataset.intent));
-  if ($('btn-coach')) $('btn-coach').onclick = () => act(tip.intent);
   if ($('btn-move')) $('btn-move').onclick = () => { const e = app.preview.path[app.preview.path.length - 1]; doMove(e.x, e.y); };
   if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; renderBattle(app.S); };
   if ($('btn-tx')) $('btn-tx').onclick = () => { app.target = null; renderBattle(app.S); };
@@ -4487,9 +4290,9 @@ function renderPanel(S, b, mine, mt, tip) {
 
 const reasons = (o) => {
   const bits = [];
-  if (o.mode === 'advantage') bits.push(`<b class="good">Advantage</b>: ${o.adv.map((a) => `<a class="rl" data-rule="${a.rule}">${esc(a.text)}</a>`).join(', ')}`);
-  if (o.mode === 'disadvantage') bits.push(`<b class="bad">Disadvantage</b>: ${o.dis.map((a) => `<a class="rl" data-rule="${a.rule}">${esc(a.text)}</a>`).join(', ')}`);
-  if (o.adv.length && o.dis.length) bits.push('<a class="rl" data-rule="advantage">Advantage and Disadvantage cancel</a>');
+  if (o.mode === 'advantage') bits.push(`<b class="good">Advantage</b>: ${o.adv.map((a) => `${esc(a.text)}`).join(', ')}`);
+  if (o.mode === 'disadvantage') bits.push(`<b class="bad">Disadvantage</b>: ${o.dis.map((a) => `${esc(a.text)}`).join(', ')}`);
+  if (o.adv.length && o.dis.length) bits.push('Advantage and Disadvantage cancel');
   return bits;
 };
 const intentAttr = (i) => `data-intent='${esc(JSON.stringify(i))}'`;
@@ -4499,9 +4302,9 @@ const row = (label, intent, ok, why, primary = true) =>
 function spellCost(b, me, sid) {
   const s = SPELLS[sid];
   const c = canCast(b, me, sid);
-  if (s.level === 0) return { c, tag: '<a class="rl" data-rule="cantrips">cantrip</a>' };
-  if (c.pay === 'free') return { c, tag: '<a class="rl" data-rule="magic-initiate">free cast</a>' };
-  return { c, tag: `<a class="rl" data-rule="spell-slots">spell slot</a>${s.time === 'bonus' ? ', <b>Bonus Action</b>' : ''}` };
+  if (s.level === 0) return { c, tag: 'cantrip' };
+  if (c.pay === 'free') return { c, tag: 'free cast' };
+  return { c, tag: `spell slot${s.time === 'bonus' ? ', <b>Bonus Action</b>' : ''}` };
 }
 
 function targetCard(b, me, T) {
@@ -4520,7 +4323,7 @@ function targetCard(b, me, T) {
     }
     if (!self && T.hp <= 0 && !T.dead && !T.stable) {
       rows += row('Stabilize', { a: 'stabilize', target: T.id }, t.action && cheb(me, T) <= 1,
-        cheb(me, T) <= 1 ? `<a class="rl" data-rule="stabilize">Help action</a>: DC 10 Wisdom (Medicine) check, you have ${signed(me.skills.medicine)}.` : 'Move next to them first.');
+        cheb(me, T) <= 1 ? `Help action: DC 10 Wisdom (Medicine) check, you have ${signed(me.skills.medicine)}.` : 'Move next to them first.');
     }
     if (!rows) rows = `<div class="why dim">${self ? 'Nothing to do on yourself right now.' : `${esc(T.name)} is fine.`}</div>`;
     rows += `<div class="opt"><button class="btn small ghost" id="btn-tinfo">${self ? 'My character sheet' : 'Character sheet'}</button></div>`;
@@ -4528,8 +4331,8 @@ function targetCard(b, me, T) {
     for (const o of attackOptions(b, me, T)) {
       const flat = o.atk.dmgFlat.reduce((s, x) => s + x.value, 0);
       const bits = [`${Math.round(o.p * 100)}% to hit`, `${o.atk.dice}${signed(flat)} ${o.atk.type}`, ...reasons(o)];
-      if (o.sneak) bits.push(`<b class="good">+${me.sneak} <a class="rl" data-rule="sneak-attack">Sneak Attack</a></b>`);
-      if (o.atk.mastery) bits.push(`<a class="rl" data-rule="${MASTERIES[o.atk.mastery].rule}">${MASTERIES[o.atk.mastery].name}</a>`);
+      if (o.sneak) bits.push(`<b class="good">+${me.sneak} Sneak Attack</b>`);
+      if (o.atk.mastery) bits.push(`${MASTERIES[o.atk.mastery].name}`);
       const why = o.ok ? bits.join(' · ') : `Out of ${o.atk.kind === 'melee' ? 'reach: move next to it first' : 'range'}.`;
       rows += row(o.atk.name, { a: 'attack', target: T.id, attack: o.atk.id }, o.ok && canAttack(t), why);
     }
@@ -4565,10 +4368,10 @@ function targetCard(b, me, T) {
       const ok = me.breath.uses > 0 && canAttack(t) && hit.some((x) => x.side !== me.side);
       const dc = me.breath.dc.reduce((s, p) => s + p.value, 0);
       rows += row(`Breath Weapon (${me.breath.uses})`, { a: 'breath', x: T.x, y: T.y }, ok,
-        `<a class="rl" data-rule="breath-weapon">Replaces an attack</a>: 15-ft Cone, catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody (get within 15 feet)'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''} · DC ${dc} DEX save, ${me.breath.dice} ${me.breath.type}`);
+        `Replaces an attack: 15-ft Cone, catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody (get within 15 feet)'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''} · DC ${dc} DEX save, ${me.breath.dice} ${me.breath.type}`);
     }
     if (cheb(me, T) <= 1) {
-      rows += row('Help', { a: 'help', target: T.id }, t.action, `<a class="rl" data-rule="help">Help action</a>: your ally's next attack on ${esc(T.name)} gets Advantage.`, false);
+      rows += row('Help', { a: 'help', target: T.id }, t.action, `Help action: your ally's next attack on ${esc(T.name)} gets Advantage.`, false);
     }
     if (!canAttack(t)) rows += '<div class="why dim">You have already used your action this turn.</div>';
   }
@@ -4602,7 +4405,7 @@ function renderReact(S, b) {
   app.reactUntil = Date.now() + S.reactIn;
   const opt = attackOptions(b, R, M).filter((o) => o.atk.kind === 'melee').sort((p, q) => q.expected - p.expected)[0];
   el.innerHTML = `<h3>⚡ Reaction!</h3>
-    <p>${esc(M.name)} is leaving your reach. Use your Reaction for an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>
+    <p>${esc(M.name)} is leaving your reach. Use your Reaction for an Opportunity Attack
     with your ${esc(opt.atk.name)} (${Math.round(opt.p * 100)}% to hit)?</p>
     <div class="row"><button class="btn primary" id="btn-react-yes">Attack!</button><button class="btn" id="btn-react-no">Let it go</button></div>
     <div class="timer" id="react-timer"></div>`;
@@ -4627,15 +4430,15 @@ function renderOver(S, b) {
   if (el.dataset.dismissed === String(b.seq)) return;
   if (!el.classList.contains('hidden') && el.dataset.seq === String(b.seq)) return;
   el.dataset.seq = String(b.seq);
-  const rules = rulesSeen(b.log).map((k) => `<a class="chip rl" data-rule="${k}">${esc(GLOSSARY[k].title)}</a>`).join('');
+  const foes = Object.values(b.creatures).filter((c) => c.side === 'foe');
+  const fallen = Object.values(b.creatures).filter((c) => c.side === 'hero' && c.hp <= 0);
   const win = b.over === 'victory';
   const sc = SCENES[S.battleScene];
   const hostBtns = win ? '<button class="btn primary wide" id="btn-cont">Continue the story</button>'
     : '<button class="btn primary wide" id="btn-retry">Try the fight again</button><button class="btn wide" id="btn-lobby">Back to the lobby</button>';
   el.innerHTML = `<div class="card"><div class="logo">${win ? '🏆' : '💀'}</div><h2>${win ? 'Victory!' : 'Defeat'}</h2>
     <p class="dim">${esc(sc?.title || 'The fight')}: ${win ? 'won' : 'lost'} after ${b.round} round${b.round === 1 ? '' : 's'}.${win ? '' : ' Everyone gets back up for another try.'}</p>
-    <h4 class="kicker">Rules you used: tap one to read it again</h4>
-    <div class="chips">${rules}</div>
+    <p>${foes.filter((c) => c.dead).length} of ${foes.length} foes defeated${fallen.length ? ` · ${fallen.map((c) => esc(c.name)).join(', ')} down` : ''}.</p>
     ${isHost() ? hostBtns : '<p class="dim">Waiting for the host…</p>'}
     <button class="btn ghost wide" id="btn-over-log">See the combat log</button></div>`;
   el.classList.remove('hidden');

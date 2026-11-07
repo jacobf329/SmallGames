@@ -18,7 +18,7 @@
   <div class="panel narrow">
     <div class="logo">🎲</div>
     <h1>First Roll</h1>
-    <p class="tag">Learn the 2024 fifth-edition rules by playing them with friends.</p>
+    <p class="tag">A co-op, turn-based fantasy RPG on the 2024 fifth-edition rules.</p>
 
     <label class="fld">Your name
       <input id="in-name" maxlength="20" autocomplete="nickname" placeholder="Name">
@@ -40,8 +40,7 @@
       <button id="btn-join" class="btn">Join</button>
     </div>
     <p id="home-msg" class="msg"></p>
-    <button id="btn-lesson-home" class="btn ghost small">New to the d20? Try the dice lesson</button>
-    <p class="fine">Early access: chapters 0 to 3. Play solo with AI companions, or co-op with up to 4 friends.
+    <p class="fine">Early access: two chapters. Play solo with AI companions, or co-op with up to 4 friends.
       Rules from the SRD 5.2.1 (CC-BY-4.0). <a href="#" id="lnk-credits">Credits</a></p>
   </div>
 </section>
@@ -61,13 +60,13 @@
     </div>
     <h2>Who's here</h2>
     <ul id="seat-list" class="seats"></ul>
-    <h2>Before you set out</h2>
+    <h2>Your hero</h2>
     <div id="lobby-chapters" class="chapters"></div>
     <h2>The party</h2>
     <div id="party-list" class="party-strip"></div>
     <div id="companions-row" class="host-row"></div>
     <p class="note">AI companions fill out the party. On Auto there are always at least three heroes; fights scale to the party's size.</p>
-    <button id="btn-start" class="btn primary wide">Set out: Chapter 2</button>
+    <button id="btn-start" class="btn primary wide">Set out</button>
     <p id="lobby-wait" class="msg hidden">Waiting for the host to start…</p>
     <button id="btn-leave" class="btn ghost small">Leave</button>
   </div>
@@ -77,12 +76,6 @@
 <section id="scr-build" class="screen">
   <div class="panel"><div id="build-body"></div></div>
   <div class="footbar"><button id="build-back" class="btn">Back</button><button id="build-next" class="btn primary">Next</button></div>
-</section>
-
-<!-- ============================================================== lesson -->
-<section id="scr-lesson" class="screen">
-  <div class="panel"><div id="lesson-body"></div></div>
-  <div class="footbar"><button id="lesson-back" class="btn">Back</button><button id="lesson-next" class="btn primary">Next</button></div>
 </section>
 
 <!-- =============================================================== story -->

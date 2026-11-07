@@ -3,7 +3,7 @@
 // the dev server's local Firestore stand-in. Ana hosts and builds a Fighter,
 // Ben joins by link and builds a Cleric, one AI companion joins them, and they
 // play the whole early-access campaign: votes, skill checks and both fights,
-// each taking the Coach's advice on their own turns. Both phones must reach
+// each playing their own turns the way an AI companion would (window.__FR.auto). Both phones must reach
 // the end, the AI must never play for a connected player, and Ben must get
 // his seat back after a reload.
 //
@@ -109,8 +109,7 @@ try {
         if (await p.$('#react:not(.hidden) #btn-react-yes')) { await p.click('#btn-react-yes'); reactions++; continue; }
         if (await p.evaluate(() => document.body.dataset.myturn === '1')) {
           if (!shot && p === ben) { await p.waitForTimeout(400); if (shotsAt) await p.screenshot({ path: `${shotsAt}/coop-ben-turn.png` }); shot = true; }
-          const c = await p.$('#btn-coach');
-          if (c) await c.click(); else await p.click('[data-act="end"]');
+          await p.evaluate(() => window.__FR.auto());
           turns[p.label]++;
           await p.waitForTimeout(120);
         }

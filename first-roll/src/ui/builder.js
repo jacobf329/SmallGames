@@ -1,17 +1,15 @@
-// Chapter 1: Making your hero. A six-step builder that teaches the 2024
-// character-creation order: class, background, species, ability scores,
-// the background's increases, then a name and the finished sheet. Every
-// step starts on a sensible recommendation, so "Next" all the way works.
+// Hero creation, in the 2024 order: class, background, species, ability
+// scores, the background's increases, then a name and the finished sheet.
+// Every step starts on a sensible pick, so "Next" all the way works.
 
 import {
   CLASSES, BACKGROUNDS, SPECIES, FEATS, SKILL_NAMES, ABILITIES, ABILITY_NAMES, STANDARD_ARRAY,
   DRAGON_ANCESTRY, abilityMod, signed,
 } from '../rules/data.js';
 import { buildHero, defaultSpec, suggestPlus, validateSpec, DEFAULT_BACKGROUND } from '../rules/character.js';
-import { GLOSSARY } from '../rules/glossary.js';
 import { $, show } from './dom.js';
 import { esc } from './explain.js';
-import { sheetHtml, ruleLink as R } from './sheet.js';
+import { sheetHtml } from './sheet.js';
 
 const ABILITY_USES = {
   str: 'Melee attacks, Athletics', dex: 'AC, ranged and Finesse attacks, Stealth, Initiative',
@@ -54,13 +52,13 @@ export function openBuilder({ spec = null, playerName = '', onDone, onCancel }) 
   }
 
   const views = {
-    class: () => `<p class="lead">Your class is what you do in a fight. You can change anything later.</p>
+    class: () => `
       ${Object.entries(CLASSES).map(([id, c]) => card({
         on: d.cls === id, emoji: c.emoji, title: `${c.name} · ${c.role}`,
         sub: `d${c.hitDie} Hit Die · main ability ${ABILITY_NAMES[c.primary]}${c.spellcasting ? ' · casts spells' : ''}`,
         body: `<span>${esc(c.blurb)}</span><span class="dim">${esc(c.plays)}</span>`, attr: `data-cls="${id}"`,
       })).join('')}`,
-    background: () => `<p class="lead">What did your hero do before adventuring? In the 2024 rules your background gives your ability increases, an ${R('alert', 'Origin feat')} and two skills.</p>
+    background: () => `<p class="lead">Your background raises three abilities and gives you an Origin feat and two skills.</p>
       ${Object.entries(BACKGROUNDS).map(([id, b]) => {
         const f = FEATS[b.feat];
         return card({
@@ -71,7 +69,7 @@ export function openBuilder({ spec = null, playerName = '', onDone, onCancel }) 
           attr: `data-bg="${id}"`,
         });
       }).join('')}`,
-    species: () => `<p class="lead">Your species gives you traits. In the 2024 rules it doesn't change your ability scores, so pick whatever you like the sound of.</p>
+    species: () => `
       ${Object.entries(SPECIES).map(([id, s]) => card({
         on: d.species === id, emoji: s.emoji, title: s.name, sub: `Speed ${s.speed} ft`,
         body: `<span>${s.traits.slice(0, 3).map((t) => `<b>${esc(t.name)}</b>: ${esc(t.text)}`).join('<br>')}</span>`,
@@ -86,7 +84,7 @@ export function openBuilder({ spec = null, playerName = '', onDone, onCancel }) 
         <div class="scores">${ABILITIES.map((a) => `<div class="srow"><span><b>${ABILITY_NAMES[a]}</b><span class="dim">${ABILITY_USES[a]}</span></span>
           <select data-ab="${a}">${STANDARD_ARRAY.map((v) => `<option ${d.scores[a] === v ? 'selected' : ''}>${v}</option>`).join('')}</select>
           <b class="mod">${signed(abilityMod(d.scores[a]))}</b></div>`).join('')}</div>
-        <p class="note">Picking a number another ability already has swaps the two. The modifier on the right is what you add to rolls: ${R('ability-modifier', 'score − 10, halved, rounded down')}.</p>`;
+        <p class="note">Picking a number another ability already has swaps the two.</p>`;
     },
     plus: () => {
       const b = BACKGROUNDS[d.background];
@@ -98,7 +96,7 @@ export function openBuilder({ spec = null, playerName = '', onDone, onCancel }) 
           return `<div class="srow"><span><b>${ABILITY_NAMES[a]}</b><span class="dim">${d.scores[a]} → ${d.scores[a] + v} (${signed(abilityMod(d.scores[a] + v))})</span></span>
             ${three ? '<b>+1</b>' : `<span class="seg">${[2, 1, 0].map((n) => `<button data-plus="${a}:${n}" class="${v === n ? 'on' : ''}">+${n}</button>`).join('')}</span>`}</div>`;
         }).join('')}</div>
-        <p class="note">Tip: raising an odd score to an even one bumps its modifier. 15 → 17 gives +3.</p>`;
+        `;
     },
     review: () => {
       let h;
@@ -110,13 +108,12 @@ export function openBuilder({ spec = null, playerName = '', onDone, onCancel }) 
 
   function render() {
     const st = STEPS[step];
-    const g = st.rule && GLOSSARY[st.rule];
     $('build-body').innerHTML = `
-      <div class="build-head"><span class="kicker">Chapter 1 · Making your hero · step ${step + 1} of ${STEPS.length}</span>
+      <div class="build-head"><span class="kicker">Create your hero · step ${step + 1} of ${STEPS.length}</span>
         <h2 class="bt">${st.title}</h2>
         <div class="dots">${STEPS.map((_, i) => `<i class="${i <= step ? 'on' : ''}"></i>`).join('')}</div></div>
       ${views[st.id]()}
-      ${g ? `<p class="rulebox"><b>${esc(g.title)}.</b> ${esc(g.text)}</p>` : ''}`;
+      `;
     $('build-back').textContent = step ? 'Back' : 'Cancel';
     $('build-next').textContent = step === STEPS.length - 1 ? 'Done: this is my hero' : 'Next';
     bind();

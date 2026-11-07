@@ -7,7 +7,7 @@ import { buildHero } from '../rules/character.js';
 import { SKILL_NAMES, SKILLS, ABILITY_NAMES, signed } from '../rules/data.js';
 import { $ } from './dom.js';
 import { esc, short, detail } from './explain.js';
-import { sheetHtml, ruleLink as R } from './sheet.js';
+import { sheetHtml } from './sheet.js';
 
 // ctx: { S, me, isHost, send, openSheet, colors }
 export function renderStory(ctx) {
@@ -39,7 +39,7 @@ export function renderStory(ctx) {
     const ck = st.check;
     const sk = sc.check.skill;
     const label = `${SKILL_NAMES[sk]} (${ABILITY_NAMES[SKILLS[sk]]})`;
-    html += `<div class="checkbox"><div class="ck-head">${R(sc.check.mode === 'group' ? 'group-check' : 'ability-checks', sc.check.mode === 'group' ? 'Group check' : 'Ability check')}: <b>${label}</b>, DC ${sc.check.dc}</div>
+    html += `<div class="checkbox"><div class="ck-head">${sc.check.mode === 'group' ? 'Group check' : 'Check'}: <b>${label}</b>, DC ${sc.check.dc}</div>
       <p class="dim">${esc(sc.check.prompt)}</p>`;
     html += `<div class="ck-list">${heroes.map((p) => {
       const parts = skillParts(p.h, sk);
@@ -72,14 +72,13 @@ export function renderStory(ctx) {
     if (st.result) {
       html += `<div class="result ${st.result.success ? 'good' : 'bad'}"><b>${st.result.success ? 'Success!' : 'Failure.'}</b> ${esc(st.result.text)}</div>`;
       const fl = st.result.flags?.surprise;
-      if (fl) html += `<p class="note">${fl === 'foes' ? 'Your foes will be surprised: they roll Initiative with Disadvantage.' : 'You are surprised: your party rolls Initiative with Disadvantage.'} ${R('surprise', 'Surprise')}</p>`;
+      if (fl) html += `<p class="note">${fl === 'foes' ? 'Your foes will be surprised: they roll Initiative with Disadvantage.' : 'You are surprised: your party rolls Initiative with Disadvantage.'}</p>`;
       html += isHost ? '<button class="btn primary wide" id="s-continue">Continue</button>' : '<p class="note">Waiting for the host to continue…</p>';
     }
   } else if (sc.kind === 'end') {
-    html += `<div class="result good"><b>The End of Chapter ${sc.chapter}.</b></div>`;
+    html += '<div class="result good"><b>To be continued.</b> More adventures are on the way.</div>';
     html += isHost ? '<button class="btn primary wide" id="s-again">Back to the lobby</button>' : '';
   }
-  if (sc.lesson) html += `<p class="rulebox"><b>Rules in this scene.</b> ${esc(sc.lesson)}</p>`;
 
   html += `<h4 class="kicker">The party</h4><div class="party-strip">${heroes.map((p) =>
     `<button class="pchip" data-sheet="${p.id}" style="border-color:${p.controller ? colorOf(p.controller) : 'var(--line)'}">${p.h.emoji} ${esc(p.name)}<span class="dim">${p.controller ? '' : ' (AI)'}</span></button>`).join('')}</div>`;

@@ -1,17 +1,16 @@
 # First Roll
 
-A co-op, turn-based RPG that teaches the 2024 fifth-edition rules by playing
-them. Every roll shows its math, and every number links to the rule behind it.
-Scope and roadmap: [SCOPE.md](SCOPE.md).
+A co-op, turn-based fantasy RPG built on the 2024 fifth-edition rules (SRD
+5.2.1). Create a hero, team up with friends or AI companions, make choices
+and skill checks in story scenes, and fight tactical battles on a grid. Any
+roll can be opened to see its dice and modifiers. Scope and roadmap: [SCOPE.md](SCOPE.md).
 
-**Early access (Phase 1): chapters 0 to 3.**
+**Early access: two chapters.**
 
-| Chapter | What you do | What it teaches |
-| --- | --- | --- |
-| 0 · Rolling the d20 | A hands-on dice lesson on your own phone while friends join | D20 Tests, modifiers vs DC, Advantage/Disadvantage, attack rolls vs AC, saves, Heroic Inspiration |
-| 1 · Making your hero | A six-step builder in the lobby | Class → background (its +2/+1 and Origin feat) → species → standard array → increases → name |
-| 2 · Your First Fight | Escort a flour cart: vote on the route, maybe a Perception check, then a goblin ambush | Initiative, surprise, turns, attack rolls, damage |
-| 3 · Weapon Mastery and Teamwork | Follow the trail: sneak (group Stealth) or demand (Intimidation), then the Goblin Boss | Mastery, Help, group checks, healing, Multiattack, Redirect Attack |
+| Chapter | What happens |
+| --- | --- |
+| 1 · The Flour Road | Escort a miller's cart to market: pick a route (the woods mean a Perception check), then a goblin ambush |
+| 2 · The Goblin Camp | Follow the stolen flour: sneak in (group Stealth) or make demands (Intimidation), then fight the Goblin Boss |
 
 - **1–4 players**, each on their own phone, with **AI companions** filling the
   party (Auto keeps at least three heroes). Fights scale to the party's size
@@ -55,7 +54,7 @@ node tools/e2e.mjs --bundle         # the same against dist/first-roll.html
 The e2e test uses the pre-installed Playwright and Chromium:
 
 1. Ana hosts and builds a Fighter; Ben joins by link and builds a Cleric. One AI companion makes up the party.
-2. They vote, roll checks and fight both battles, following the Coach on their turns.
+2. They vote, roll checks and fight both battles; on their turns each phone plays the way an AI companion would (`window.__FR.auto()`).
 3. The test checks that both phones reach the end and that the AI never played for a connected player.
 4. Ben reloads and must get his seat back.
 
@@ -85,30 +84,29 @@ src/rules/     the rules engine: pure, seeded, JSON state, no DOM or network
   combat.js      initiative and surprise, turns, attacks, Advantage/Disadvantage,
                  saves, spells and slots, cones, Multiattack, Redirect Attack,
                  species traits, Opportunity Attacks, Help, 0 HP and death saves
-  ai.js          monsters, AI companions and the Coach (one brain)
+  ai.js          monsters and AI companions (one brain)
   glossary.js    plain-language rules for every rule key and spell
 src/game/
-  campaign.js    chapters 2-3: scenes, choices, checks, fights, companions
+  campaign.js    chapters 1-2: scenes, choices, checks, fights, companions
   encounters.js  maps and foes sized to the party
   room.js        the party: seats, heroes, votes, checks, fights, turn control,
                  AI turns, reaction prompts, saves. Runs on the host's phone
 src/net/online.js WebRTC + Firestore signalling, ported from Skyline Hustle
-src/ui/        main.js (screens), builder.js, lesson.js, story.js, sheet.js,
+src/ui/        main.js (screens), builder.js, story.js, sheet.js,
                board.js (SVG grid), explain.js (Why? text), dom.js
 tools/         serve.mjs, bundle.mjs, e2e.mjs
 ```
 
-- **The engine explains itself.** Each resolution is appended to
-  `battle.log` as a record of what was rolled, what was added and which rule
-  applied. The roll cards, the combat log, the Why? sheet and the
-  end-of-fight recap are all rendered from those records.
+- **Every roll is a record.** Each resolution is appended to `battle.log`
+  with what was rolled, what was added and which rule applied. The roll
+  cards, the combat log and the Why? breakdowns are all rendered from those
+  records.
 - **Those records are also the network protocol.** Phones send intents
   (`{ a: 'cast', spell: 'guiding-bolt', target: 'f2' }`). The host's room
   checks each one against the rules and whose turn it is, resolves it, and
   broadcasts the new state. Dice are rolled only on the host.
 - **The AI plays by the same rules.** Monster and companion turns go through
-  the same `perform()` as a person's tap, and the Coach's tip is the AI's
-  choice for your hero, explained in words.
+  the same `perform()` as a person's tap.
 - **Dropping out is fine.** Seats have tokens. A player whose phone drops is
   handed to the AI after 8 s and gets their hero back when they rejoin. A
   newcomer mid-campaign can build a hero from the story screen. The host

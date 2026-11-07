@@ -1,4 +1,4 @@
-// Decision-making for monsters, AI companions and the Coach. aiNext returns
+// Decision-making for monsters and AI companions. aiNext returns
 // one intent at a time; it plays by exactly the same rules as a person
 // because its intents go through combat.perform like anyone else's.
 //
@@ -252,54 +252,6 @@ export function aiNext(b, id) {
     if (me.side === 'foe' && !t.moves && t.action) return { a: 'dash' };
   }
   return { a: 'end' };
-}
-
-// The Coach: the same choice, explained in plain words for a player.
-export function coach(b, id) {
-  const intent = aiNext(b, id);
-  if (!intent) return null;
-  const me = b.creatures[id];
-  const T = intent.target ? b.creatures[intent.target] : null;
-  let text;
-  switch (intent.a) {
-    case 'attack': {
-      const o = attackOptions(b, me, T).find((x) => x.atk.id === intent.attack);
-      const pct = Math.round(o.p * 100);
-      text = `Attack ${T.name} with your ${o.atk.name}: ${pct}% to hit`;
-      if (o.mode === 'advantage') text += ', with Advantage';
-      if (o.mode === 'disadvantage') text += ', but with Disadvantage';
-      if (o.sneak) text += ', and Sneak Attack applies';
-      text += '.';
-      break;
-    }
-    case 'cast': {
-      const s = SPELLS[intent.spell];
-      const o = specialOptions(b, me).find((x) => x.intent.spell === intent.spell && x.intent.target === intent.target && x.intent.x === intent.x);
-      const lvl = s.level === 0 ? 'a cantrip, free to cast' : canCast(b, me, intent.spell).pay === 'free' ? 'your free Magic Initiate cast' : 'uses a spell slot';
-      if (s.kind === 'heal') text = `${T.name} needs help: cast ${s.name} (${lvl}${s.time === 'bonus' ? ', a Bonus Action' : ''}).`;
-      else if (s.kind === 'stabilize') text = `${T.name} is dying! Cast ${s.name} to make them Stable (${lvl}).`;
-      else if (s.kind === 'cone') text = `Cast ${s.name} at the group: it catches ${o?.why.foes.map((c) => c.name).join(' and ')} (${lvl}).`;
-      else if (s.kind === 'save') text = `Cast ${s.name} on ${T.name}: it must beat DC ${o?.why.dc} on a ${s.save.toUpperCase()} save, so ${Math.round((o?.why.pFail || 0) * 100)}% it takes damage (${lvl}).`;
-      else if (s.kind === 'missile') text = `Cast ${s.name} at ${T.name}: it never misses (${lvl}).`;
-      else text = `Cast ${s.name} at ${T.name}: ${Math.round((o?.why.p || 0) * 100)}% to hit (${lvl}).`;
-      break;
-    }
-    case 'breath': text = 'Use your Breath Weapon: it replaces one attack and catches everything in the cone.'; break;
-    case 'move': {
-      const near = enemiesOf(b, me).filter((e) => !incap(e)).sort((p, q) => cheb(p, intent) - cheb(q, intent))[0];
-      const pv = previewMove(b, id, intent.x, intent.y);
-      text = near && cheb(near, intent) <= 1 ? `Move next to ${near.name} (${pv?.feet ?? '?'} ft).` : `Move to the marked square (${pv?.feet ?? '?'} ft).`;
-      if (me.ai === 'skirmisher' && near) text += ' A friend is next to it, so Sneak Attack will work.';
-      break;
-    }
-    case 'second-wind': text = "You're badly hurt: use Second Wind (Bonus Action) to heal."; break;
-    case 'stabilize': text = `${T.name} is dying! Use your action to stabilize them (DC 10 Medicine).`; break;
-    case 'nimble': text = 'Disengage, then move away.'; break;
-    case 'dash': text = 'Dash to cover more ground.'; break;
-    case 'end': text = "You've done what you can: end your turn."; break;
-    default: text = '';
-  }
-  return { intent, text };
 }
 
 export { onBoard, key, pathFrom };
