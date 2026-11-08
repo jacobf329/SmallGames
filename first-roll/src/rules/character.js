@@ -10,8 +10,11 @@
 //   speciesAbility (int | wis | cha, for species spells), speciesSkill (human, elf),
 //   bgFeat: { cantrips, spell, ability } (a background's Magic Initiate),
 //   versatile: { feat, list, cantrips, spell, ability, skills } (human Origin feat),
-//   skills (class picks), expertise (rogue), style (fighter), kit, masteries,
-//   order (cleric), cantrips, book (wizard spellbook), prepared, scholar (wizard 2+)
+//   skills (class picks), expertise (rogue, bard 2+, ranger 2+), style
+//   (fighter; paladin and ranger 2+), warriorCantrips (Blessed or Druidic
+//   Warrior), kit, masteries, order (cleric, druid), cantrips, book (wizard
+//   spellbook), prepared, scholar (wizard 2+), invocations and pactWeapon
+//   (warlock), metamagic (sorcerer 2+), land (druid 3), prey (ranger 3)
 // }
 // validateSpec fills any missing choice with a sensible default and drops
 // choices the rules don't allow, so older saved heroes still load.
@@ -21,13 +24,22 @@ import {
   CLASSES, SKILLS, SKILL_NAMES, SPELLS, STANDARD_ARRAY, DRAGON_ANCESTRY, GOBLIN_WARRIOR,
   SLOTS_BY_LEVEL, SUBCLASSES, MAX_LEVEL, HP_PER_LEVEL, signed, POINT_COST, POINT_BUDGET,
   KITS, FIGHTING_STYLES, SPELL_LISTS, CANTRIPS_KNOWN, PREPARED_BY_LEVEL, SPELLBOOK_SIZE, DOMAIN_SPELLS,
-  DEFAULT_LINEAGE, ORIGIN_FEATS, MI_DEFAULT_ABILITY,
+  DEFAULT_LINEAGE, ORIGIN_FEATS, MI_DEFAULT_ABILITY, SLOT_TABLES, ALWAYS_PREPARED, LAND_SPELLS, DRUID_ORDERS,
+  HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, METAMAGIC, STYLE_LEVEL, stylesFor, LIST_NAMES, isMonkWeapon, PACT_WEAPONS,
 } from './data.js';
 import { die } from './rng.js';
 
 export const PB_BY_LEVEL = [0, 2, 2, 2, 2, 3];
 export { SPELLS };
-export const DEFAULT_BACKGROUND = { fighter: 'soldier', rogue: 'criminal', cleric: 'acolyte', wizard: 'sage' };
+export const DEFAULT_BACKGROUND = {
+  fighter: 'soldier', rogue: 'criminal', cleric: 'acolyte', wizard: 'sage', barbarian: 'soldier', bard: 'acolyte',
+  druid: 'sage', monk: 'criminal', paladin: 'soldier', ranger: 'soldier', sorcerer: 'acolyte', warlock: 'acolyte',
+};
+// How a companion of each class plays (see ai.js).
+export const AI_ROLE = {
+  fighter: 'melee', rogue: 'skirmisher', cleric: 'support', wizard: 'caster', barbarian: 'melee', bard: 'support',
+  druid: 'support', monk: 'melee', paladin: 'melee', ranger: 'archer', sorcerer: 'caster', warlock: 'caster',
+};
 const sumParts = (parts) => parts.reduce((s, p) => s + p.value, 0);
 const uniq = (xs) => [...new Set(xs)];
 const CAST_ABILITIES = ['int', 'wis', 'cha'];
@@ -52,7 +64,15 @@ export function defaultSpec(cls, { species = 'human', background = DEFAULT_BACKG
 
 export const pointCost = (scores) => ABILITIES.reduce((s, a) => s + (POINT_COST[scores[a]] ?? 99), 0);
 export const rollTotal = (r) => [...r].sort((x, y) => y - x).slice(0, 3).reduce((s, v) => s + v, 0);
-export const maxSpellLevel = (level) => Math.max(...Object.keys(SLOTS_BY_LEVEL[level]).map(Number));
+// A class's spell slot table (full, half or pact), and the highest spell level it can cast.
+export const slotTable = (cls) => SLOT_TABLES[CLASSES[cls]?.spellcasting?.slots || 'full'];
+export const maxSpellLevel = (level, cls = 'wizard') => Math.max(...Object.keys(slotTable(cls)[level]).map(Number));
+// Extra skills a class gains later: Primal Knowledge (Barbarian 3), Bonus Proficiencies (College of Lore).
+export const extraSkills = (cls, level) => (level >= 3 ? { barbarian: 1, bard: 3 }[cls] || 0 : 0);
+// How many Expertise skills a class has at this level.
+export const expertiseCount = (cls, level) => ({ rogue: 2, bard: level >= 2 ? 2 : 0, ranger: level >= 2 ? 1 : 0 }[cls] || 0);
+export const styleAt = (cls, level) => STYLE_LEVEL[cls] != null && level >= STYLE_LEVEL[cls];
+export const metamagicCount = (cls, level) => (cls === 'sorcerer' && level >= 2 ? 2 : 0);
 
 // Pick n from `want` (in order) that pass ok(), then fill from `fill`.
 function pickN(n, want, fill, ok) {
@@ -80,12 +100,23 @@ function cleanMI(raw, list, taken) {
 // The cleric's and wizard's own spells, at this level.
 export function classSpellCounts(cls, level, order) {
   return {
-    cantrips: (CANTRIPS_KNOWN[cls]?.[level] || 0) + (order === 'thaumaturge' ? 1 : 0),
+    cantrips: (CANTRIPS_KNOWN[cls]?.[level] || 0) + (order === 'thaumaturge' || order === 'magician' ? 1 : 0),
     prepared: PREPARED_BY_LEVEL[cls]?.[level] || 0,
     book: cls === 'wizard' ? SPELLBOOK_SIZE[level] : 0,
   };
 }
-export const domainSpells = (cls, level) => (cls === 'cleric' && level >= 3 ? DOMAIN_SPELLS[3] : []);
+// Spells a class always has prepared at this level, not counted against its
+// number (Life Domain, Circle of the Land, oath and patron spells, Paladin's
+// Smite, Favored Enemy). Cantrips among them are known, not prepared.
+export function alwaysPrepared(cls, level, land) {
+  const out = [];
+  if (cls === 'cleric' && level >= 3) out.push(...DOMAIN_SPELLS[3]);
+  if (cls === 'druid' && level >= 3) out.push(...LAND_SPELLS[land || 'arid'].spells);
+  for (const [lv, xs] of Object.entries(ALWAYS_PREPARED[cls] || {})) if (level >= +lv) out.push(...xs);
+  return out;
+}
+export const domainSpells = (cls, level, land) => alwaysPrepared(cls, level, land).filter((s) => SPELLS[s].level > 0);
+export const alwaysCantrips = (cls, level, land) => alwaysPrepared(cls, level, land).filter((s) => SPELLS[s].level === 0);
 
 // Cantrips a species gives (they don't count toward a class's cantrips).
 export function speciesCantrips(species, lineage) {
@@ -148,11 +179,12 @@ export function validateSpec(spec, { level = 1 } = {}) {
   const speciesAbility = SP.castAbility ? (CAST_ABILITIES.includes(spec.speciesAbility) ? spec.speciesAbility : bestCast) : null;
 
   // Equipment and class options.
-  const order = cls === 'cleric' ? (spec.order === 'thaumaturge' ? 'thaumaturge' : 'protector') : null;
+  const order = cls === 'cleric' ? (spec.order === 'thaumaturge' ? 'thaumaturge' : 'protector')
+    : cls === 'druid' ? (DRUID_ORDERS[spec.order] ? spec.order : D.order) : null;
   let kit = C.kits.includes(spec.kit) ? spec.kit : D.kit;
   if (KITS[cls][kit].needs && KITS[cls][kit].needs !== order) kit = D.kit;
   const carried = uniq(KITS[cls][kit].weapons);
-  const style = cls === 'fighter' ? (FIGHTING_STYLES[spec.style] ? spec.style : D.style) : null;
+  const style = styleAt(cls, level) ? (stylesFor(cls).includes(spec.style) ? spec.style : D.style) : null;
   const masteries = pickN(C.masteryCount, spec.masteries, [...(D.masteries || []), ...carried], (w) => carried.includes(w));
 
   // Skills, in the order the rules hand them out: background, class, species, feats.
@@ -161,7 +193,7 @@ export function validateSpec(spec, { level = 1 } = {}) {
   // the class's picks, so each choice stays where the player put it.
   const held = new Set([spec.speciesSkill, ...(Array.isArray(spec.versatile?.skills) ? spec.versatile.skills : [])]);
   const skillFill = [...D.skills, ...C.skillChoices.from];
-  const skills = pickN(C.skillChoices.n, spec.skills, [...skillFill.filter((s) => !held.has(s)), ...skillFill], (s) => C.skillChoices.from.includes(s) && !prof.has(s));
+  const skills = pickN(C.skillChoices.n + extraSkills(cls, level), spec.skills, [...skillFill.filter((s) => !held.has(s)), ...skillFill], (s) => C.skillChoices.from.includes(s) && !prof.has(s));
   for (const s of skills) prof.add(s);
   let speciesSkill = null;
   if (species === 'human' || species === 'elf') {
@@ -173,13 +205,15 @@ export function validateSpec(spec, { level = 1 } = {}) {
   // The class's own spells.
   let cantrips = [], book = [], prepared = [];
   const fromSpecies = speciesCantrips(species, lineage);
+  const land = cls === 'druid' && level >= 3 ? (LAND_SPELLS[spec.land] ? spec.land : 'arid') : null;
+  const fromClass = alwaysCantrips(cls, level, land);
+  const miWant = [spec.bgFeat?.cantrips, spec.versatile?.cantrips].flatMap((x) => (Array.isArray(x) ? x : []));
   if (C.spellcasting) {
     const n = classSpellCounts(cls, level, order);
-    const top = maxSpellLevel(level);
+    const top = maxSpellLevel(level, cls);
     const list = SPELL_LISTS[cls];
-    const miWant = [spec.bgFeat?.cantrips, spec.versatile?.cantrips].flatMap((x) => (Array.isArray(x) ? x : []));
-    const cFill = [...D.cantrips, ...list[0]];
-    cantrips = pickN(n.cantrips, spec.cantrips, [...cFill.filter((s) => !miWant.includes(s)), ...cFill], (s) => list[0].includes(s) && !fromSpecies.includes(s));
+    const cFill = [...(D.cantrips || []), ...(list[0] || [])];
+    cantrips = pickN(n.cantrips, spec.cantrips, [...cFill.filter((s) => !miWant.includes(s)), ...cFill], (s) => (list[0] || []).includes(s) && !fromSpecies.includes(s) && !fromClass.includes(s));
     const leveled = Object.entries(list).filter(([lv]) => +lv >= 1 && +lv <= top).flatMap(([, xs]) => xs);
     if (cls === 'wizard') {
       // Each spell level has its own room in the book (see bookLimit).
@@ -191,13 +225,20 @@ export function validateSpec(spec, { level = 1 } = {}) {
       }
       prepared = pickN(n.prepared, spec.prepared, [...D.prepared, ...book], (s) => book.includes(s));
     } else {
-      const dom = domainSpells(cls, level);
-      prepared = pickN(n.prepared, spec.prepared, D.prepared, (s) => leveled.includes(s) && !dom.includes(s));
+      const dom = domainSpells(cls, level, land);
+      prepared = pickN(n.prepared, spec.prepared, [...D.prepared, ...leveled], (s) => leveled.includes(s) && !dom.includes(s));
     }
+  }
+  // Blessed Warrior / Druidic Warrior: two cantrips from another list.
+  let warriorCantrips = [];
+  const ws = FIGHTING_STYLES[style];
+  if (ws?.list) {
+    const wl = SPELL_LISTS[ws.list][0];
+    warriorCantrips = pickN(2, spec.warriorCantrips, [...(D.warriorCantrips || []), ...wl], (s) => wl.includes(s) && !fromSpecies.includes(s) && !miWant.includes(s));
   }
 
   // Feats: the background's, then the human's Versatile feat.
-  const taken = new Set([...cantrips, ...prepared, ...book, ...fromSpecies]);
+  const taken = new Set([...cantrips, ...prepared, ...book, ...fromSpecies, ...warriorCantrips, ...fromClass]);
   let bgFeat = null;
   if (B.feat === 'magic-initiate') {
     bgFeat = cleanMI(spec.bgFeat, B.featList, taken);
@@ -220,14 +261,25 @@ export function validateSpec(spec, { level = 1 } = {}) {
     } else versatile = { feat };
   }
 
-  const expertise = cls === 'rogue' ? pickN(2, spec.expertise, [...D.expertise, ...prof], (s) => prof.has(s)) : [];
+  const expertise = pickN(expertiseCount(cls, level), spec.expertise, [...(D.expertise || []), ...prof], (s) => prof.has(s));
+  // Warlock: Eldritch Invocations (the Eldritch Blast ones need that cantrip).
+  let invocations = [], pactWeapon = null;
+  if (cls === 'warlock') {
+    const eb = cantrips.includes('eldritch-blast');
+    const okInv = (x) => INVOCATIONS[x] && INVOCATIONS[x].min <= level && (eb || !['agonizing-blast', 'repelling-blast', 'eldritch-spear'].includes(x));
+    invocations = pickN(INVOCATIONS_KNOWN[level], spec.invocations, [...D.invocations, ...Object.keys(INVOCATIONS)], okInv);
+    if (invocations.includes('pact-of-the-blade')) pactWeapon = PACT_WEAPONS.includes(spec.pactWeapon) ? spec.pactWeapon : D.pactWeapon;
+  }
+  const metamagic = pickN(metamagicCount(cls, level), spec.metamagic, [...(D.metamagic || []), ...Object.keys(METAMAGIC)], (x) => !!METAMAGIC[x]);
+  const prey = cls === 'ranger' && level >= 3 ? (HUNTER_PREY[spec.prey] ? spec.prey : D.prey) : null;
   const scholar = cls === 'wizard' && level >= 2
     ? (pickN(1, [spec.scholar], D.scholar, (s) => SCHOLAR_SKILLS.includes(s) && prof.has(s) && !expertise.includes(s))[0] || null) : (SCHOLAR_SKILLS.includes(spec.scholar) ? spec.scholar : null);
 
   return {
     cls, species, background, method, scores, ...(rolls ? { rolls } : {}), plus, ancestry, name,
     lineage, speciesAbility, speciesSkill, bgFeat, versatile,
-    skills, expertise, style, kit, masteries, order, cantrips, book, prepared, scholar,
+    skills, expertise, style, warriorCantrips, kit, masteries, order, cantrips, book, prepared, scholar,
+    invocations, pactWeapon, metamagic, land, prey,
   };
 }
 
@@ -244,15 +296,27 @@ function spellStats(m, pb, ability) {
 
 const SPECIES_RESIST = { dwarf: ['Poison'] };
 
-// Armor Class parts for what the hero wears (Mage Armor replaces "no armor").
+// Armor Class parts for what the hero wears. With no armor on, the best of the
+// ways to work out a base AC counts (they never stack): 10 + DEX, Mage Armor
+// (13 + DEX), or a class's Unarmored Defense (10 + DEX + another modifier).
 export function armorParts(h) {
   const m = h.mods;
-  const armor = h.mageArmor && h.armorId === 'none' ? { name: 'Mage Armor', base: 13, dex: true, rule: 'mage-armor' } : ARMOR[h.armorId];
-  const parts = [{ label: armor.name, value: armor.base, rule: armor.rule || 'armor-class' }];
-  if (armor.dex) {
-    const d = armor.maxDex != null ? Math.min(m.dex, armor.maxDex) : m.dex;
-    parts.push({ label: `DEX modifier${armor.maxDex != null && m.dex > armor.maxDex ? ` (max ${armor.maxDex})` : ''}`, value: d, rule: 'ability-modifier' });
+  const mk = (armor) => {
+    const parts = [{ label: armor.name, value: armor.base, rule: armor.rule || 'armor-class' }];
+    if (armor.dex) {
+      const d = armor.maxDex != null ? Math.min(m.dex, armor.maxDex) : m.dex;
+      parts.push({ label: `DEX modifier${armor.maxDex != null && m.dex > armor.maxDex ? ` (max ${armor.maxDex})` : ''}`, value: d, rule: 'ability-modifier' });
+    }
+    if (armor.plus) parts.push({ label: `${armor.plus.toUpperCase()} modifier`, value: m[armor.plus], rule: 'ability-modifier' });
+    return parts;
+  };
+  const opts = [mk(ARMOR[h.armorId])];
+  if (h.armorId === 'none') {
+    if (h.mageArmor || h.shadows) opts.push(mk({ name: h.shadows ? 'Mage Armor (Armor of Shadows)' : 'Mage Armor', base: 13, dex: true, rule: 'mage-armor' }));
+    const u = h.unarmored;
+    if (u && !(u.noShield && h.hasShield)) opts.push(mk({ name: u.name, base: 10, dex: true, plus: u.ab, rule: u.rule }));
   }
+  const parts = opts.reduce((best, o) => (sumParts(o) > sumParts(best) ? o : best));
   if (h.hasShield) parts.push({ label: 'Shield', value: 2, rule: 'armor-class' });
   if (h.style === 'defense' && ARMOR[h.armorId].type) parts.push({ label: 'Defense fighting style', value: 1, rule: 'defense' });
   return parts;
@@ -272,20 +336,29 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   const sub = L(3) ? SUBCLASSES[spec.cls] : null;
   const feats = [B.feat, spec.versatile?.feat].filter(Boolean);
   const has = (f) => feats.includes(f);
+  const cls = spec.cls;
+  const inv = (x) => (spec.invocations || []).includes(x);
 
-  // Armor Class
-  const armor = ARMOR[kit.armor];
-  const acParts = armorParts({ mods: m, armorId: kit.armor, hasShield: kit.shield, style: spec.style });
+  // Armor Class. Armor of Shadows: the Warlock goes without the Leather Armor.
+  const armorId = inv('armor-of-shadows') ? 'none' : kit.armor;
+  const armor = ARMOR[armorId];
+  const unarmored = cls === 'barbarian' ? { name: 'Unarmored Defense (10)', ab: 'con', rule: 'unarmored-defense' }
+    : cls === 'monk' ? { name: 'Unarmored Defense (10)', ab: 'wis', noShield: true, rule: 'unarmored-defense' }
+    : cls === 'sorcerer' && L(3) ? { name: 'Draconic Resilience (10)', ab: 'cha', rule: 'draconic-resilience' } : null;
+  const shadows = inv('armor-of-shadows');
+  const acParts = armorParts({ mods: m, armorId, hasShield: kit.shield, style: spec.style, unarmored, shadows });
 
   // Speed: the species', and heavy armor without the Strength for it costs 10 ft.
   const speedParts = [{ label: `${S.name}${lin?.speed ? ` (${lin.name})` : ''}`, value: lin?.speed || S.speed, rule: 'speed' }];
   if (armor.str && scores.str < armor.str) speedParts.push({ label: `${armor.name} needs Strength ${armor.str}`, value: -10, rule: 'armor-class' });
+  if (cls === 'monk' && L(2) && armorId === 'none' && !kit.shield) speedParts.push({ label: 'Unarmored Movement', value: 10, rule: 'unarmored-movement' });
 
   // Hit Points: the Hit Die's maximum + CON at level 1, then its fixed value
   // + CON for each level after (plus species, per level).
   const hpParts = [{ label: `d${C.hitDie} maximum`, value: C.hitDie, rule: 'hit-points' }, { label: 'CON modifier', value: m.con, rule: 'ability-modifier' }];
   if (level > 1) hpParts.push({ label: `Levels 2${level > 2 ? `-${level}` : ''}: ${level - 1} × (${HP_PER_LEVEL[C.hitDie]} + CON)`, value: (level - 1) * (HP_PER_LEVEL[C.hitDie] + m.con), rule: 'level-up' });
   if (spec.species === 'dwarf') hpParts.push({ label: 'Dwarven Toughness', value: level, rule: 'dwarven-toughness' });
+  if (cls === 'sorcerer' && L(3)) hpParts.push({ label: 'Draconic Resilience', value: 3, rule: 'draconic-resilience' });
   const hpMax = Math.max(1, sumParts(hpParts));
 
   // Initiative: a Dexterity check, plus PB with the Alert feat.
@@ -298,9 +371,12 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   const scholar = spec.cls === 'wizard' && L(2) ? spec.scholar : null;
   if (scholar) expertise.push(scholar);
   const skills = {};
+  const jack = cls === 'bard' && L(2);
   for (const [s, ab] of Object.entries(SKILLS)) {
     skills[s] = m[ab] + (prof.has(s) ? (expertise.includes(s) ? 2 : 1) * pb : 0);
     if (spec.order === 'thaumaturge' && (s === 'arcana' || s === 'religion')) skills[s] += Math.max(1, m.wis);
+    if (spec.order === 'magician' && (s === 'arcana' || s === 'nature')) skills[s] += Math.max(1, m.wis);
+    if (jack && !prof.has(s)) skills[s] += Math.floor(pb / 2);
   }
 
   // Saving throws
@@ -308,12 +384,20 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   for (const a of ABILITIES) saves[a] = m[a] + (C.saves.includes(a) ? pb : 0);
 
   // Weapons: each carried weapon, and a thrown version of the throwable ones.
+  // A Monk's weapons use DEX if it's better, and at least the Martial Arts
+  // die. A Warlock's pact weapon can use CHA.
   const attacks = [];
-  for (const wid of kit.weapons) {
+  const martialDie = cls === 'monk' ? '1d6' : null;
+  const dieSize = (d) => +d.split('d')[1];
+  const weaponList = [...kit.weapons, ...(spec.pactWeapon ? [spec.pactWeapon] : [])];
+  for (const [wi, wid] of weaponList.entries()) {
     const w = WEAPONS[wid];
-    const ability = w.kind === 'ranged' ? 'dex' : (w.finesse && m.dex > m.str ? 'dex' : 'str');
+    const pact = !!spec.pactWeapon && wi === weaponList.length - 1;
+    const monkW = martialDie && isMonkWeapon(wid);
+    let ability = w.kind === 'ranged' ? 'dex' : ((w.finesse || monkW) && m.dex > m.str ? 'dex' : 'str');
+    if (pact && m.cha > m[ability]) ability = 'cha';
     const two = !kit.shield && !!w.versatile;
-    const mastery = spec.masteries.includes(wid) && MASTERIES[w.mastery] ? w.mastery : null;
+    const mastery = !pact && spec.masteries.includes(wid) && MASTERIES[w.mastery] ? w.mastery : null;
     const mk = (variant) => {
       const ranged = variant === 'thrown' || w.kind === 'ranged';
       const hit = [
@@ -322,19 +406,30 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
       ];
       if (spec.style === 'archery' && w.kind === 'ranged') hit.push({ label: 'Archery fighting style', value: 2, rule: 'archery' });
       const dmgFlat = [{ label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'damage' }];
-      const dice = variant === 'melee' && two ? w.versatile : w.dice;
+      let dice = variant === 'melee' && two ? w.versatile : w.dice;
+      if (monkW && dieSize(martialDie) > dieSize(dice)) dice = martialDie;
       return {
-        id: variant === 'thrown' ? `${wid}-thrown` : wid, base: wid,
-        name: variant === 'thrown' ? `${w.name} (thrown)` : `${w.name}${variant === 'melee' && two ? ' (two hands)' : ''}`,
+        id: pact ? 'pact' : variant === 'thrown' ? `${wid}-thrown` : wid, base: pact ? 'pact' : wid,
+        name: pact ? `${w.name} (pact weapon)` : variant === 'thrown' ? `${w.name} (thrown)` : `${w.name}${variant === 'melee' && two ? ' (two hands)' : ''}`,
         kind: ranged ? 'ranged' : 'melee', thrown: variant === 'thrown', dice, type: w.type,
         finesse: !!w.finesse, light: !!w.light, range: variant === 'thrown' ? w.thrown : w.range || null, props: w.props, hit, dmgFlat, mastery,
-        ability, abilityMod: m[ability],
+        ability, abilityMod: m[ability], monk: !!monkW, pact,
         gwf: spec.style === 'great-weapon' && variant === 'melee' && (w.twoHanded || two),
         masteryText: mastery ? MASTERIES[mastery].text : null,
       };
     };
     attacks.push(mk(w.kind === 'ranged' ? 'ranged' : 'melee'));
-    if (w.thrown) attacks.push(mk('thrown'));
+    if (w.thrown && !pact) attacks.push(mk('thrown'));
+  }
+  // A Monk's Unarmed Strike: the Martial Arts die + DEX or STR.
+  if (martialDie) {
+    const ab = m.dex > m.str ? 'dex' : 'str';
+    attacks.push({
+      id: 'unarmed', base: 'unarmed', name: 'Unarmed Strike', kind: 'melee', thrown: false, dice: martialDie, type: 'Bludgeoning',
+      finesse: false, light: false, range: null, props: ['Martial Arts'], mastery: null, ability: ab, abilityMod: m[ab], unarmed: true, monk: true,
+      hit: [{ label: `${ab.toUpperCase()} modifier`, value: m[ab], rule: 'ability-modifier' }, { label: 'Proficiency Bonus', value: pb, rule: 'proficiency' }],
+      dmgFlat: [{ label: `${ab.toUpperCase()} modifier`, value: m[ab], rule: 'damage' }], gwf: false, masteryText: null,
+    });
   }
 
   // Spells: the class's own, Origin feats, species extras.
@@ -354,12 +449,24 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   let slots = null;
   if (C.spellcasting) {
     const sc = C.spellcasting;
+    const pact = sc.slots === 'pact';
+    const alwaysFrom = { cleric: 'Life Domain', druid: 'Circle of the Land', paladin: 'Oath of Devotion', sorcerer: 'Draconic Sorcery', warlock: 'Fiend Patron', ranger: 'Favored Enemy' }[cls];
     for (const s of spec.cantrips) learn(s, sc.ability, C.name);
     for (const s of spec.prepared) learn(s, sc.ability, C.name, { slot: true });
-    for (const s of domainSpells(spec.cls, level)) learn(s, sc.ability, 'Life Domain', { slot: true });
+    for (const s of alwaysPrepared(cls, level, spec.land)) {
+      if (s === 'divine-smite') learn(s, sc.ability, "Paladin's Smite", { slot: true, free: 1 });
+      else if (s === 'hunters-mark') learn(s, sc.ability, 'Favored Enemy', { slot: true, free: 2 });
+      else learn(s, sc.ability, alwaysFrom, { slot: SPELLS[s].level > 0 });
+    }
     slots = {};
-    for (const [lv, k] of Object.entries(SLOTS_BY_LEVEL[level])) slots[lv] = { max: k, left: k };
+    for (const [lv, k] of Object.entries(slotTable(cls)[level])) slots[lv] = { max: k, left: k, ...(pact ? { pact: true } : {}) };
   }
+  if (spec.warriorCantrips?.length) {
+    const st = FIGHTING_STYLES[spec.style];
+    for (const s of spec.warriorCantrips) learn(s, st.ability, st.name);
+  }
+  if (inv('fiendish-vigor')) { learn('false-life', 'cha', 'Fiendish Vigor'); known['false-life'].atWill = 'Fiendish Vigor'; known['false-life'].maxed = true; }
+  if (inv('pact-of-the-chain')) learn('find-familiar', 'cha', 'Pact of the Chain');
   const featFeature = [];
   const miLearn = (mi, label) => {
     for (const s of mi.cantrips) learn(s, mi.ability, label);
@@ -367,8 +474,8 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     featFeature.push({ name: label, rule: 'magic-initiate',
       text: `${mi.cantrips.map((x) => SPELLS[x].name).join(' and ')}; ${SPELLS[mi.spell].name} once per Long Rest free (or with a slot). Ability: ${ABILITY_NAMES[mi.ability]}.` });
   };
-  if (spec.bgFeat) miLearn(spec.bgFeat, `Magic Initiate (${spec.bgFeat.list === 'cleric' ? 'Cleric' : 'Wizard'})`);
-  if (spec.versatile?.feat === 'magic-initiate') miLearn(spec.versatile, `Magic Initiate (${spec.versatile.list === 'cleric' ? 'Cleric' : 'Wizard'})`);
+  if (spec.bgFeat) miLearn(spec.bgFeat, `Magic Initiate (${LIST_NAMES[spec.bgFeat.list]})`);
+  if (spec.versatile?.feat === 'magic-initiate') miLearn(spec.versatile, `Magic Initiate (${LIST_NAMES[spec.versatile.list]})`);
   const sa = spec.speciesAbility;
   if (lin?.cantrip) learn(lin.cantrip, sa, lin.name);
   if (lin?.cantrip2) learn(lin.cantrip2, sa, lin.name);
@@ -425,6 +532,77 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(3, 'Evoker: Potent Cantrip', 'potent-cantrip', 'When a creature succeeds on a save against your damaging cantrip, or your cantrip attack misses, it still takes half the damage.');
     F(3, 'Evoker: Evocation Savant', null, 'Copying Evocation spells into your spellbook takes half the time and gold.');
   }
+  const names = (xs) => xs.map((x) => SPELLS[x].name).join(', ');
+  const prepText = (ab, how) => `Cantrips at will; prepared spells use spell slots. ${ab} is your spellcasting ability. You prepare ${PREPARED_BY_LEVEL[cls][level]} ${C.name} spells${how}`;
+  const styleF = (lv) => {
+    if (!spec.style) return;
+    const st = FIGHTING_STYLES[spec.style];
+    F(lv, `Fighting Style: ${st.name}`, st.rule, `${st.text}${spec.warriorCantrips?.length ? ` Yours: ${names(spec.warriorCantrips)}.` : ''}`);
+  };
+  const rageUses = L(3) ? 3 : 2;
+  if (cls === 'barbarian') {
+    F(1, 'Rage', 'rage', `Bonus Action, without Heavy armor: Resistance to Bludgeoning, Piercing and Slashing damage, +2 damage on Strength weapon attacks, and Advantage on Strength checks and saves. No spells or Concentration while raging. It lasts until the end of your next turn, and goes on each turn you attack an enemy, make one save or use a Bonus Action to keep it up. ${rageUses} uses; one back on a Short Rest, all on a Long Rest.`);
+    F(1, 'Unarmored Defense', 'unarmored-defense', 'Without armor, your AC is 10 + DEX + CON. A Shield still adds +2.');
+    F(1, 'Weapon Mastery', 'weapon-mastery', `Use the mastery property of 2 kinds of weapons. ${mastText()}.`);
+    F(2, 'Danger Sense', 'danger-sense', "Advantage on Dexterity saving throws, unless you're Incapacitated.");
+    F(2, 'Reckless Attack', 'reckless-attack', 'When you make your first attack roll on your turn, you can attack recklessly: Advantage on attack rolls using Strength until the start of your next turn, but attack rolls against you have Advantage too.');
+    F(3, 'Primal Knowledge', 'skills', 'Proficiency in one more skill from the Barbarian list.');
+    F(3, 'Berserker: Frenzy', 'frenzy', 'If you use Reckless Attack while raging, the first creature you hit on your turn with a Strength attack takes an extra 2d6 damage (one d6 per point of your Rage Damage).');
+  } else if (cls === 'bard') {
+    F(1, 'Bardic Inspiration', 'bardic-inspiration', `Bonus Action: give a creature within 60 feet a d6. Once in the next hour, when it fails a D20 Test, it can roll the die and add it, maybe turning the failure into a success (here: used for it automatically when that would work). ${Math.max(1, m.cha)} uses (your Charisma modifier, at least 1); all back on a Long Rest.`);
+    F(1, 'Spellcasting', 'spellcasting', `${prepText('Charisma', '. When you gain a Bard level you can swap one of them for another, and one cantrip.')}`);
+    F(2, 'Expertise', 'expertise', `Double Proficiency Bonus in ${spec.expertise.map((x) => SKILL_NAMES[x]).join(' and ')}.`);
+    F(2, 'Jack of All Trades', 'jack-of-all-trades', `Add half your Proficiency Bonus (+${Math.floor(pb / 2)}) to skill checks with skills you aren't proficient in.`);
+    F(3, 'College of Lore: Bonus Proficiencies', 'skills', 'Proficiency in three more skills of your choice.');
+    F(3, 'College of Lore: Cutting Words', 'cutting-words', 'Reaction when a creature you can see within 60 feet succeeds on an attack roll or ability check, or rolls damage: spend a Bardic Inspiration and subtract the die from its roll. (Here: used for you automatically against an attack roll it could turn into a miss.)');
+  } else if (cls === 'druid') {
+    F(1, 'Spellcasting', 'spellcasting', `${prepText('Wisdom', ' and can change them after a Long Rest.')}`);
+    F(1, 'Druidic', null, 'You know Druidic, the secret language of druids.');
+    F(1, `Primal Order: ${DRUID_ORDERS[spec.order].name}`, 'primal-order', DRUID_ORDERS[spec.order].text);
+    F(2, 'Wild Shape', 'wild-shape', `Bonus Action: turn into a Beast you know (here: a Wolf, AC 12, Speed 40, Bite +4 for 1d6 + 2 that knocks a Medium or smaller creature Prone). You keep your own Hit Points and gain ${level} Temporary Hit Points (your Druid level). No spellcasting in beast form. It ends as a Bonus Action, or if you're Incapacitated or drop to 0 HP. 2 uses; one back on a Short Rest, all on a Long Rest.`);
+    F(2, 'Wild Companion', null, 'Spend a spell slot or a use of Wild Shape to cast Find Familiar. (Useful outside of fights here.)');
+    if (spec.land) F(3, `Circle of the Land: ${LAND_SPELLS[spec.land].name}`, 'spellcasting', `Always prepared, not counted: ${names(LAND_SPELLS[spec.land].spells)}. You can pick another land after a Long Rest.`);
+    F(3, "Circle of the Land: Land's Aid", 'lands-aid', 'Magic action, one use of Wild Shape: pick a point within 60 feet. Each enemy in a 10-foot Sphere there makes a Constitution save against your spell save DC: 2d6 Necrotic damage, half on a success. One ally in it regains 2d6 Hit Points.');
+  } else if (cls === 'monk') {
+    F(1, 'Martial Arts', 'martial-arts', 'With no armor and no Shield: your Unarmed Strikes and Monk weapons (Simple melee weapons, and Martial melee weapons with the Light property) deal at least 1d6, your Martial Arts die, and can use Dexterity. Bonus Action: one Unarmed Strike.');
+    F(1, 'Unarmored Defense', 'unarmored-defense', 'Without armor or a Shield, your AC is 10 + DEX + WIS.');
+    F(2, "Monk's Focus", 'monks-focus', `${level} Focus Points, all back on a Short or Long Rest. Flurry of Blows: 1 point, two Unarmed Strikes as a Bonus Action. Patient Defense: Disengage as a Bonus Action, or 1 point to Disengage and Dodge. Step of the Wind: Dash as a Bonus Action, or 1 point to Disengage and Dash.`);
+    F(2, 'Unarmored Movement', 'unarmored-movement', '+10 feet of Speed without armor or a Shield.');
+    F(2, 'Uncanny Metabolism', 'uncanny-metabolism', `Once per Long Rest, when you roll Initiative: regain all Focus Points and 1d6 + ${level} Hit Points (used for you automatically when it helps).`);
+    F(3, 'Deflect Attacks', 'deflect-attacks', "Reaction when an attack roll hits you for Bludgeoning, Piercing or Slashing damage: take 1d10 + DEX + your Monk level less. If that brings it to 0, spend 1 Focus Point to send it back: a creature within 5 feet (60 for a ranged attack) makes a Dexterity save against your Focus DC or takes 2d6 + DEX of the attack's type. (Used for you automatically.)");
+    F(3, 'Open Hand Technique', 'open-hand-technique', `When a Flurry of Blows strike hits, you can also Addle it (no Opportunity Attacks until its next turn), Push it (Strength save or pushed 15 feet away) or Topple it (Dexterity save or Prone). Focus save DC ${8 + m.wis + pb} (8 + WIS + Proficiency Bonus).`);
+  } else if (cls === 'paladin') {
+    F(1, 'Lay on Hands', 'lay-on-hands', `A pool of ${5 * level} Hit Points (5 × Paladin level), refilled on a Long Rest. Bonus Action: touch a creature and restore Hit Points from the pool, or spend 5 to end the Poisoned condition on it.`);
+    F(1, 'Spellcasting', 'spellcasting', `${prepText('Charisma', '. After a Long Rest you can swap one of them for another.')}`);
+    F(1, 'Weapon Mastery', 'weapon-mastery', `Use the mastery property of 2 kinds of weapons. ${mastText()}.`);
+    styleF(2);
+    F(2, "Paladin's Smite", 'divine-smite', 'Divine Smite is always prepared, and you can cast it once per Long Rest without a spell slot.');
+    F(3, 'Channel Divinity', 'channel-divinity', 'Two uses (one back on a Short Rest, all on a Long Rest). Divine Sense: sense Celestials, Fiends and Undead nearby (useful outside of fights). Your oath adds Sacred Weapon.');
+    F(3, 'Oath of Devotion: Sacred Weapon', 'sacred-weapon', `When you take the Attack action, spend a Channel Divinity: for 10 minutes, add your Charisma modifier (+${Math.max(1, m.cha)}) to attack rolls with melee weapons, which shed light and can deal Radiant damage.`);
+    F(3, 'Oath of Devotion Spells', 'spellcasting', 'Always prepared, not counted: Protection from Evil and Good, Shield of Faith.');
+  } else if (cls === 'ranger') {
+    F(1, 'Spellcasting', 'spellcasting', `${prepText('Wisdom', '. After a Long Rest you can swap one of them for another.')}`);
+    F(1, 'Favored Enemy', 'favored-enemy', "Hunter's Mark is always prepared, and you can cast it twice per Long Rest without a spell slot.");
+    F(1, 'Weapon Mastery', 'weapon-mastery', `Use the mastery property of 2 kinds of weapons. ${mastText()}.`);
+    F(2, 'Deft Explorer', 'expertise', `Expertise in ${spec.expertise.map((x) => SKILL_NAMES[x]).join(' and ')}, and two more languages.`);
+    styleF(2);
+    F(3, "Hunter: Hunter's Lore", null, "While a creature is marked by your Hunter's Mark, you know its Immunities, Resistances and Vulnerabilities.");
+    if (spec.prey) F(3, `Hunter: ${HUNTER_PREY[spec.prey].name}`, HUNTER_PREY[spec.prey].rule, `${HUNTER_PREY[spec.prey].text} You can switch Hunter's Prey after a Short or Long Rest.`);
+  } else if (cls === 'sorcerer') {
+    F(1, 'Spellcasting', 'spellcasting', `${prepText('Charisma', '. When you gain a Sorcerer level you can swap one of them for another, and one cantrip.')}`);
+    F(1, 'Innate Sorcery', 'innate-sorcery', 'Bonus Action, twice per Long Rest: for 1 minute, your Sorcerer spells get +1 to their save DC, and you have Advantage on their attack rolls.');
+    F(2, 'Font of Magic', 'font-of-magic', `${level} Sorcery Points, all back on a Long Rest. Bonus Action: turn 2 points into a level 1 spell slot${L(3) ? ', or 3 into a level 2 slot' : ''}. With no action, turn a spell slot into points equal to its level. Slots you make vanish on a Long Rest.`);
+    if (spec.metamagic.length) F(2, `Metamagic: ${spec.metamagic.map((x) => METAMAGIC[x].name).join(', ')}`, 'metamagic', spec.metamagic.map((x) => `${METAMAGIC[x].name} (${METAMAGIC[x].cost} point${METAMAGIC[x].cost > 1 ? 's' : ''}): ${METAMAGIC[x].text}`).join(' '));
+    F(3, 'Draconic Sorcery: Draconic Resilience', 'draconic-resilience', '+3 Hit Points (one more per later Sorcerer level), and without armor your AC is 10 + DEX + CHA.');
+    F(3, 'Draconic Spells', 'spellcasting', "Always prepared, not counted: Alter Self, Chromatic Orb, Command, Dragon's Breath.");
+  } else if (cls === 'warlock') {
+    const sl = Object.entries(slotTable(cls)[level])[0];
+    F(1, 'Pact Magic', 'pact-magic', `${sl[1]} spell slot${sl[1] > 1 ? 's' : ''} of level ${sl[0]}, all back on a Short or Long Rest. Charisma is your spellcasting ability. You prepare ${PREPARED_BY_LEVEL.warlock[level]} Warlock spells and can swap one, and one cantrip, when you gain a level.`);
+    for (const x of spec.invocations) F(1, `Invocation: ${INVOCATIONS[x].name}`, 'eldritch-invocations', `${INVOCATIONS[x].text}${x === 'pact-of-the-blade' ? ` Yours: ${WEAPONS[spec.pactWeapon].name}.` : ''}`);
+    F(2, 'Magical Cunning', null, 'Once per Long Rest, a 1-minute rite regains up to half your Pact Magic slots. (Not used here: a Short Rest gives them all back anyway.)');
+    F(3, "Fiend Patron: Dark One's Blessing", 'dark-ones-blessing', `When you drop an enemy to 0 Hit Points, or one within 10 feet of you drops to 0, you gain ${Math.max(1, m.cha + level)} Temporary Hit Points (CHA modifier + Warlock level).`);
+    F(3, 'Fiend Patron Spells', 'spellcasting', 'Always prepared, not counted: Burning Hands, Command, Scorching Ray, Suggestion.');
+  }
   features.push({ name: `Equipment: ${kit.name}`, rule: null, text: kit.text, source: C.name });
 
   const ancestry = DRAGON_ANCESTRY[spec.ancestry];
@@ -438,7 +616,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     species: lin && spec.species !== 'goliath' ? `${lin.name}${spec.species === 'tiefling' ? ' Tiefling' : ''}` : S.name, speciesId: spec.species, lineage: spec.lineage,
     background: B.name, size: spec.species === 'halfling' || spec.species === 'gnome' ? 'small' : 'medium',
     scores, mods: m, saves, saveProfs: [...C.saves],
-    armorId: kit.armor, hasShield: kit.shield, style: spec.style, mageArmor: false,
+    armorId, hasShield: kit.shield, style: spec.style, mageArmor: false, unarmored, shadows,
     ac: sumParts(acParts), acParts, hp: hpMax, hpMax, hpParts, tempHp: 0,
     hitDice: { die: C.hitDie, max: level, left: level },
     speed: sumParts(speedParts), speedParts, initParts, attacks, skills, profSkills: [...prof], expertise, features, casting,
@@ -458,7 +636,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     initAdv: spec.cls === 'fighter' && L(3),
     cunning: spec.cls === 'rogue' && L(2),
     steadyAim: spec.cls === 'rogue' && L(3),
-    channel: spec.cls === 'cleric' && L(2) ? { uses: 2, max: 2 } : null,
+    channel: (cls === 'cleric' && L(2)) || (cls === 'paladin' && L(3)) ? { uses: 2, max: 2 } : null,
     discipleOfLife: spec.cls === 'cleric' && L(3),
     preserveLife: spec.cls === 'cleric' && L(3),
     potentCantrip: spec.cls === 'wizard' && L(3),
@@ -475,7 +653,28 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     creature: 'humanoid', conds: [], autoInspire: true,
     multiattack: 1,
     reaction: true, deathSaves: { s: 0, f: 0 }, stable: false, dead: false,
-    x: 0, y: 0, ai: { fighter: kit.weapons.includes('longbow') ? 'archer' : 'melee', rogue: 'skirmisher', cleric: 'support', wizard: 'caster' }[spec.cls],
+    // The other classes (see combat.js for how each works in a fight).
+    rage: cls === 'barbarian' ? { uses: rageUses, max: rageUses } : null,
+    rageDmg: cls === 'barbarian' ? 2 : 0,
+    dangerSense: cls === 'barbarian' && L(2), reckless: cls === 'barbarian' && L(2), frenzy: cls === 'barbarian' && L(3),
+    bardic: cls === 'bard' ? { uses: Math.max(1, m.cha), max: Math.max(1, m.cha), die: 6 } : null,
+    cuttingWords: cls === 'bard' && L(3),
+    wildShape: cls === 'druid' && L(2) ? { uses: 2, max: 2 } : null,
+    landsAid: cls === 'druid' && L(3),
+    martialDie, monk: cls === 'monk',
+    focus: cls === 'monk' && L(2) ? { uses: level, max: level } : null,
+    focusDc: cls === 'monk' ? [{ label: 'Base', value: 8, rule: 'monks-focus' }, { label: 'WIS modifier', value: m.wis, rule: 'ability-modifier' }, { label: 'Proficiency Bonus', value: pb, rule: 'proficiency' }] : null,
+    metabolism: cls === 'monk' && L(2) ? { uses: 1, max: 1 } : null,
+    deflect: cls === 'monk' && L(3), openHand: cls === 'monk' && L(3),
+    layOnHands: cls === 'paladin' ? { uses: 5 * level, max: 5 * level } : null,
+    sacredWeapon: cls === 'paladin' && L(3),
+    prey: spec.prey || null,
+    innate: cls === 'sorcerer' ? { uses: 2, max: 2 } : null,
+    sorcery: cls === 'sorcerer' && L(2) ? { uses: level, max: level } : null,
+    metamagic: [...(spec.metamagic || [])],
+    invocations: [...(spec.invocations || [])],
+    darkOne: cls === 'warlock' && L(3),
+    x: 0, y: 0, ai: cls === 'fighter' ? (kit.weapons.includes('longbow') ? 'archer' : 'melee') : AI_ROLE[cls],
   };
 }
 
@@ -494,7 +693,7 @@ export function setMageArmor(h, on) {
 // last until a rest). Each count keeps its max so a level-up can add the
 // difference to what's left.
 
-const USES = ['secondWind', 'actionSurge', 'channel', 'giant', 'adrenaline', 'breath'];
+const USES = ['secondWind', 'actionSurge', 'channel', 'giant', 'adrenaline', 'breath', 'rage', 'bardic', 'wildShape', 'focus', 'layOnHands', 'innate', 'sorcery', 'metabolism'];
 
 export function heroState(h) {
   const st = {
@@ -521,7 +720,8 @@ export function applyState(h, st) {
   if (st.hd) h.hitDice.left = carry(st.hd.left, st.hd.max, h.hitDice.max);
   for (const [lv, s] of Object.entries(h.casting?.slots || {})) {
     const o = st.slots?.[lv];
-    if (o) s.left = carry(o.left, o.max, s.max);
+    // Font of Magic can make slots past the maximum; they last until a Long Rest.
+    if (o) s.left = Math.max(0, Math.min(s.max + Math.max(0, o.left - o.max), o.left + (s.max - o.max)));
   }
   for (const [sid, k] of Object.entries(h.casting?.known || {})) if (st.free?.[sid] != null) k.free = Math.min(k.free, st.free[sid]);
   for (const u of USES) {
@@ -562,6 +762,12 @@ export function finishShortRest(h) {
   if (h.secondWind && h.secondWind.uses < h.secondWind.max) { h.secondWind.uses++; got.push('a use of Second Wind'); }
   if (h.actionSurge && h.actionSurge.uses < h.actionSurge.max) { h.actionSurge.uses = h.actionSurge.max; got.push('Action Surge'); }
   if (h.channel && h.channel.uses < h.channel.max) { h.channel.uses++; got.push('a use of Channel Divinity'); }
+  if (h.rage && h.rage.uses < h.rage.max) { h.rage.uses++; got.push('a use of Rage'); }
+  if (h.wildShape && h.wildShape.uses < h.wildShape.max) { h.wildShape.uses++; got.push('a use of Wild Shape'); }
+  if (h.focus && h.focus.uses < h.focus.max) { h.focus.uses = h.focus.max; got.push('all Focus Points'); }
+  let pact = false;
+  for (const s of Object.values(h.casting?.slots || {})) if (s.pact && s.left < s.max) { s.left = s.max; pact = true; }
+  if (pact) got.push('all Pact Magic spell slots');
   if (h.adrenaline && h.adrenaline.uses < h.adrenaline.max) { h.adrenaline.uses = h.adrenaline.max; got.push('Adrenaline Rush'); }
   if (h.arcaneRecovery && !h.arcaneRecovery.used && h.casting?.slots) {
     let budget = Math.ceil(h.level / 2);

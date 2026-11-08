@@ -16,7 +16,7 @@ import { cheb, incap, down, hasCond, condOf, reachMap, canEndAt, pathFrom, key, 
 import {
   attackOptions, enemiesOf, alliesOf, previewMove, canCast, canAttack, spellAttack, spellDC,
   attackFactors, hitChance, hitBonus, saveChance, spellMod, scaled, areaTargets, pointError, offhandFor, canTarget,
-  provokers, speedOf, seenBy, preservePlan, damageMult, acAgainst, reachOf, BREATH_AREAS, spellAim,
+  provokers, speedOf, seenBy, preservePlan, damageMult, acAgainst, reachOf, BREATH_AREAS, spellAim, smitePay, spellDCParts,
 } from './combat.js';
 import { inBounds } from './grid.js';
 import { SPELLS } from './data.js';
@@ -35,6 +35,23 @@ const finishing = (T, avg) => (T.hp <= avg ? 2 : 0) - (down(T) ? 3 : 0) + (hasCo
 const slotCost = (can) => (can.pay === 'slot' ? 2 + can.slot * 1.5 : can.pay === 'free' ? 1.5 : 0);
 const sees = (b, me, T, range) => feetBetween(me, T) <= range && lineOfSight(b, me, T);
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+const PFE_TYPES = ['aberration', 'celestial', 'elemental', 'fey', 'fiend', 'undead'];
+const flatOf = (atk) => (atk.dmgFlat || []).reduce((s2, x) => s2 + x.value, 0);
+const myMark = (b, me) => b.effects.find((e) => e.type === 'mark' && e.by === me.id);
+const anyUp = (b, me) => targetsOf(b, me).some((T) => !down(T));
+const totalFoeHp = (b, me) => targetsOf(b, me).filter((T) => !down(T)).reduce((s2, T) => s2 + T.hp, 0);
+const sleepProof = (c) => c.condImmune?.includes('exhaustion') || c.speciesId === 'elf';
+// Spots to center an area on: each foe's square and the squares around it.
+function spotsNear(b, me, aim, foes) {
+  const spots = new Map();
+  const consider = (x, y) => { if (inBounds(x, y) && !pointError(b, me, aim, x, y)) spots.set(`${x},${y}`, { x, y }); };
+  if (aim.from === 'self') for (const [dx, dy] of DIRS) consider(me.x + dx, me.y + dy);
+  for (const T of foes) {
+    consider(T.x, T.y);
+    if (aim.from !== 'self') for (const [dx, dy] of DIRS) consider(T.x + dx, T.y + dy);
+  }
+  return [...spots.values()];
+}
 
 // Weapon attacks from where `me` stands.
 function weaponOptions(b, me, { kind = null } = {}) {
@@ -97,9 +114,9 @@ export function specialOptions(b, me, { light = false } = {}) {
           const f = attackFactors(b, me, T, atk);
           const p = hitChance(hitBonus(atk), acAgainst(b, me, T, atk).value, f.mode, me.luck);
           const giant = me.giant?.uses && s.kind === 'attack' ? (me.giant.kind === 'fire' ? 5.5 : me.giant.kind === 'frost' ? 3.5 : 0) : 0;
-          const each = avgDice(sc.dice) * damageMult(T, s.type) + giant;
+          const each = (avgDice(sc.dice) + flatOf(atk)) * damageMult(T, s.type) + giant;
           const n = s.kind === 'rays' ? sc.rays : 1;
-          add({ a: 'cast', spell: sid, target: T.id }, n * p * each + finishing(T, each) - cost + (s.rider === 'guided' ? 1.5 : 0) + (s.rider === 'chill' || s.rider === 'shocked' || s.rider === 'sicken' ? 0.5 : 0), { T, p, mode: f.mode, n });
+          add({ a: 'cast', spell: sid, target: T.id }, n * p * each + finishing(T, each) - cost + (s.rider === 'guided' ? 1.5 : 0) + (s.rider === 'chill' || s.rider === 'shocked' || s.rider === 'sicken' || s.rider === 'pull' || s.rider === 'wisp' ? 0.5 : 0), { T, p, mode: f.mode, n });
         }
         break;
       }
@@ -108,7 +125,7 @@ export function specialOptions(b, me, { light = false } = {}) {
           if (!sees(b, me, T, range)) continue;
           const pFail = 1 - saveChance(b, T, s.save, dc);
           const avg = avgDice(sc.dice) * damageMult(T, s.type);
-          add({ a: 'cast', spell: sid, target: T.id }, (pFail + (s.half ? (1 - pFail) / 2 : 0)) * avg + finishing(T, avg) - cost, { T, pFail, dc });
+          add({ a: 'cast', spell: sid, target: T.id }, (pFail + (s.half ? (1 - pFail) / 2 : 0)) * avg + finishing(T, avg) - cost + pFail * (s.rider === 'mocked' ? 1.5 : s.rider === 'flee' ? 1 : 0), { T, pFail, dc });
         }
         break;
       }
@@ -150,18 +167,22 @@ export function specialOptions(b, me, { light = false } = {}) {
       case 'area': {
         const aim = spellAim(sid, can.slot);
         const near = threatened(b, me);
-        const spots = new Map();
-        const consider = (x, y) => { if (inBounds(x, y) && !pointError(b, me, aim, x, y)) spots.set(`${x},${y}`, { x, y }); };
-        if (aim.from === 'self') for (const [dx, dy] of DIRS) consider(me.x + dx, me.y + dy);
-        for (const T of foes) {
-          consider(T.x, T.y);
-          if (aim.from !== 'self') for (const [dx, dy] of DIRS) consider(T.x + dx, T.y + dy);
-        }
-        for (const { x, y } of spots.values()) {
+        for (const { x, y } of spotsNear(b, me, aim, foes)) {
           const hit = areaTargets(b, me, aim, x, y);
           const fs = hit.filter((c) => c.side !== me.side && !down(c) && !c.dead);
           const pals = hit.filter((c) => c.side === me.side);
-          if (!fs.length || pals.length) continue;
+          if (!fs.length) continue;
+          // Sleep, Entangle, Web: a condition instead of damage. Sleep skips allies.
+          if (s.cond) {
+            const sleep = s.cond === 'sleep';
+            if (!sleep && pals.length) continue;
+            const fresh = fs.filter((c) => !incap(c) && !hasCond(c, 'restrained') && !(sleep && sleepProof(c)));
+            if (!fresh.length) continue;
+            const exp = fresh.reduce((acc, c) => acc + (1 - saveChance(b, c, s.save, dc)) * (sleep ? 8 : 6) * Math.min(1, c.hp / 8), 0);
+            add({ a: 'cast', spell: sid, x, y }, exp - cost, { foes: fresh, pals: sleep ? [] : pals });
+            continue;
+          }
+          if (pals.length) continue;
           if (s.effect) {
             const fresh = fs.filter((c) => !b.effects.some((x2) => x2.type === s.effect && x2.target === c.id));
             if (fresh.length < 2) continue;
@@ -226,7 +247,50 @@ export function specialOptions(b, me, { light = false } = {}) {
         }
         break;
       }
+      case 'mark': {
+        if (myMark(b, me)) break;
+        let best = null;
+        for (const T of foes) {
+          if (down(T) || !sees(b, me, T, s.range)) continue;
+          if (!best || T.hp > best.hp) best = T;
+        }
+        if (best) add({ a: 'cast', spell: sid, target: best.id }, 2 + 3.5 * Math.min(3, best.hp / 7) - cost * 0.5, { T: best }, 'bonus');
+        break;
+      }
+      case 'selfbuff': {
+        if (s.buff === 'favor') {
+          if (me.favorOn || b.effects.some((e) => e.type === 'favor' && e.by === me.id)) break;
+          const close = foes.some((T) => !down(T) && cheb(me, T) <= 3);
+          if (close && canAttack(t)) add({ a: 'cast', spell: sid }, 2 + 2.5 * Math.min(3, totalFoeHp(b, me) / 10) - cost, { T: me }, 'bonus');
+        } else if (s.buff === 'blur') {
+          if (threatened(b, me) || foes.filter((T) => !down(T)).length >= 2) add({ a: 'cast', spell: sid }, 6 - cost, { T: me });
+        }
+        break;
+      }
+      case 'bane': {
+        const pick = foes.filter((T) => !down(T) && sees(b, me, T, s.range) && !b.effects.some((e) => e.type === 'bane' && e.target === T.id))
+          .sort((p, q) => q.hp - p.hp).slice(0, sc.targets);
+        if (pick.length < 2) break;
+        const exp = pick.reduce((acc, T) => acc + (1 - saveChance(b, T, 'cha', dc)) * 2.5, 0);
+        add({ a: 'cast', spell: sid, targets: pick.map((c) => c.id) }, 1 + exp - cost, { ids: pick.map((c) => c.id) });
+        break;
+      }
       default: break;
+    }
+    // Buffs added with the new classes (Heroism, Protection from Evil and Good, Barkskin, Dragon's Breath).
+    if (s.kind === 'buff' && ['heroism', 'pfe', 'bark', 'dbreath'].includes(s.buff)) {
+      const pool = friends.filter((F) => !down(F) && (F === me || sees(b, me, F, range)) && !b.effects.some((e) => e.type === s.buff && e.target === F.id));
+      let best = null;
+      for (const F of pool) {
+        const near = awake(b, F).filter((e) => cheb(e, F) * 5 <= reachOf(e) + 10);
+        let v = 0;
+        if (s.buff === 'heroism') v = hasCond(F, 'frightened') ? 7 : 0;
+        else if (s.buff === 'pfe') v = near.filter((e) => PFE_TYPES.includes(e.creature)).length * 3;
+        else if (s.buff === 'bark') v = near.length ? Math.max(0, 17 - F.ac) * 1.2 : 0;
+        else if (s.buff === 'dbreath') v = foes.filter((T) => !down(T) && cheb(T, F) <= 3).length >= 2 ? 6 : 0;
+        if (v && (!best || v > best.v)) best = { F, v };
+      }
+      if (best) add({ a: 'cast', spell: sid, targets: [best.F.id] }, best.v - cost, { T: best.F }, s.time);
     }
   }
   if (me.breath?.uses > 0 && canAttack(t) && !light) {
@@ -249,7 +313,7 @@ export function specialOptions(b, me, { light = false } = {}) {
     }
   }
   // Channel Divinity (Cleric).
-  if (me.channel?.uses > 0 && t.action && !t.magicUsed) {
+  if (me.channel?.uses > 0 && t.action && !t.magicUsed && me.cls === 'cleric') {
     if (me.level >= 2) {
       const dc = me.casting ? me.casting.stats.wis.dc.reduce((s, p) => s + p.value, 0) : 10;
       for (const T of foes) {
@@ -278,8 +342,94 @@ export function specialOptions(b, me, { light = false } = {}) {
       add({ a: 'spiritual', target: T.id }, 6 + finishing(T, 6), { T }, 'bonus');
     }
   }
+  classOptions(b, me, add, { friends, foes, light });
   out.sort((p, q) => q.score - p.score);
   return out;
+}
+
+// The features of the newer classes: Rage, Bardic Inspiration, Wild Shape,
+// Martial Arts, Lay on Hands, Innate Sorcery and the rest.
+function classOptions(b, me, add, { friends, foes, light }) {
+  const t = b.turn;
+  const up = foes.filter((T) => !down(T));
+  if (!up.length) return;
+  // Rage: as soon as a fight is close enough to matter.
+  if (me.rage && !me.raging && me.rage.uses > 0 && t.bonus && !me.conc) {
+    const soon = up.some((T) => cheb(me, T) * 5 <= speedOf(b, me) + 10);
+    if (soon) add({ a: 'rage' }, 8, { T: me }, 'bonus');
+  }
+  // Bardic Inspiration: to the friend most likely to roll soon. Lore bards keep one for Cutting Words.
+  if (me.bardic && t.bonus && me.bardic.uses > (me.cuttingWords ? 1 : 0)) {
+    let best = null;
+    for (const F of friends) {
+      if (F === me || down(F) || F.bardicDie || !sees(b, me, F, 60)) continue;
+      const v = (awake(b, F).some((e) => cheb(e, F) <= 2) ? 2 : 0) + (F.attacks?.length ? 1 : 0);
+      if (!best || v > best.v) best = { F, v };
+    }
+    if (best) add({ a: 'inspire', target: best.F.id }, 4 + best.v * 0.5, { T: best.F }, 'bonus');
+  }
+  // Wild Shape: once the druid has no spell slots left to spend.
+  if (me.wildShape && !me.shape && t.bonus && me.wildShape.uses > (me.landsAid ? 1 : 0)) {
+    const slots = Object.values(me.casting?.slots || {}).reduce((s2, x) => s2 + x.left, 0);
+    if (!slots && !me.conc) add({ a: 'shape' }, 5.5, { T: me }, 'bonus');
+  }
+  // Land's Aid: a 10-foot Sphere of thorns that also heals a friend inside.
+  if (me.landsAid && me.wildShape?.uses > 0 && t.action && !t.magicUsed && !light && !me.shape) {
+    const area = { mode: 'area', shape: 'sphere', size: 10, from: 'point', range: 60 };
+    const dc = me.casting.stats.wis.dc.reduce((s2, p) => s2 + p.value, 0);
+    for (const { x, y } of spotsNear(b, me, area, up)) {
+      const inside = areaTargets(b, me, area, x, y);
+      const fs = inside.filter((c) => c.side !== me.side && !down(c) && !c.dead);
+      if (!fs.length) continue;
+      const hurt = inside.some((c) => c.side === me.side && c.hp < c.hpMax / 2);
+      const exp = fs.reduce((acc, c) => acc + 7 * damageMult(c, 'Necrotic') * (1 - saveChance(b, c, 'con', dc) / 2), 0);
+      add({ a: 'landsaid', x, y }, exp + (hurt ? 5 : 0) - 3, { foes: fs });
+    }
+  }
+  // Martial Arts and Flurry of Blows (Bonus Action Unarmed Strikes).
+  const fist = me.martialDie && me.attacks.find((a) => a.id === 'unarmed');
+  if (fist && t.bonus) {
+    for (const T of up) {
+      const o = attackOptions(b, me, T).find((x) => x.atk.id === 'unarmed');
+      if (!o?.ok) continue;
+      add({ a: 'martial', target: T.id }, o.expected + finishing(T, o.avg), { T, o }, 'bonus');
+      if (me.focus?.uses > 0) add({ a: 'flurry', target: T.id, tech: 'topple' }, 2 * o.expected + finishing(T, o.avg) + (me.openHand ? 1 : 0) - 2, { T, o }, 'bonus');
+    }
+  }
+  // Lay on Hands: bring a fallen friend back up, or top up a badly hurt one.
+  if (me.layOnHands && t.bonus) {
+    for (const F of friends) {
+      if (F.dead || (F !== me && cheb(me, F) > 1)) continue;
+      const pool = me.layOnHands.uses;
+      if (hasCond(F, 'poisoned') && pool >= 5) add({ a: 'lay', target: F.id, cure: true }, 4, { T: F, cure: true }, 'bonus');
+      if (pool < 1 || F.hp >= F.hpMax) continue;
+      if (F.hp <= 0) add({ a: 'lay', target: F.id, amount: Math.min(pool, Math.max(1, Math.ceil(F.hpMax / 2))) }, 20, { T: F }, 'bonus');
+      else if (F.hp <= F.hpMax / 3) add({ a: 'lay', target: F.id, amount: Math.min(pool, F.hpMax - F.hp) }, 6, { T: F }, 'bonus');
+    }
+  }
+  // Hunter's Mark or Hex: move it once its creature drops.
+  const mk = myMark(b, me);
+  if (mk && t.bonus) {
+    const old = b.creatures[mk.target];
+    if (!old || old.dead || old.hp <= 0) {
+      const T = up.filter((X) => sees(b, me, X, 90)).sort((p, q) => q.hp - p.hp)[0];
+      if (T) add({ a: 'remark', target: T.id }, 7, { T }, 'bonus');
+    }
+  }
+  // Innate Sorcery: early in a fight worth it.
+  if (me.innate && !me.innateOn && me.innate.uses > 0 && t.bonus && totalFoeHp(b, me) > 15) add({ a: 'innate' }, 5, { T: me }, 'bonus');
+  // Dragon's Breath: exhale a 15-foot Cone.
+  const db = b.effects.find((e) => e.type === 'dbreath' && e.target === me.id);
+  if (db && t.action && !t.magicUsed && !light) {
+    const dc = db.dcParts.reduce((s2, p) => s2 + p.value, 0);
+    for (const T of up) {
+      const hit = areaTargets(b, me, BREATH_AREAS.cone, T.x, T.y);
+      const fs = hit.filter((c) => c.side !== me.side && !down(c));
+      if (!fs.length || hit.some((c) => c.side === me.side)) continue;
+      const exp = fs.reduce((acc, c) => acc + avgDice(db.dice) * damageMult(c, db.dmgType) * (1 - saveChance(b, c, 'dex', dc) / 2), 0);
+      add({ a: 'exhale', x: T.x, y: T.y }, exp, { foes: fs });
+    }
+  }
 }
 
 // Best thing to do with the action from where `me` stands.
@@ -428,7 +578,7 @@ export function aiNext(b, id) {
     return { a: 'end' };
   }
   if (incap(me)) return { a: 'end' };
-  const style = me.ai || 'melee';
+  const style = me.shape ? 'melee' : me.ai || 'melee';
   const foes = targetsOf(b, me);
   if (!foes.length) return { a: 'end' };
 
@@ -468,6 +618,10 @@ export function aiNext(b, id) {
     const here = bestHere(b, me);
     if (!here || here.score < 3) return web?.web ? { a: 'cut', target: id } : { a: 'escape' };
   }
+  if (web?.escape && t.action) {
+    const here = bestHere(b, me);
+    if (!here || here.score < 3) return { a: 'escape' };
+  }
 
   // Casters in someone's reach: Misty Step away first.
   if ((style === 'caster' || style === 'support') && t.bonus && threatened(b, me) && canCast(b, me, 'misty-step').ok) {
@@ -492,6 +646,12 @@ export function aiNext(b, id) {
   }
 
   if (here && here.score > 0.3) {
+    const atk = here.intent.a === 'attack' && me.attacks.find((a) => a.id === here.intent.attack);
+    const melee = atk && atk.kind === 'melee' && !here.intent.offhand;
+    // Reckless Attack: with a Strength melee attack, while not badly hurt.
+    if (melee && me.reckless && !t.rolled && (atk.ability || 'str') === 'str' && me.hp > me.hpMax / 2 && !b.effects.some((e) => e.type === 'reckless' && e.by === id)) return { a: 'reckless' };
+    // Sacred Weapon: as the Attack action starts, against a fight that's worth it.
+    if (melee && me.sacredWeapon && !me.sacredOn && me.channel?.uses > 0 && totalFoeHp(b, me) > 12) return { a: 'sacred' };
     // Steady Aim before a shot taken from where you stand.
     if (here.intent.a === 'attack' && here.ranged && me.steadyAim && t.bonus && !t.moves && t.moveLeft >= speedOf(b, me) && here.why.o.mode !== 'advantage' && !threatened(b, me)) return { a: 'aim' };
     return here.intent;
@@ -501,6 +661,12 @@ export function aiNext(b, id) {
   if (!canAttack(t)) {
     const off = offhandOptions(b, me)[0];
     if (off && off.score > 1) return off.intent;
+  }
+
+  // Leftover Bonus Action (Martial Arts, Bardic Inspiration, Hunter's Mark...).
+  if (t.bonus && !canAttack(t)) {
+    const top = specialOptions(b, me).filter((o) => o.time === 'bonus')[0];
+    if (top && top.score > 1.5) return top.intent;
   }
 
   // Action used: Action Surge for another go.
@@ -530,6 +696,8 @@ export function aiNext(b, id) {
       if (best && cheb(best, T) < cheb(me, T) && previewMove(b, id, best.x, best.y)) return { a: 'move', x: best.x, y: best.y };
     }
   }
+  // Rage ends unless you attacked or took damage: spend the Bonus Action to keep it.
+  if (me.raging && !me.raging.kept && t.bonus && anyUp(b, me)) return { a: 'rage' };
   return { a: 'end' };
 }
 
@@ -542,6 +710,12 @@ export function aiReact(b) {
   const p = b.pending;
   if (!p) return null;
   if (p.kind === 'shield') return true;     // only asked when +5 AC would turn the hit into a miss
+  if (p.kind === 'smite') {
+    // Smite on a Critical Hit, or when the target has enough Hit Points left to be worth a slot.
+    const R = b.creatures[p.reactor], T = b.creatures[p.target];
+    const pay = smitePay(b, R);
+    return !!pay && !!T && (p.crit || pay.pay === 'free' || T.hp >= 6);
+  }
   return true;
 }
 
@@ -581,6 +755,11 @@ export function coach(b, id) {
       else if (s.kind === 'cure') text = `Cast ${s.name} to end ${T.name}'s ${intent.cond} condition (${lvl}).`;
       else if (s.kind === 'teleport') text = `You're in an enemy's reach: Misty Step away (${lvl}). Teleporting doesn't provoke Opportunity Attacks.`;
       else if (s.kind === 'spiritual') text = `Cast ${s.name} next to ${T.name} (${lvl}, a Bonus Action). It keeps attacking on later turns.${conc}`;
+      else if (s.kind === 'area' && s.cond) text = `Cast ${s.name} on the marked square: ${(o?.why.foes || []).map((c) => c.name).join(' and ')} must save or be ${s.cond === 'sleep' ? 'Incapacitated, then Unconscious' : 'Restrained'} (${lvl}).${conc}`;
+      else if (s.kind === 'mark') text = `Cast ${s.name} on ${T.name} (${lvl}, a Bonus Action): an extra ${s.dice} ${s.type} damage each time you hit it.${conc}`;
+      else if (s.kind === 'selfbuff') text = s.buff === 'favor' ? `Cast ${s.name} (${lvl}, a Bonus Action): +1d4 Radiant damage on your weapon hits for 1 minute.` : `Cast ${s.name} (${lvl}): attackers have Disadvantage against you.${conc}`;
+      else if (s.kind === 'bane') text = `Cast ${s.name} on ${(intent.targets || []).map((x) => b.creatures[x]?.name).join(', ')}: on a failed Charisma save, they subtract 1d4 from attack rolls and saves (${lvl}).${conc}`;
+      else if (s.kind === 'buff' && intent.targets?.length === 1 && s.buff !== 'bless') text = `Cast ${s.name} on ${b.creatures[intent.targets[0]]?.name} (${lvl}${s.time === 'bonus' ? ', a Bonus Action' : ''}).${conc}`;
       else if (s.kind === 'rays') text = `Cast ${s.name}: ${o?.why.n || 3} rays at ${T.name}, ${Math.round((o?.why.p || 0) * 100)}% each to hit (${lvl}).`;
       else text = `Cast ${s.name} at ${T.name}: ${Math.round((o?.why.p || 0) * 100)}% to hit (${lvl}).`;
       break;
@@ -607,6 +786,21 @@ export function coach(b, id) {
     case 'preserve': text = 'Use Preserve Life to heal your Bloodied allies.'; break;
     case 'spiritual': text = `Your Spiritual Weapon attacks ${T.name} (Bonus Action).`; break;
     case 'web': text = `Web ${T.name}.`; break;
+    case 'rage': text = me.raging ? 'Use your Bonus Action to keep raging: otherwise your Rage ends this turn, since you neither attacked nor took damage.' : 'Rage (Bonus Action): Resistance to Bludgeoning, Piercing and Slashing damage, and extra damage on Strength attacks.'; break;
+    case 'reckless': text = 'Attack recklessly: Advantage on your Strength attacks this turn, but enemies get Advantage against you until your next turn.'; break;
+    case 'inspire': text = `Give ${T.name} Bardic Inspiration (Bonus Action): a d${me.bardic.die} to add when one of their D20 Tests falls short.`; break;
+    case 'shape': text = 'You have no spell slots left: use Wild Shape (Bonus Action) to become a Wolf and fight with its Bite.'; break;
+    case 'unshape': text = 'Return to your normal form (Bonus Action).'; break;
+    case 'landsaid': text = "Use Land's Aid on the marked square: Necrotic damage to enemies in it (half on a Constitution save), and a friend in it heals 2d6."; break;
+    case 'martial': text = `Make a Bonus Action Unarmed Strike at ${T.name} (Martial Arts).`; break;
+    case 'flurry': text = `Spend 1 Focus Point on Flurry of Blows: two Unarmed Strikes at ${T.name} as a Bonus Action.`; break;
+    case 'patient': case 'stepwind': text = intent.a === 'patient' ? 'Use Patient Defense (Bonus Action).' : 'Use Step of the Wind (Bonus Action).'; break;
+    case 'lay': text = intent.cure ? `Use Lay on Hands to end ${T.name}'s Poisoned condition (5 from the pool).` : `${T.name} needs help: use Lay on Hands (Bonus Action) to restore ${intent.amount} Hit Points.`; break;
+    case 'sacred': text = 'Use Channel Divinity: Sacred Weapon as you attack: your Charisma modifier is added to your melee attack rolls.'; break;
+    case 'remark': text = `Your mark's creature is down: move it to ${T.name} (Bonus Action).`; break;
+    case 'innate': text = 'Use Innate Sorcery (Bonus Action): +1 to your spell save DC and Advantage on your Sorcerer spell attacks for 1 minute.'; break;
+    case 'font': text = 'Use Font of Magic to trade Sorcery Points and spell slots.'; break;
+    case 'exhale': text = "Exhale your Dragon's Breath at the marked square: a 15-foot Cone, half damage on a Dexterity save."; break;
     case 'end': text = "You've done what you can: end your turn."; break;
     default: text = '';
   }

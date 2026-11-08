@@ -45,7 +45,15 @@ export const WEAPONS = {
   mace: { name: 'Mace', kind: 'melee', dice: '1d6', type: 'Bludgeoning', props: [], mastery: 'sap' },
   quarterstaff: { name: 'Quarterstaff', kind: 'melee', dice: '1d6', type: 'Bludgeoning', props: ['Versatile (1d8)'], versatile: '1d8', mastery: 'topple' },
   dagger: { name: 'Dagger', kind: 'melee', dice: '1d4', type: 'Piercing', props: ['Finesse', 'Light', 'Thrown (20/60)'], finesse: true, light: true, thrown: [20, 60], mastery: 'nick' },
+  greataxe: { name: 'Greataxe', kind: 'melee', dice: '1d12', type: 'Slashing', props: ['Heavy', 'Two-Handed'], heavy: true, twoHanded: true, mastery: 'cleave', martial: true },
+  handaxe: { name: 'Handaxe', kind: 'melee', dice: '1d6', type: 'Slashing', props: ['Light', 'Thrown (20/60)'], light: true, thrown: [20, 60], mastery: 'vex' },
+  spear: { name: 'Spear', kind: 'melee', dice: '1d6', type: 'Piercing', props: ['Thrown (20/60)', 'Versatile (1d8)'], thrown: [20, 60], versatile: '1d8', mastery: 'sap' },
+  sickle: { name: 'Sickle', kind: 'melee', dice: '1d4', type: 'Slashing', props: ['Light'], light: true, mastery: 'nick' },
 };
+// A Monk's weapons: Simple Melee weapons, and Martial Melee weapons with the Light property.
+export const isMonkWeapon = (wid) => WEAPONS[wid]?.kind === 'melee' && (!WEAPONS[wid].martial || !!WEAPONS[wid].light);
+// What a Warlock's Pact of the Blade can conjure (any Simple or Martial Melee weapon here).
+export const PACT_WEAPONS = ['longsword', 'greatsword', 'flail', 'scimitar', 'shortsword', 'greataxe', 'mace', 'quarterstaff', 'spear'];
 
 export const MASTERIES = {
   sap: { name: 'Sap', rule: 'mastery-sap', text: 'On a hit, the target has Disadvantage on its next attack roll before the start of your next turn.' },
@@ -54,6 +62,7 @@ export const MASTERIES = {
   graze: { name: 'Graze', rule: 'mastery-graze', text: 'On a miss, the target still takes damage equal to the ability modifier you used for the attack roll.' },
   slow: { name: 'Slow', rule: 'mastery-slow', text: "On a hit that deals damage, the target's Speed drops by 10 feet until the start of your next turn." },
   topple: { name: 'Topple', rule: 'mastery-topple', text: 'On a hit, the target makes a Constitution save (DC 8 + the ability modifier you attacked with + your Proficiency Bonus) or falls Prone.' },
+  cleave: { name: 'Cleave', rule: 'mastery-cleave', text: "Once per turn, when you hit a creature with a melee attack, you can attack a second creature within 5 feet of the first and within your reach. On a hit it takes the weapon's damage, without your ability modifier. (Used for you automatically.)" },
 };
 
 // type: light / medium / heavy (none for no armor). str: Strength needed, or Speed -10 ft.
@@ -71,7 +80,12 @@ export const FIGHTING_STYLES = {
   defense: { name: 'Defense', rule: 'defense', text: 'While you wear Light, Medium or Heavy armor, you gain a +1 bonus to Armor Class.' },
   'great-weapon': { name: 'Great Weapon Fighting', rule: 'great-weapon-fighting', text: 'When you roll damage for a Melee weapon you hold in two hands (Two-Handed or Versatile), treat any 1 or 2 on a damage die as a 3.' },
   'two-weapon': { name: 'Two-Weapon Fighting', rule: 'two-weapon-fighting', text: "When you make the Light property's extra attack, add your ability modifier to its damage." },
+  'blessed-warrior': { name: 'Blessed Warrior', rule: 'blessed-warrior', only: ['paladin'], list: 'cleric', ability: 'cha', text: 'You learn two Cleric cantrips. Charisma is your spellcasting ability for them.' },
+  'druidic-warrior': { name: 'Druidic Warrior', rule: 'druidic-warrior', only: ['ranger'], list: 'druid', ability: 'wis', text: 'You learn two Druid cantrips. Wisdom is your spellcasting ability for them.' },
 };
+// Which classes get a Fighting Style, and at what level.
+export const STYLE_LEVEL = { fighter: 1, paladin: 2, ranger: 2 };
+export const stylesFor = (cls) => Object.keys(FIGHTING_STYLES).filter((k) => !FIGHTING_STYLES[k].only || FIGHTING_STYLES[k].only.includes(cls));
 
 // Starting equipment. A fighter picks a pack (or gold spent as listed); the
 // others' packs are fixed here. gold: what's left over.
@@ -98,6 +112,38 @@ export const KITS = {
     a: { name: 'Option A', armor: 'none', shield: false, weapons: ['quarterstaff', 'dagger'], gold: 5,
       text: "2 Daggers, a Quarterstaff (your Arcane Focus), Robe, Spellbook, Scholar's Pack and 5 GP." },
   },
+  barbarian: {
+    a: { name: 'Option A', armor: 'none', shield: false, weapons: ['greataxe', 'handaxe'], twins: ['handaxe'], gold: 15,
+      text: "Greataxe, 4 Handaxes, Explorer's Pack and 15 GP." },
+  },
+  bard: {
+    a: { name: 'Option A', armor: 'leather', shield: false, weapons: ['dagger'], twins: ['dagger'], gold: 19,
+      text: "Leather Armor, 2 Daggers, a Musical Instrument, Entertainer's Pack and 19 GP." },
+  },
+  druid: {
+    a: { name: 'Option A', armor: 'leather', shield: true, weapons: ['sickle', 'quarterstaff'], gold: 9,
+      text: "Leather Armor, Shield, Sickle, Druidic Focus (Quarterstaff), Explorer's Pack, Herbalism Kit and 9 GP." },
+  },
+  monk: {
+    a: { name: 'Option A', armor: 'none', shield: false, weapons: ['spear', 'dagger'], twins: ['dagger'], gold: 11,
+      text: "Spear, 5 Daggers, a set of Artisan's Tools or a Musical Instrument, Explorer's Pack and 11 GP." },
+  },
+  paladin: {
+    a: { name: 'Option A', armor: 'chain', shield: true, weapons: ['longsword', 'javelin'], gold: 9,
+      text: "Chain Mail, Shield, Longsword, 6 Javelins, Holy Symbol, Priest's Pack and 9 GP." },
+  },
+  ranger: {
+    a: { name: 'Option A', armor: 'studded', shield: false, weapons: ['scimitar', 'shortsword', 'longbow'], gold: 7,
+      text: "Studded Leather Armor, Scimitar, Shortsword, Longbow, 20 Arrows, Quiver, Druidic Focus (sprig of mistletoe), Explorer's Pack and 7 GP." },
+  },
+  sorcerer: {
+    a: { name: 'Option A', armor: 'none', shield: false, weapons: ['spear', 'dagger'], twins: ['dagger'], gold: 28,
+      text: "Spear, 2 Daggers, Arcane Focus (crystal), Dungeoneer's Pack and 28 GP." },
+  },
+  warlock: {
+    a: { name: 'Option A', armor: 'leather', shield: false, weapons: ['sickle', 'dagger'], twins: ['dagger'], gold: 15,
+      text: "Leather Armor, Sickle, 2 Daggers, Arcane Focus (orb), Book (occult lore), Scholar's Pack and 15 GP." },
+  },
 };
 
 // -------------------------------------------------------------- spells ----
@@ -114,7 +160,12 @@ export const KITS = {
 //   Restoration), temp (Temporary Hit Points on yourself), armor (Mage
 //   Armor), stride (Longstrider), teleport (a square you can see),
 //   command, hold, spiritual, shield and rebuke (Reactions), utility (no
-//   battle use).
+//   battle use), mark (Hex, Hunter's Mark: extra damage on your hits),
+//   smite (Divine Smite, asked after a melee hit), selfbuff (an effect on
+//   yourself), bane (creatures save or take -1d4).
+// An area spell with cond puts that condition on whoever fails (escape: the
+// check a creature can make as an action to break free). pickType: you pick
+// the damage type from types (the game picks the one that hurts most).
 // touch: range is a creature next to you. conc: needs Concentration.
 // up: what each slot level above the spell's adds. ritual: can be a Ritual.
 export const SPELLS = {
@@ -147,6 +198,20 @@ export const SPELLS = {
   'minor-illusion': { name: 'Minor Illusion', level: 0, time: 'action', range: 30, kind: 'utility', text: 'A sound or a small still image of an object, for 1 minute. (Useful outside of fights.)' },
   'prestidigitation': { name: 'Prestidigitation', level: 0, time: 'action', range: 10, kind: 'utility', text: 'Small magic tricks: a spark, a smell, cleaning or soiling an object, warming food. (Useful outside of fights.)' },
   'druidcraft': { name: 'Druidcraft', level: 0, time: 'action', range: 30, kind: 'utility', text: 'Small nature magic: predict the weather, make a flower bloom, a puff of wind. (Useful outside of fights.)' },
+  'eldritch-blast': { name: 'Eldritch Blast', level: 0, time: 'action', range: 120, kind: 'attack', dice: '1d10', type: 'Force',
+    text: 'A beam of crackling energy: make a ranged spell attack. On a hit, 1d10 Force damage. (More beams come at higher levels than this game reaches.)' },
+  'vicious-mockery': { name: 'Vicious Mockery', level: 0, time: 'action', range: 60, kind: 'save', save: 'wis', dice: '1d6', type: 'Psychic', rider: 'mocked',
+    text: 'Insults laced with magic: a creature you can see within 60 feet makes a Wisdom save. On a failure, 1d6 Psychic damage and Disadvantage on its next attack roll before the end of its next turn.' },
+  'produce-flame': { name: 'Produce Flame', level: 0, time: 'action', range: 60, kind: 'attack', dice: '1d8', type: 'Fire',
+    text: 'A flame appears in your hand (a Bonus Action), and you hurl it as a Magic action: ranged spell attack, 1d8 Fire damage on a hit. Here, conjuring and hurling it are one action.' },
+  'thorn-whip': { name: 'Thorn Whip', level: 0, time: 'action', range: 30, reach: 30, melee: true, kind: 'attack', dice: '1d6', type: 'Piercing', rider: 'pull',
+    text: 'A vine whip: make a melee spell attack against a creature within 30 feet. On a hit, 1d6 Piercing damage, and if it is Large or smaller you pull it up to 10 feet straight toward you.' },
+  'starry-wisp': { name: 'Starry Wisp', level: 0, time: 'action', range: 60, kind: 'attack', dice: '1d8', type: 'Radiant', rider: 'wisp',
+    text: "A mote of light: ranged spell attack. On a hit, 1d8 Radiant damage, and until the end of your next turn the target sheds light and can't benefit from being Invisible (here: it can't stay Hidden)." },
+  'sorcerous-burst': { name: 'Sorcerous Burst', level: 0, time: 'action', range: 120, kind: 'attack', dice: '1d8', pickType: true, types: ['Acid', 'Cold', 'Fire', 'Lightning', 'Poison', 'Psychic', 'Thunder'], explode: true,
+    text: 'Sorcerous energy of a type you pick (Acid, Cold, Fire, Lightning, Poison, Psychic or Thunder): ranged spell attack, 1d8 damage on a hit. Each 8 you roll adds another d8, up to your spellcasting modifier in extra dice.' },
+  'acid-splash': { name: 'Acid Splash', level: 0, time: 'action', range: 60, kind: 'area', area: { shape: 'sphere', size: 5, from: 'point' }, save: 'dex', dice: '1d6', type: 'Acid',
+    text: 'An acid bubble bursts in a 5-foot Sphere at a point within 60 feet. Each creature in it makes a Dexterity save or takes 1d6 Acid damage.' },
   // ---- level 1
   'healing-word': { name: 'Healing Word', level: 1, time: 'bonus', range: 60, kind: 'heal', dice: '2d4', up: { dice: '2d4' },
     text: 'A creature you can see within 60 feet regains 2d4 + your spellcasting modifier Hit Points. A Bonus Action. Higher slot: +2d4 per level.' },
@@ -198,6 +263,32 @@ export const SPELLS = {
     text: 'Gain the service of a small spirit animal, like an owl or a cat, that scouts for you. A Ritual. (Useful outside of fights here.)' },
   'speak-with-animals': { name: 'Speak with Animals', level: 1, time: 'action', kind: 'utility', ritual: true,
     text: 'For 10 minutes you can understand and talk with Beasts. A Ritual. (Useful outside of fights.)' },
+  'hex': { name: 'Hex', level: 1, time: 'bonus', range: 90, kind: 'mark', mark: 'hex', dice: '1d6', type: 'Necrotic', conc: true,
+    text: "Concentration, up to 1 hour. A Bonus Action: curse a creature within 90 feet. Your attacks that hit it deal an extra 1d6 Necrotic damage, and it has Disadvantage on checks with one ability you pick. If it drops to 0 HP, a Bonus Action on a later turn moves the curse to another creature." },
+  'hunters-mark': { name: "Hunter's Mark", level: 1, time: 'bonus', range: 90, kind: 'mark', mark: 'hunters-mark', dice: '1d6', type: 'Force', conc: true,
+    text: "Concentration, up to 1 hour. A Bonus Action: mark a creature within 90 feet as your quarry. Your attacks that hit it deal an extra 1d6 Force damage, and you have Advantage on checks to find it. If it drops to 0 HP, a Bonus Action on a later turn moves the mark." },
+  'divine-smite': { name: 'Divine Smite', level: 1, time: 'bonus', kind: 'smite', dice: '2d8', type: 'Radiant', up: { dice: '1d8' },
+    text: 'A Bonus Action right after you hit with a melee weapon or an Unarmed Strike: the target takes an extra 2d8 Radiant damage, +1d8 if it is a Fiend or Undead. Higher slot: +1d8 per level. (You are asked after a hit.)' },
+  'divine-favor': { name: 'Divine Favor', level: 1, time: 'bonus', kind: 'selfbuff', buff: 'favor',
+    text: 'A Bonus Action. For 1 minute, your weapon attacks deal an extra 1d4 Radiant damage on a hit.' },
+  'heroism': { name: 'Heroism', level: 1, time: 'action', range: 5, touch: true, kind: 'buff', buff: 'heroism', targets: 1, conc: true, up: { targets: 1 },
+    text: "Concentration, up to 1 minute. A willing creature you touch is immune to the Frightened condition and gains Temporary Hit Points equal to your spellcasting modifier at the start of each of its turns. Higher slot: one more creature per level." },
+  'bane': { name: 'Bane', level: 1, time: 'action', range: 30, kind: 'bane', save: 'cha', targets: 3, conc: true, up: { targets: 1 },
+    text: 'Concentration, up to 1 minute. Up to three creatures within 30 feet make a Charisma save. Each that fails subtracts 1d4 from its attack rolls and saving throws. Higher slot: one more creature per level.' },
+  'dissonant-whispers': { name: 'Dissonant Whispers', level: 1, time: 'action', range: 60, kind: 'save', save: 'wis', dice: '3d6', type: 'Psychic', half: true, rider: 'flee', up: { dice: '1d6' },
+    text: 'A creature you can see within 60 feet makes a Wisdom save. On a failure, 3d6 Psychic damage, and it must use its Reaction, if it can, to move as far as its Speed allows away from you. On a success, half damage only. Higher slot: +1d6 per level.' },
+  'entangle': { name: 'Entangle', level: 1, time: 'action', range: 90, kind: 'area', area: { shape: 'cube', size: 20, from: 'point' }, save: 'str', cond: 'restrained', escape: 'str', conc: true,
+    text: 'Concentration, up to 1 minute. Grasping plants fill a 20-foot square within 90 feet. Each creature in it makes a Strength save or is Restrained until the spell ends. A Restrained creature can take an action to make a Strength (Athletics) check against your spell save DC to break free. Careful: allies in the square can be caught too.' },
+  'sleep': { name: 'Sleep', level: 1, time: 'action', range: 60, kind: 'area', area: { shape: 'sphere', size: 5, from: 'point' }, save: 'wis', cond: 'sleep', choose: true, conc: true,
+    text: "Concentration, up to 1 minute. Pick creatures in a 5-foot Sphere within 60 feet (here: every enemy in it). Each makes a Wisdom save or is Incapacitated until the end of its next turn; then it saves again, and on a second failure it is Unconscious until the spell ends, it takes damage, or someone shakes it awake. Creatures that don't sleep (elves, and anything immune to Exhaustion) succeed automatically." },
+  'chromatic-orb': { name: 'Chromatic Orb', level: 1, time: 'action', range: 90, kind: 'attack', dice: '3d8', pickType: true, types: ['Acid', 'Cold', 'Fire', 'Lightning', 'Poison', 'Thunder'], up: { dice: '1d8' },
+    text: 'An orb of energy of a type you pick (Acid, Cold, Fire, Lightning, Poison or Thunder): ranged spell attack, 3d8 damage on a hit. (In the full rules, rolling a pair can make it leap to a second target; not used here yet.) Higher slot: +1d8 per level.' },
+  'protection-from-evil-and-good': { name: 'Protection from Evil and Good', level: 1, time: 'action', range: 5, touch: true, kind: 'buff', buff: 'pfe', targets: 1, conc: true,
+    text: "Concentration, up to 10 minutes. A willing creature you touch is warded against Aberrations, Celestials, Elementals, Fey, Fiends and Undead: they have Disadvantage on attack rolls against it, and can't Charm, Frighten or possess it. (Goblins and Bugbears are Fey.)" },
+  'fog-cloud': { name: 'Fog Cloud', level: 1, time: 'action', range: 120, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 hour. A 20-foot Sphere of thick fog that hides everything inside it. (Not used in fights here yet.)' },
+  'charm-person': { name: 'Charm Person', level: 1, time: 'action', range: 30, kind: 'utility',
+    text: 'A Humanoid makes a Wisdom save (with Advantage if you are fighting it) or is Charmed by you for 1 hour, treating you as a friendly acquaintance. (Useful outside of fights.)' },
   // ---- level 2
   'scorching-ray': { name: 'Scorching Ray', level: 2, time: 'action', range: 120, kind: 'rays', rays: 3, dice: '2d6', type: 'Fire', up: { rays: 1 },
     text: 'Three rays of fire. Make a ranged spell attack for each: 2d6 Fire damage on a hit. Aim them at one target or several. Higher slot: one more ray per level.' },
@@ -211,24 +302,71 @@ export const SPELLS = {
     text: 'Concentration, up to 1 minute. A Bonus Action: a floating spectral weapon appears and makes a melee spell attack (1d8 + spellcasting modifier Force). On later turns, a Bonus Action moves it up to 20 feet and attacks again.' },
   'lesser-restoration': { name: 'Lesser Restoration', level: 2, time: 'bonus', range: 5, touch: true, kind: 'cure', cures: ['poisoned', 'blinded', 'deafened', 'paralyzed'],
     text: 'A Bonus Action. Touch a creature and end one condition on it: Blinded, Deafened, Paralyzed or Poisoned.' },
+  'shatter': { name: 'Shatter', level: 2, time: 'action', range: 60, kind: 'area', area: { shape: 'sphere', size: 10, from: 'point' }, save: 'con', dice: '3d8', type: 'Thunder', half: true, up: { dice: '1d8' },
+    text: 'A ringing blast in a 10-foot Sphere at a point within 60 feet. Each creature in it makes a Constitution save: 3d8 Thunder damage on a failure, half as much on a success. Careful: allies in it are hit too. Higher slot: +1d8 per level.' },
+  'barkskin': { name: 'Barkskin', level: 2, time: 'bonus', range: 5, touch: true, kind: 'buff', buff: 'bark', targets: 1, up: { targets: 1 },
+    text: "A Bonus Action. For 1 hour, a willing creature you touch has bark-hard skin: its Armor Class can't be lower than 17. No Concentration. Higher slot: one more creature per level." },
+  'blur': { name: 'Blur', level: 2, time: 'action', kind: 'selfbuff', buff: 'blur', conc: true,
+    text: 'Concentration, up to 1 minute. Your body blurs: attack rolls against you have Disadvantage.' },
+  'web': { name: 'Web', level: 2, time: 'action', range: 60, kind: 'area', area: { shape: 'cube', size: 20, from: 'point' }, save: 'dex', cond: 'restrained', escape: 'str', conc: true,
+    text: 'Concentration, up to 1 hour. Sticky webbing fills a 20-foot Cube within 60 feet. Each creature in it makes a Dexterity save or is Restrained while in the web. A Restrained creature can take an action to make a Strength (Athletics) check against your spell save DC to break free.' },
+  'dragons-breath': { name: "Dragon's Breath", level: 2, time: 'bonus', range: 5, touch: true, kind: 'buff', buff: 'dbreath', targets: 1, conc: true, dice: '3d6', types: ['Acid', 'Cold', 'Fire', 'Lightning', 'Poison'], up: { dice: '1d6' },
+    text: 'Concentration, up to 1 minute. A Bonus Action: a willing creature you touch can take a Magic action to exhale a 15-foot Cone of Acid, Cold, Fire, Lightning or Poison (picked when you cast). Each creature in it makes a Dexterity save against your spell save DC: 3d6 damage, half on a success. Higher slot: +1d6 per level.' },
+  'alter-self': { name: 'Alter Self', level: 2, time: 'action', kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 hour. Change your appearance, breathe underwater, or grow natural weapons. (Useful outside of fights here.)' },
+  'suggestion': { name: 'Suggestion', level: 2, time: 'action', range: 30, kind: 'utility', conc: true,
+    text: 'Concentration, up to 8 hours. Suggest a reasonable course of action to a creature that can hear you; it makes a Wisdom save or follows it. (Useful outside of fights.)' },
 };
 
 // Each class's spell list (the spells of the SRD this game has).
 export const SPELL_LISTS = {
   cleric: {
     0: ['sacred-flame', 'spare-the-dying', 'guidance', 'resistance-cantrip', 'thaumaturgy', 'light', 'mending'],
-    1: ['bless', 'command', 'cure-wounds', 'detect-magic', 'guiding-bolt', 'healing-word', 'inflict-wounds', 'shield-of-faith'],
+    1: ['bless', 'command', 'cure-wounds', 'detect-magic', 'guiding-bolt', 'healing-word', 'inflict-wounds', 'shield-of-faith', 'bane', 'protection-from-evil-and-good'],
     2: ['aid', 'hold-person', 'lesser-restoration', 'spiritual-weapon'],
   },
   wizard: {
-    0: ['fire-bolt', 'ray-of-frost', 'chill-touch', 'shocking-grasp', 'poison-spray', 'mage-hand', 'light', 'mending', 'dancing-lights', 'minor-illusion', 'prestidigitation'],
-    1: ['magic-missile', 'burning-hands', 'shield', 'thunderwave', 'mage-armor', 'false-life', 'ray-of-sickness', 'detect-magic', 'comprehend-languages', 'feather-fall', 'identify', 'alarm', 'unseen-servant', 'find-familiar'],
-    2: ['scorching-ray', 'misty-step', 'hold-person'],
+    0: ['fire-bolt', 'ray-of-frost', 'chill-touch', 'shocking-grasp', 'poison-spray', 'acid-splash', 'mage-hand', 'light', 'mending', 'dancing-lights', 'minor-illusion', 'prestidigitation'],
+    1: ['magic-missile', 'burning-hands', 'shield', 'thunderwave', 'mage-armor', 'false-life', 'ray-of-sickness', 'chromatic-orb', 'sleep', 'fog-cloud', 'charm-person', 'detect-magic', 'comprehend-languages', 'feather-fall', 'identify', 'alarm', 'unseen-servant', 'find-familiar'],
+    2: ['scorching-ray', 'misty-step', 'hold-person', 'shatter', 'web', 'blur', 'dragons-breath', 'alter-self', 'suggestion'],
+  },
+  bard: {
+    0: ['vicious-mockery', 'starry-wisp', 'dancing-lights', 'light', 'mage-hand', 'mending', 'minor-illusion', 'prestidigitation'],
+    1: ['healing-word', 'dissonant-whispers', 'heroism', 'sleep', 'faerie-fire', 'bane', 'command', 'cure-wounds', 'thunderwave', 'charm-person', 'comprehend-languages', 'detect-magic', 'feather-fall', 'identify', 'longstrider', 'speak-with-animals', 'unseen-servant'],
+    2: ['shatter', 'hold-person', 'aid', 'lesser-restoration', 'suggestion'],
+  },
+  druid: {
+    0: ['produce-flame', 'thorn-whip', 'starry-wisp', 'poison-spray', 'guidance', 'spare-the-dying', 'resistance-cantrip', 'druidcraft', 'mending'],
+    1: ['entangle', 'healing-word', 'cure-wounds', 'faerie-fire', 'thunderwave', 'longstrider', 'fog-cloud', 'detect-magic', 'speak-with-animals'],
+    2: ['barkskin', 'hold-person', 'lesser-restoration'],
+  },
+  paladin: {
+    1: ['divine-favor', 'bless', 'cure-wounds', 'heroism', 'shield-of-faith', 'command', 'protection-from-evil-and-good', 'divine-smite', 'detect-magic'],
+  },
+  ranger: {
+    1: ['hunters-mark', 'cure-wounds', 'entangle', 'longstrider', 'fog-cloud', 'alarm', 'detect-magic', 'speak-with-animals'],
+  },
+  sorcerer: {
+    0: ['fire-bolt', 'sorcerous-burst', 'ray-of-frost', 'shocking-grasp', 'chill-touch', 'acid-splash', 'poison-spray', 'dancing-lights', 'light', 'mage-hand', 'mending', 'minor-illusion', 'prestidigitation'],
+    1: ['magic-missile', 'chromatic-orb', 'shield', 'burning-hands', 'sleep', 'thunderwave', 'false-life', 'ray-of-sickness', 'charm-person', 'comprehend-languages', 'detect-magic', 'feather-fall', 'fog-cloud'],
+    2: ['scorching-ray', 'shatter', 'web', 'misty-step', 'hold-person', 'blur', 'dragons-breath', 'alter-self', 'suggestion'],
+  },
+  warlock: {
+    0: ['eldritch-blast', 'chill-touch', 'poison-spray', 'mage-hand', 'minor-illusion', 'prestidigitation'],
+    1: ['hex', 'hellish-rebuke', 'protection-from-evil-and-good', 'charm-person', 'comprehend-languages', 'unseen-servant'],
+    2: ['misty-step', 'hold-person', 'shatter', 'suggestion'],
   },
 };
 // Cantrips known, and spells you can prepare, by class level (2024 tables).
-export const CANTRIPS_KNOWN = { cleric: { 1: 3, 2: 3, 3: 3 }, wizard: { 1: 3, 2: 3, 3: 3 } };
-export const PREPARED_BY_LEVEL = { cleric: { 1: 4, 2: 5, 3: 6 }, wizard: { 1: 4, 2: 5, 3: 6 } };
+// Paladins and Rangers know no cantrips unless a Fighting Style gives them.
+export const CANTRIPS_KNOWN = {
+  cleric: { 1: 3, 2: 3, 3: 3 }, wizard: { 1: 3, 2: 3, 3: 3 }, bard: { 1: 2, 2: 2, 3: 2 }, druid: { 1: 2, 2: 2, 3: 2 },
+  sorcerer: { 1: 4, 2: 4, 3: 4 }, warlock: { 1: 2, 2: 2, 3: 2 },
+};
+export const PREPARED_BY_LEVEL = {
+  cleric: { 1: 4, 2: 5, 3: 6 }, wizard: { 1: 4, 2: 5, 3: 6 }, bard: { 1: 4, 2: 5, 3: 6 }, druid: { 1: 4, 2: 5, 3: 6 },
+  paladin: { 1: 2, 2: 3, 3: 4 }, ranger: { 1: 2, 2: 3, 3: 4 }, sorcerer: { 1: 2, 2: 4, 3: 6 }, warlock: { 1: 2, 2: 3, 3: 4 },
+};
 // A wizard's spellbook starts with 6 level 1 spells and gains 2 a level.
 export const SPELLBOOK_SIZE = { 1: 6, 2: 8, 3: 10 };
 // Life Domain spells: always prepared from Cleric level 3, not counted.
@@ -266,7 +404,7 @@ export const CLASSES = {
       cantrips: ['sacred-flame', 'spare-the-dying', 'thaumaturgy', 'light'],
       prepared: ['healing-word', 'cure-wounds', 'guiding-bolt', 'bless', 'shield-of-faith', 'spiritual-weapon', 'command', 'hold-person', 'inflict-wounds', 'aid', 'lesser-restoration'] },
     suggested: { wis: 15, con: 14, str: 13, dex: 12, cha: 10, int: 8 },
-    spellcasting: { ability: 'wis', prepares: 'list' },
+    spellcasting: { ability: 'wis', prepares: 'list', change: 'any', slots: 'full' },
     blurb: 'Divine magic. Keeps the party standing and burns foes with radiant light.',
     plays: 'Heal whoever is in trouble (Healing Word is a Bonus Action), then Sacred Flame or Guiding Bolt.',
   },
@@ -280,16 +418,178 @@ export const CLASSES = {
       book: ['magic-missile', 'burning-hands', 'shield', 'mage-armor', 'thunderwave', 'detect-magic', 'false-life', 'ray-of-sickness', 'scorching-ray', 'misty-step', 'hold-person', 'find-familiar'],
       prepared: ['magic-missile', 'shield', 'burning-hands', 'mage-armor', 'scorching-ray', 'misty-step', 'thunderwave', 'false-life', 'ray-of-sickness', 'hold-person'] },
     suggested: { int: 15, con: 14, dex: 13, wis: 12, cha: 10, str: 8 },
-    spellcasting: { ability: 'int', prepares: 'book' },
+    spellcasting: { ability: 'int', prepares: 'book', change: 'any', slots: 'full' },
     blurb: 'Fragile but powerful. Attacks from a distance with spells.',
     plays: 'Stay back and cast Fire Bolt. Save your spell slots for Magic Missile or Burning Hands on a crowd.',
   },
+  barbarian: {
+    name: 'Barbarian', emoji: '🪓', hitDie: 12, primary: 'str', role: 'Front line',
+    saves: ['str', 'con'],
+    skillChoices: { n: 2, from: ['athletics', 'perception', 'survival', 'intimidation', 'animalHandling', 'nature'] },
+    masteryCount: 2, kits: ['a'],
+    defaults: { kit: 'a', masteries: ['greataxe', 'handaxe'], skills: ['athletics', 'perception', 'survival', 'intimidation', 'animalHandling', 'nature'] },
+    suggested: { str: 15, con: 14, dex: 13, wis: 12, cha: 10, int: 8 },
+    blurb: 'The most Hit Points of anyone, and a Rage that shrugs off blows.',
+    plays: 'Rage on your first turn (a Bonus Action), then swing the Greataxe. While raging you take half damage from weapons.',
+  },
+  bard: {
+    name: 'Bard', emoji: '🎻', hitDie: 8, primary: 'cha', role: 'Support',
+    saves: ['dex', 'cha'],
+    skillChoices: { n: 3, from: ['persuasion', 'performance', 'deception', 'insight', 'perception', 'history', 'acrobatics', 'arcana', 'athletics', 'animalHandling', 'intimidation', 'investigation', 'medicine', 'nature', 'religion', 'sleightOfHand', 'stealth', 'survival'] },
+    masteryCount: 0, kits: ['a'],
+    defaults: { kit: 'a', skills: ['persuasion', 'performance', 'insight', 'perception', 'deception', 'history', 'arcana', 'medicine'], expertise: ['persuasion', 'perception'],
+      cantrips: ['vicious-mockery', 'starry-wisp', 'minor-illusion'],
+      prepared: ['healing-word', 'dissonant-whispers', 'heroism', 'sleep', 'shatter', 'hold-person', 'faerie-fire', 'bane', 'cure-wounds', 'thunderwave'] },
+    suggested: { cha: 15, dex: 14, con: 13, wis: 12, int: 10, str: 8 },
+    spellcasting: { ability: 'cha', prepares: 'list', change: 'level', slots: 'full' },
+    blurb: 'Magic in words and music. Lifts friends up and talks enemies down.',
+    plays: 'Give a friend Bardic Inspiration (a Bonus Action), then Vicious Mockery or Healing Word whoever needs it.',
+  },
+  druid: {
+    name: 'Druid', emoji: '🌳', hitDie: 8, primary: 'wis', role: 'Support',
+    saves: ['int', 'wis'],
+    skillChoices: { n: 2, from: ['nature', 'perception', 'medicine', 'survival', 'animalHandling', 'insight', 'arcana', 'religion'] },
+    masteryCount: 0, kits: ['a'],
+    defaults: { kit: 'a', order: 'magician', skills: ['nature', 'perception', 'medicine', 'survival'],
+      cantrips: ['produce-flame', 'thorn-whip', 'starry-wisp', 'guidance'],
+      prepared: ['entangle', 'healing-word', 'cure-wounds', 'faerie-fire', 'barkskin', 'thunderwave', 'hold-person', 'lesser-restoration', 'longstrider'] },
+    suggested: { wis: 15, con: 14, dex: 13, int: 12, cha: 10, str: 8 },
+    spellcasting: { ability: 'wis', prepares: 'list', change: 'any', slots: 'full' },
+    blurb: 'Nature magic. Tangles foes in vines, heals, and later turns into a wolf.',
+    plays: 'Entangle a group of enemies, then Produce Flame. From level 2, Wild Shape into a wolf as a Bonus Action.',
+  },
+  monk: {
+    name: 'Monk', emoji: '👊', hitDie: 8, primary: 'dex', role: 'Striker',
+    saves: ['str', 'dex'],
+    skillChoices: { n: 2, from: ['acrobatics', 'stealth', 'insight', 'athletics', 'history', 'religion'] },
+    masteryCount: 0, kits: ['a'],
+    defaults: { kit: 'a', skills: ['acrobatics', 'stealth', 'insight', 'athletics'] },
+    suggested: { dex: 15, wis: 14, con: 13, str: 12, int: 10, cha: 8 },
+    blurb: 'Fast hands and feet. Strikes two or three times a turn without armor.',
+    plays: 'Attack, then use your Bonus Action for an Unarmed Strike. From level 2, Flurry of Blows hits twice.',
+  },
+  paladin: {
+    name: 'Paladin', emoji: '⚜️', hitDie: 10, primary: 'str', role: 'Front line',
+    saves: ['wis', 'cha'],
+    skillChoices: { n: 2, from: ['athletics', 'persuasion', 'insight', 'intimidation', 'medicine', 'religion'] },
+    masteryCount: 2, kits: ['a'],
+    defaults: { kit: 'a', style: 'defense', masteries: ['longsword', 'javelin'], skills: ['athletics', 'persuasion', 'insight', 'intimidation'],
+      warriorCantrips: ['sacred-flame', 'guidance'],
+      prepared: ['divine-favor', 'bless', 'cure-wounds', 'heroism', 'shield-of-faith', 'command'] },
+    suggested: { str: 15, cha: 14, con: 13, wis: 12, dex: 10, int: 8 },
+    spellcasting: { ability: 'cha', prepares: 'list', change: 'one', slots: 'half' },
+    blurb: 'A holy knight in heavy armor. Heals with a touch and smites with radiant light.',
+    plays: 'Walk up and hit. Lay on Hands (a Bonus Action) heals a friend; from level 2, Divine Smite after a hit.',
+  },
+  ranger: {
+    name: 'Ranger', emoji: '🏹', hitDie: 10, primary: 'dex', role: 'Archer',
+    saves: ['str', 'dex'],
+    skillChoices: { n: 3, from: ['perception', 'stealth', 'survival', 'nature', 'athletics', 'insight', 'investigation', 'animalHandling'] },
+    masteryCount: 2, kits: ['a'],
+    defaults: { kit: 'a', style: 'archery', masteries: ['longbow', 'scimitar'], skills: ['perception', 'stealth', 'survival', 'nature', 'athletics', 'insight'], expertise: ['perception'],
+      warriorCantrips: ['thorn-whip', 'guidance'], prey: 'colossus',
+      prepared: ['cure-wounds', 'entangle', 'longstrider', 'fog-cloud'] },
+    suggested: { dex: 15, wis: 14, con: 13, str: 12, int: 10, cha: 8 },
+    spellcasting: { ability: 'wis', prepares: 'list', change: 'one', slots: 'half' },
+    blurb: "A hunter with a longbow and a little nature magic. Marks a quarry and doesn't miss it.",
+    plays: "Hunter's Mark the toughest enemy (a Bonus Action), then shoot it with the Longbow every turn.",
+  },
+  sorcerer: {
+    name: 'Sorcerer', emoji: '🔥', hitDie: 6, primary: 'cha', role: 'Blaster',
+    saves: ['con', 'cha'],
+    skillChoices: { n: 2, from: ['arcana', 'persuasion', 'insight', 'deception', 'intimidation', 'religion'] },
+    masteryCount: 0, kits: ['a'],
+    defaults: { kit: 'a', skills: ['arcana', 'persuasion', 'insight', 'deception'], metamagic: ['quickened', 'twinned'],
+      cantrips: ['fire-bolt', 'sorcerous-burst', 'ray-of-frost', 'shocking-grasp', 'acid-splash'],
+      prepared: ['magic-missile', 'shield', 'chromatic-orb', 'burning-hands', 'scorching-ray', 'shatter', 'web', 'misty-step', 'sleep', 'hold-person'] },
+    suggested: { cha: 15, con: 14, dex: 13, wis: 12, int: 10, str: 8 },
+    spellcasting: { ability: 'cha', prepares: 'list', change: 'level', slots: 'full' },
+    blurb: 'Magic in the blood. Fewer spells than a wizard, but bends them with Metamagic.',
+    plays: 'Stay back and cast Fire Bolt or Sorcerous Burst. Innate Sorcery (a Bonus Action) makes your spells harder to avoid.',
+  },
+  warlock: {
+    name: 'Warlock', emoji: '👁️', hitDie: 8, primary: 'cha', role: 'Blaster',
+    saves: ['wis', 'cha'],
+    skillChoices: { n: 2, from: ['deception', 'intimidation', 'arcana', 'investigation', 'history', 'nature', 'religion'] },
+    masteryCount: 0, kits: ['a'],
+    defaults: { kit: 'a', skills: ['deception', 'intimidation', 'arcana', 'investigation'], invocations: ['armor-of-shadows', 'agonizing-blast', 'repelling-blast'], pactWeapon: 'longsword',
+      cantrips: ['eldritch-blast', 'chill-touch', 'mage-hand'],
+      prepared: ['hex', 'hellish-rebuke', 'protection-from-evil-and-good', 'misty-step', 'hold-person', 'shatter', 'charm-person'] },
+    suggested: { cha: 15, con: 14, dex: 13, wis: 12, int: 10, str: 8 },
+    spellcasting: { ability: 'cha', prepares: 'list', change: 'level', slots: 'pact' },
+    blurb: 'Power from a pact. Few spell slots that come back on a Short Rest, and Eldritch Blast.',
+    plays: 'Hex the toughest enemy (a Bonus Action), then Eldritch Blast it every turn.',
+  },
 };
 
-// Spell slots for a full caster (Cleric, Wizard) by character level.
+// Spell slots by class level. Full casters (Bard, Cleric, Druid, Sorcerer,
+// Wizard), half casters (Paladin, Ranger) and a Warlock's Pact Magic, whose
+// slots are all of one level and come back on a Short Rest.
 export const SLOTS_BY_LEVEL = { 1: { 1: 2 }, 2: { 1: 3 }, 3: { 1: 4, 2: 2 } };
+export const SLOT_TABLES = {
+  full: SLOTS_BY_LEVEL,
+  half: { 1: { 1: 2 }, 2: { 1: 2 }, 3: { 1: 3 } },
+  pact: { 1: { 1: 1 }, 2: { 1: 2 }, 3: { 2: 2 } },
+};
 // Subclasses (one per class in the SRD), chosen at level 3.
-export const SUBCLASSES = { fighter: 'Champion', rogue: 'Thief', cleric: 'Life Domain', wizard: 'Evoker' };
+export const SUBCLASSES = {
+  fighter: 'Champion', rogue: 'Thief', cleric: 'Life Domain', wizard: 'Evoker',
+  barbarian: 'Path of the Berserker', bard: 'College of Lore', druid: 'Circle of the Land', monk: 'Warrior of the Open Hand',
+  paladin: 'Oath of Devotion', ranger: 'Hunter', sorcerer: 'Draconic Sorcery', warlock: 'Fiend Patron',
+};
+// Spells a subclass or class feature always has prepared (they don't count).
+export const ALWAYS_PREPARED = {
+  paladin: { 2: ['divine-smite'], 3: ['protection-from-evil-and-good', 'shield-of-faith'] },
+  ranger: { 1: ['hunters-mark'] },
+  sorcerer: { 3: ['alter-self', 'chromatic-orb', 'command', 'dragons-breath'] },
+  warlock: { 3: ['burning-hands', 'command', 'scorching-ray', 'suggestion'] },
+};
+// Circle of the Land: pick a land at level 3; its spells are always prepared.
+export const LAND_SPELLS = {
+  arid: { name: 'Arid Land', spells: ['blur', 'burning-hands', 'fire-bolt'] },
+  polar: { name: 'Polar Land', spells: ['fog-cloud', 'hold-person', 'ray-of-frost'] },
+  temperate: { name: 'Temperate Land', spells: ['misty-step', 'shocking-grasp', 'sleep'] },
+  tropical: { name: 'Tropical Land', spells: ['acid-splash', 'ray-of-sickness', 'web'] },
+};
+// A Druid's Primal Order and a Hunter's Prey.
+export const DRUID_ORDERS = {
+  magician: { name: 'Magician', text: 'One extra Druid cantrip, and add your Wisdom modifier (at least +1) to Intelligence (Arcana and Nature) checks.' },
+  warden: { name: 'Warden', text: 'Training with Martial weapons and Medium armor.' },
+};
+export const HUNTER_PREY = {
+  colossus: { name: 'Colossus Slayer', rule: 'colossus-slayer', text: "Once per turn, when you hit a creature that is missing any of its Hit Points with a weapon, it takes an extra 1d8 damage." },
+  horde: { name: 'Horde Breaker', rule: 'horde-breaker', text: "Once on each of your turns, when you attack with a weapon, you can make another attack with it against a different creature within 5 feet of the first that you haven't attacked this turn. (Used for you automatically.)" },
+};
+// A Warlock's Eldritch Invocations. min: Warlock level needed.
+export const INVOCATIONS = {
+  'armor-of-shadows': { name: 'Armor of Shadows', min: 1, text: 'Cast Mage Armor on yourself at will, without a spell slot. Here: you go without armor, and your base Armor Class is 13 + your Dexterity modifier.' },
+  'eldritch-mind': { name: 'Eldritch Mind', min: 1, text: 'Advantage on Constitution saving throws to keep Concentration.' },
+  'pact-of-the-blade': { name: 'Pact of the Blade', min: 1, text: 'A pact weapon in your hand (here: from the start of each fight). You are proficient with it, and use Charisma for its attack and damage rolls if that is better.' },
+  'pact-of-the-chain': { name: 'Pact of the Chain', min: 1, text: 'You learn Find Familiar and can cast it without a spell slot. (Useful outside of fights here.)' },
+  'agonizing-blast': { name: 'Agonizing Blast', min: 2, text: 'Add your Charisma modifier to the damage of Eldritch Blast.' },
+  'repelling-blast': { name: 'Repelling Blast', min: 2, text: 'When Eldritch Blast hits a Large or smaller creature, you push it up to 10 feet straight away from you. (Used for you automatically.)' },
+  'eldritch-spear': { name: 'Eldritch Spear', min: 2, text: "Eldritch Blast's range goes up by 30 feet times your Warlock level." },
+  'fiendish-vigor': { name: 'Fiendish Vigor', min: 2, text: "Cast False Life on yourself at will without a spell slot, and don't roll: you get the most it gives (12 Temporary Hit Points)." },
+  'devils-sight': { name: "Devil's Sight", min: 2, text: 'See normally in darkness, magical or not, within 120 feet. (Every fight here is lit.)' },
+  'mask-of-many-faces': { name: 'Mask of Many Faces', min: 2, text: 'Cast Disguise Self at will without a spell slot. (Useful outside of fights.)' },
+  'misty-visions': { name: 'Misty Visions', min: 2, text: 'Cast Silent Image at will without a spell slot. (Useful outside of fights.)' },
+};
+export const INVOCATIONS_KNOWN = { 1: 1, 2: 3, 3: 3 };
+// A Sorcerer's Metamagic (two at level 2). cost: Sorcery Points.
+export const METAMAGIC = {
+  careful: { name: 'Careful Spell', cost: 1, text: 'When your spell makes creatures save, up to your Charisma modifier (at least 1) of your allies in it succeed automatically and take no damage on a success.' },
+  distant: { name: 'Distant Spell', cost: 1, text: 'Double the range of a spell with a range of 5 feet or more, or give a touch spell a range of 30 feet.' },
+  empowered: { name: 'Empowered Spell', cost: 1, text: 'Reroll up to your Charisma modifier (at least 1) of the damage dice and use the new rolls. (Here: the lowest dice.)' },
+  extended: { name: 'Extended Spell', cost: 1, text: "Double a spell's duration, and you have Advantage on saves to keep Concentration on it." },
+  heightened: { name: 'Heightened Spell', cost: 2, text: 'One creature has Disadvantage on its saves against the spell.' },
+  quickened: { name: 'Quickened Spell', cost: 2, text: "Cast a spell that takes an action as a Bonus Action instead. Not if you've already cast a level 1+ spell this turn, and no other level 1+ spell this turn after it." },
+  seeking: { name: 'Seeking Spell', cost: 1, text: 'When your spell attack misses, reroll the d20 and use the new roll. (Used for you automatically when it could hit.)' },
+  subtle: { name: 'Subtle Spell', cost: 1, text: 'Cast without words, gestures or materials. (Useful outside of fights.)' },
+  transmuted: { name: 'Transmuted Spell', cost: 1, text: 'Change a spell\'s Acid, Cold, Fire, Lightning, Poison or Thunder damage to another of those types. (Here: the one it is weakest to.)' },
+  twinned: { name: 'Twinned Spell', cost: 1, text: 'A spell that can target one more creature when cast with a higher slot targets one more creature, as if cast one level higher.' },
+};
+// Font of Magic: Sorcery Points it costs to make a spell slot of each level.
+export const SLOT_COST = { 1: 2, 2: 3 };
 export const MAX_LEVEL = 3;
 // Hit Points gained per level after the first: the Hit Die's fixed value.
 export const HP_PER_LEVEL = { 6: 4, 8: 5, 10: 6, 12: 7 };
@@ -396,13 +696,14 @@ export const BACKGROUNDS = {
 // Initiate comes with its list. Skilled: three skills.
 export const FEATS = {
   'alert': { name: 'Alert', rule: 'alert', text: 'Add your Proficiency Bonus to your Initiative rolls.' },
-  'magic-initiate': { name: 'Magic Initiate', rule: 'magic-initiate', text: 'Two cantrips and one level 1 spell from the Cleric or Wizard list. Cast the level 1 spell once per Long Rest without a spell slot, or with your slots. Pick Intelligence, Wisdom or Charisma to cast them.',
-    lists: ['cleric', 'wizard'], repeatable: 'list' },
+  'magic-initiate': { name: 'Magic Initiate', rule: 'magic-initiate', text: 'Two cantrips and one level 1 spell from the Cleric, Druid or Wizard list. Cast the level 1 spell once per Long Rest without a spell slot, or with your slots. Pick Intelligence, Wisdom or Charisma to cast them.',
+    lists: ['cleric', 'druid', 'wizard'], repeatable: 'list' },
   'savage-attacker': { name: 'Savage Attacker', rule: 'savage-attacker', text: 'Once per turn when you hit with a weapon, roll its damage dice twice and use either roll.' },
   'skilled': { name: 'Skilled', rule: 'skilled', text: 'Proficiency in any three skills.', repeatable: true },
 };
 export const ORIGIN_FEATS = ['alert', 'magic-initiate', 'savage-attacker', 'skilled'];
-export const MI_DEFAULT_ABILITY = { cleric: 'wis', wizard: 'int' };
+export const MI_DEFAULT_ABILITY = { cleric: 'wis', druid: 'wis', wizard: 'int' };
+export const LIST_NAMES = { cleric: 'Cleric', druid: 'Druid', wizard: 'Wizard', bard: 'Bard', paladin: 'Paladin', ranger: 'Ranger', sorcerer: 'Sorcerer', warlock: 'Warlock' };
 
 // ------------------------------------------------------------ monsters ----
 // SRD 5.2.1 Goblin Warrior (CR 1/4, 50 XP) and Goblin Boss (CR 1, 200 XP).

@@ -8,9 +8,11 @@ import { ENCOUNTERS, buildEncounter } from '../src/game/encounters.js';
 import { COMPANIONS } from '../src/game/campaign.js';
 
 const runs = +process.argv[2] || 30;
-const players = { fighter: 'human', rogue: 'halfling', cleric: 'dwarf', wizard: 'elf' };
+const players = { fighter: 'human', rogue: 'halfling', cleric: 'dwarf', wizard: 'elf', barbarian: 'goliath', bard: 'human', druid: 'elf', monk: 'human', paladin: 'dragonborn', ranger: 'elf', sorcerer: 'tiefling', warlock: 'tiefling' };
+const only = process.argv[3] ? process.argv[3].split(',') : null;
+const refused = new Map();      // intents the AI picked that the rules turned down
 const rows = [];
-for (const [cls, species] of Object.entries(players)) {
+for (const [cls, species] of Object.entries(players).filter(([c]) => !only || only.includes(c))) {
   for (const id of Object.keys(ENCOUNTERS)) {
     let wins = 0, downs = 0;
     for (let r = 0; r < runs; r++) {
@@ -28,7 +30,11 @@ for (const [cls, species] of Object.entries(players)) {
         const who = b.order[b.idx];
         const i = aiNext(b, who) || { a: 'end' };
         const res = perform(b, who, i);
-        if (!res.ok) perform(b, who, { a: 'end' });
+        if (!res.ok) {
+          const k = `${b.creatures[who].cls || 'foe'} ${i.a}${i.spell ? ' ' + i.spell : ''}: ${res.error}`;
+          refused.set(k, (refused.get(k) || 0) + 1);
+          perform(b, who, { a: 'end' });
+        }
       }
       if (b.over === 'victory') wins++;
       downs += heroes.filter((h) => b.creatures[h.id].hp <= 0).length;
@@ -37,3 +43,4 @@ for (const [cls, species] of Object.entries(players)) {
   }
 }
 console.log(rows.join('\n'));
+if (refused.size) { console.log('\nRefused AI choices:'); for (const [k, n] of [...refused].sort((p, q) => q[1] - p[1])) console.log(`  ${n}x ${k}`); }
