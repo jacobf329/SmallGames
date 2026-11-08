@@ -54,12 +54,13 @@ test('Magic Initiate: the free cast is used before a slot', () => {
   const w = hero('wizard', { background: 'sage' }, { x: 0, y: 9 });
   const b = fight([w, gob('g1', 0, 3)], 'wizard');
   b.creatures.g1.hp = 99;
-  assert.equal(canCast(b, w, 'magic-missile').pay, 'free');
-  dice(b, 1, 2, 3);
-  perform(b, 'wizard', { a: 'cast', spell: 'magic-missile', target: 'g1' });
-  assert.equal(last(b, 'missile').total, 1 + 2 + 3 + 3);
+  assert.equal(canCast(b, w, 'false-life').pay, 'free');    // Sage: Magic Initiate (Wizard) with False Life
+  assert.equal(canCast(b, w, 'magic-missile').pay, 'slot');
+  dice(b, 1, 2);
+  assert.ok(perform(b, 'wizard', { a: 'cast', spell: 'false-life' }).ok);
+  assert.equal(b.creatures.wizard.tempHp, 1 + 2 + 4);
   assert.equal(w.casting.slots[1].left, 2);
-  assert.equal(w.casting.known['magic-missile'].free, 0);
+  assert.equal(w.casting.known['false-life'].free, 0);
 });
 
 test('Sacred Flame: the target makes a Dexterity save against the spell save DC', () => {
@@ -165,6 +166,6 @@ test('Dragonborn Breath Weapon replaces an attack; Goliath Fire\'s Burn adds 1d1
   dice(b2, 15, 4, 1, 7);
   perform(b2, 'fighter', { a: 'attack', target: 'g1', attack: 'longsword' });
   const a = last(b2, 'attack');
-  assert.ok(a.damage.parts.some((p) => p.rule === 'fires-burn' && p.value === 7));
-  assert.equal(g.firesBurn.uses, 1);
+  assert.ok(a.damage.parts.some((p) => p.rule === 'giant-ancestry' && p.value === 7));
+  assert.equal(g.giant.uses, 1);
 });

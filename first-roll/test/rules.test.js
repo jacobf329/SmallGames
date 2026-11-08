@@ -9,14 +9,15 @@ import {
 import { aiNext } from '../src/rules/ai.js';
 import { setup, setTurn, dice, last } from './helpers.js';
 
-test('Human Soldier Fighter: AC 18, 14 HP (Tough), Longsword +5 for 1d8+5', () => {
+test('Human Soldier Fighter: AC 19 (Defense), 12 HP, Longsword +5 for 1d8+3', () => {
   const f = buildHero(defaultSpec('fighter'));
   assert.equal(f.scores.str, 17);
-  assert.equal(f.ac, 18);                     // Chain Mail 16 + Shield 2
-  assert.equal(f.hpMax, 14);                  // d10 max + CON 2 + Tough 2
+  assert.equal(f.ac, 19);                     // Chain Mail 16 + Shield 2 + Defense 1
+  assert.equal(f.hpMax, 12);                  // d10 max + CON 2
   const ls = f.attacks[0];
   assert.equal(ls.hit.reduce((s, h) => s + h.value, 0), 5);   // STR 3 + PB 2
-  assert.equal(ls.dmgFlat.reduce((s, h) => s + h.value, 0), 5); // STR 3 + Dueling 2
+  assert.equal(ls.dmgFlat.reduce((s, h) => s + h.value, 0), 3); // STR 3
+  assert.equal(ls.dice, '1d8');               // one hand: the Shield is in the other
   assert.equal(ls.mastery, 'sap');
 });
 
@@ -45,13 +46,13 @@ test('Advantage and Disadvantage cancel out', () => {
 
 test('attack: d20 + mods vs AC, damage applied, record explains it', () => {
   const b = setup();
-  dice(b, 12, 6, 2);            // d20 12, longsword 6, Savage Attacker reroll 2
+  dice(b, 12, 8, 2);            // d20 12, longsword 8, Savage Attacker reroll 2
   const r = perform(b, 'fighter', { a: 'attack', target: 'g1', attack: 'longsword' });
   assert.ok(r.ok);
   const a = last(b, 'attack');
   assert.equal(a.total, 17);
   assert.equal(a.outcome, 'hit');
-  assert.equal(a.damage.total, 6 + 5);      // kept the higher Savage Attacker roll
+  assert.equal(a.damage.total, 8 + 3);      // kept the higher Savage Attacker roll
   assert.match(a.damage.parts[0].savage, /Savage Attacker/);
   assert.equal(b.creatures.g1.hp, 0);
   assert.ok(b.creatures.g1.dead);
@@ -66,7 +67,7 @@ test('natural 20 doubles the damage dice; natural 1 always misses', () => {
   perform(b, 'fighter', { a: 'attack', target: 'g1', attack: 'longsword' });
   const a = last(b, 'attack');
   assert.equal(a.outcome, 'crit');
-  assert.equal(a.damage.total, 7 + 5);
+  assert.equal(a.damage.total, 7 + 3);
   setTurn(b, 'fighter');
   b.creatures.fighter.savage = false;
   dice(b, 1);

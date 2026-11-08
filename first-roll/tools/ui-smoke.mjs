@@ -93,7 +93,7 @@ await say({ t: 'timer', s: 60 });
 guard('lobby', () => app.render());
 await say({ t: 'start' });
 
-const counts = { renders: 0, cards: 0, turns: 0, fights: 0, retries: 0, scenes: new Set(), records: new Set() };
+const counts = { renders: 0, cards: 0, aims: 0, turns: 0, fights: 0, retries: 0, scenes: new Set(), records: new Set() };
 for (let step = 0; step < 60000 && SCENES[app.S?.story?.scene]?.kind !== 'end'; step++) {
   T += 1000;
   guard('tick', () => app.room.tick());
@@ -136,7 +136,26 @@ for (let step = 0; step < 60000 && SCENES[app.S?.story?.scene]?.kind !== 'end'; 
     }
     app.target = null;
     const me = b.creatures[app.me];
-    if (me.casting?.known?.['misty-step']) { app.pick = { spell: 'misty-step', label: 'Misty Step', squares: [{ x: 0, y: 0 }] }; guard('pick', () => app.render()); app.pick = null; }
+    // The spell list, then aiming every spell: tap each creature and a spread
+    // of squares once (a second tap on the same one would cast, so none repeat).
+    if (me.casting) {
+      const net = app.net;
+      app.net = { send() {} };
+      app.spells = true; guard('spells list', () => app.render()); app.spells = false;
+      const { spellAim } = await import('../src/rules/combat.js');
+      const aims = Object.keys(me.casting.known).filter((sid) => !['self', 'none'].includes(spellAim(sid).mode)).map((spell) => ({ kind: 'spell', spell }));
+      if (me.breath) aims.push({ kind: 'breath', shape: 'cone' }, { kind: 'breath', shape: 'line' });
+      if (me.giant?.kind === 'cloud') aims.push({ kind: 'jaunt' });
+      for (const a of aims) {
+        guard(`aim ${a.spell || a.kind}`, () => app.aimAt(a));
+        const done = new Set();
+        const tap = (x, y) => { const k = `${x},${y}`; if (done.has(k) || !app.aim) return; done.add(k); counts.aims++; guard(`aim tap ${a.spell || a.kind} ${k}`, () => app.tap(x, y)); };
+        for (const c of Object.values(b.creatures)) if (!(c.side === 'foe' && c.hp <= 0)) tap(c.x, c.y);
+        for (let y = 0; y < 10; y += 2) for (let x = 1; x < 8; x += 3) tap(x, y);
+        app.aim = null;
+      }
+      app.net = net;
+    }
     guard('panel', () => app.render());
     const { coach } = await import('../src/rules/ai.js');
     const tip = coach(b, app.me);
@@ -144,7 +163,7 @@ for (let step = 0; step < 60000 && SCENES[app.S?.story?.scene]?.kind !== 'end'; 
   }
 }
 const end = app.S?.story?.scene;
-console.log(`${cls}: reached ${end} at level ${app.S?.level}; ${counts.fights} fights won, ${counts.retries} lost; ${counts.turns} player turns, ${counts.cards} target cards, ${counts.renders} renders`);
+console.log(`${cls}: reached ${end} at level ${app.S?.level}; ${counts.fights} fights won, ${counts.retries} lost; ${counts.turns} player turns, ${counts.cards} target cards, ${counts.aims} aim taps, ${counts.renders} renders`);
 console.log(`records seen: ${[...counts.records].sort().join(', ')}`);
 if (errors.length) { console.error(`FAIL: ${errors.length} errors\n${[...new Set(errors)].slice(0, 8).join('\n---\n')}`); process.exit(1); }
 if (SCENES[end]?.kind !== 'end') { console.error('FAIL: did not reach the end'); process.exit(1); }

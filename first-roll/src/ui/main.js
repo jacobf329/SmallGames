@@ -9,10 +9,11 @@ import { Host, LocalNet, RtcNet, onlineSupported, normCode } from '../net/online
 import { buildHero, spellList } from '../rules/character.js';
 import { CLASSES, SPELLS, MASTERIES, signed } from '../rules/data.js';
 import {
-  previewMove, reachableSquares, attackOptions, canAttack, canCast, coneTargets, cubeTargets, attackFactors,
+  previewMove, reachableSquares, attackOptions, canAttack, canCast, attackFactors,
   hitChance, hitBonus, saveChance, spellAttack, spellDC, scaled, speedOf, acAgainst,
+  spellAim, targetError, pointError, areaSquares, areaTargets, areaLabel, BREATH_AREAS, offhandFor, canTarget,
 } from '../rules/combat.js';
-import { occupantAt, cheb, lineOfSight, canEndAt, onBoard } from '../rules/grid.js';
+import { occupantAt, cheb, lineOfSight, onBoard, W, H } from '../rules/grid.js';
 import { coach } from '../rules/ai.js';
 import { SCENES } from '../game/campaign.js';
 import { createBoard } from './board.js';
@@ -29,7 +30,7 @@ const coachOn = () => ls.get(K.coach) !== 'off';
 
 const app = {
   mode: null, room: null, host: null, net: null, code: null, timer: null,
-  me: null, S: null, lastSeq: 0, preview: null, target: null, pick: null, turnEndsAt: 0,
+  me: null, S: null, lastSeq: 0, preview: null, target: null, aim: null, spells: false, turnEndsAt: 0,
   toasts: [], toastBusy: false, wake: null, status: '', reactUntil: 0,
   overlay: null,            // 'build' | 'lesson' while one of those screens is open
 };
@@ -208,7 +209,8 @@ function takeRecords(prev, S) {
   if (fresh) return;
   for (const r of news) {
     if (ROLLED.has(r.kind)) queueToast(r);
-    if (r.kind === 'move' || r.kind === 'turn') { app.preview = null; app.target = null; app.pick = null; }
+    if (r.kind === 'turn') { app.preview = null; app.target = null; app.aim = null; app.spells = false; }
+    else if (r.kind === 'move') { app.preview = null; app.target = null; }
     if (r.kind === 'attack' && r.after?.dead) app.target = null;
   }
 }
@@ -361,11 +363,7 @@ function onTap(x, y) {
     return;
   }
   const me = b.creatures[myHeroId()];
-  if (app.pick) {
-    if (app.pick.squares.some((q) => q.x === x && q.y === y)) act({ a: 'cast', spell: app.pick.spell, x, y });
-    else { app.pick = null; renderBattle(S); }
-    return;
-  }
+  if (app.aim) { aimTap(b, me, x, y); return; }
   if (occ) {
     app.preview = null;
     app.target = app.target === occ.id ? null : occ.id;
@@ -384,7 +382,7 @@ function doMove(x, y) {
   send({ t: 'act', intent: { a: 'move', x, y } });
   app.preview = null;
 }
-const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; app.pick = null; };
+const act = (intent) => { send({ t: 'act', intent }); app.target = null; app.preview = null; app.aim = null; app.spells = false; };
 
 function renderBattle(S) {
   const b = S.battle;
@@ -413,12 +411,13 @@ function renderBattle(S) {
   const tip = mt && coachOn() ? coach(b, mine) : null;
   board.render({
     b, colors, curId: cur?.id, mine,
-    picks: mt && app.pick ? app.pick.squares : [],
-    reach: mt && !app.target && !app.pick ? reachableSquares(b, mine) : [],
+    picks: mt && app.aim ? aimSquares(b, b.creatures[mine], app.aim) : [],
+    area: mt && app.aim ? aimArea(b, b.creatures[mine], app.aim) : [],
+    chosen: mt && app.aim ? app.aim.picks : [],
+    reach: mt && !app.target && !app.aim && !app.spells ? reachableSquares(b, mine) : [],
     preview: mt ? app.preview : null,
     target: mt ? app.target : null,
-    cone: mt && app.target ? coneFor(b, b.creatures[mine], b.creatures[app.target]) : null,
-    suggest: tip?.intent.a === 'move' && !app.preview && !app.pick ? tip.intent : null,
+    suggest: tip?.intent.a === 'move' && !app.preview && !app.aim ? tip.intent : null,
   });
 
   renderPanel(S, b, mine, mt, tip);
@@ -447,14 +446,8 @@ function openRulesBook() {
     <h4>Rules</h4><div class="chips">${chips(rules)}</div><h4>Spells</h4><div class="chips">${chips(spells)}</div>`);
 }
 app.openRulesBook = openRulesBook;
-
-// If the hero has a cone (Burning Hands, Breath Weapon), the squares it would cover aimed at T.
-function coneFor(b, me, T) {
-  if (!me || !T || T === me) return null;
-  const hasCone = me.breath?.uses > 0 || spellList(me).some((s) => s.kind === 'cone');
-  if (!hasCone) return null;
-  return { x: T.x, y: T.y };
-}
+app.tap = (x, y) => onTap(x, y);
+app.aimAt = (a) => startAim(app.S.battle, app.S.battle.creatures[myHeroId()], a);
 
 function renderPanel(S, b, mine, mt, tip) {
   const P = $('panel');
@@ -480,18 +473,18 @@ function renderPanel(S, b, mine, mt, tip) {
     ${me.conc ? `<span class="chip"><a data-rule="concentration">🔮 ${esc(SPELLS[me.conc.spell]?.name || '')}</a></span>` : ''}
     ${(me.conds || []).filter((x) => CONDS[x.id]).map((x) => `<span class="chip bad"><a data-rule="${x.id === 'hidden' ? 'hide' : x.id === 'commanded' ? 'command' : x.id}">${CONDS[x.id]}</a></span>`).join('')}
     ${me.tempHp ? `<span class="chip"><a data-rule="temp-hp">+${me.tempHp} temp HP</a></span>` : ''}</div>`;
-  if (tip?.text && !app.target && !app.preview && !app.pick) {
+  if (tip?.text && !app.target && !app.preview && !app.aim && !app.spells) {
     html += `<div class="coachline">💡 <span>${esc(tip.text)}</span><button class="btn" id="btn-coach">Do it</button></div>`;
   }
-  if (app.pick) {
-    html += `<div class="preview"><span>${esc(app.pick.label)}: tap a highlighted square.</span><button class="btn ghost" id="btn-pick-x">✕</button></div>`;
-  } else if (app.target) html += targetCard(b, me, b.creatures[app.target]);
+  if (app.aim) html += aimCard(b, me, app.aim);
+  else if (app.spells) html += spellsCard(b, me);
+  else if (app.target) html += targetCard(b, me, b.creatures[app.target]);
   else if (app.preview) {
     const oa = app.preview.oas.map((id) => esc(b.creatures[id].name)).join(' and ');
     html += `<div class="preview"><span>Move ${app.preview.feet} ft here?${oa ? ` <b class="bad">⚡ ${oa} gets an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>.</b>` : ''} Tap the square again or</span>
       <button class="btn primary" id="btn-move">Move</button><button class="btn ghost" id="btn-cancel">✕</button></div>`;
-  } else if (me.casting || me.breath) {
-    html += '<div class="hint">Tap an enemy for attacks and spells, an ally (or yourself) for healing and help.</div>';
+  } else if (me.casting) {
+    html += '<div class="hint">Tap ✨ Spells to cast anything you know, or tap a creature for attacks and quick spells.</div>';
   }
   const extra = [];
   const btn = (label, intent, ok, rule) => `<button class="btn" ${intentAttr(intent)} ${ok ? '' : 'disabled'} title="${esc(GLOSSARY[rule]?.title || '')}">${esc(label)}</button>`;
@@ -512,12 +505,15 @@ function renderPanel(S, b, mine, mt, tip) {
     extra.push(btn(`Turn Undead (${me.channel.uses})`, { a: 'turn' }, t.action && !t.magicUsed && me.channel.uses && undead, 'turn-undead'));
     if (me.preserveLife) extra.push(btn(`Preserve Life (${me.channel.uses})`, { a: 'preserve' }, t.action && !t.magicUsed && me.channel.uses, 'preserve-life'));
   }
-  for (const sp of spellList(me)) {
-    if (sp.kind !== 'teleport') continue;
-    const c = canCast(b, me, sp.id);
-    extra.push(`<button class="btn" data-pick="${sp.id}" ${c.ok ? '' : 'disabled'}>${esc(sp.name)}</button>`);
+  if (me.breath) {
+    const ok = me.breath.uses > 0 && canAttack(t);
+    extra.push(`<button class="btn" data-aim='${esc(JSON.stringify({ kind: 'breath', shape: 'cone' }))}' ${ok ? '' : 'disabled'} title="Breath Weapon">Breath: Cone (${me.breath.uses})</button>`);
+    extra.push(`<button class="btn" data-aim='${esc(JSON.stringify({ kind: 'breath', shape: 'line' }))}' ${ok ? '' : 'disabled'} title="Breath Weapon">Breath: Line (${me.breath.uses})</button>`);
   }
-  html += `<div class="btns">
+  if (me.giant?.kind === 'cloud') {
+    extra.push(`<button class="btn" data-aim='${esc(JSON.stringify({ kind: 'jaunt' }))}' ${me.giant.uses > 0 && t.bonus ? '' : 'disabled'} title="Cloud's Jaunt">Cloud's Jaunt (${me.giant.uses})</button>`);
+  }
+  html += `${me.casting ? `<div class="btns one"><button class="btn spellsbtn ${app.spells ? 'on' : ''}" id="btn-spells">✨ Spells</button></div>` : ''}<div class="btns">
     <button class="btn" data-act="dash" ${t.action ? '' : 'disabled'}>Dash</button>
     <button class="btn" data-act="disengage" ${t.action ? '' : 'disabled'}>Disengage</button>
     <button class="btn" data-act="dodge" ${t.action ? '' : 'disabled'}>Dodge</button>
@@ -528,11 +524,15 @@ function renderPanel(S, b, mine, mt, tip) {
   P.innerHTML = html;
   for (const el of P.querySelectorAll('[data-act]')) el.onclick = () => act({ a: el.dataset.act });
   for (const el of P.querySelectorAll('[data-intent]')) el.onclick = () => act(JSON.parse(el.dataset.intent));
-  for (const el of P.querySelectorAll('[data-pick]')) el.onclick = () => startPick(b, me, el.dataset.pick);
+  for (const el of P.querySelectorAll('[data-aim]')) el.onclick = () => startAim(b, me, JSON.parse(el.dataset.aim));
+  if ($('btn-spells')) $('btn-spells').onclick = () => { app.spells = !app.spells; app.aim = null; app.target = null; app.preview = null; renderBattle(app.S); };
+  if ($('btn-aim-x')) $('btn-aim-x').onclick = () => { app.aim = null; renderBattle(app.S); };
+  if ($('btn-aim-undo')) $('btn-aim-undo').onclick = () => { app.aim.picks.pop(); renderBattle(app.S); };
+  if ($('btn-aim-go')) $('btn-aim-go').onclick = () => castAim(b, me);
+  for (const el of P.querySelectorAll('[data-aimslot]')) el.onclick = () => { app.aim.slot = +el.dataset.aimslot; trimPicks(b, me); renderBattle(app.S); };
   if ($('btn-coach')) $('btn-coach').onclick = () => act(tip.intent);
   if ($('btn-move')) $('btn-move').onclick = () => { const e = app.preview.path[app.preview.path.length - 1]; doMove(e.x, e.y); };
   if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; renderBattle(app.S); };
-  if ($('btn-pick-x')) $('btn-pick-x').onclick = () => { app.pick = null; renderBattle(app.S); };
   if ($('btn-tx')) $('btn-tx').onclick = () => { app.target = null; renderBattle(app.S); };
   if ($('btn-tinfo')) $('btn-tinfo').onclick = () => openSheet(sheetHtml(b.creatures[app.target]));
   $('btn-coach-toggle').onclick = () => { ls.set(K.coach, coachOn() ? 'off' : 'on'); renderBattle(app.S); };
@@ -542,20 +542,204 @@ function renderPanel(S, b, mine, mt, tip) {
 const CONDS = { prone: 'Prone', restrained: 'Restrained', grappled: 'Grappled', frightened: 'Frightened', poisoned: 'Poisoned',
   paralyzed: 'Paralyzed', incapacitated: 'Incapacitated', hidden: 'Hidden', commanded: 'Commanded' };
 
-// Misty Step: pick an empty square you can see within range.
-function startPick(b, me, sid) {
+// ------------------------------------------------------------ aiming ----
+// Casting works like the 2024 rules: pick a spell, then aim it the way its
+// text says. app.aim = { kind: 'spell'|'breath'|'jaunt', spell, slot, picks, point, err }.
+function aimOf(a) {
+  if (a.kind === 'breath') return { mode: 'area', ...BREATH_AREAS[a.shape], range: 0 };
+  if (a.kind === 'jaunt') return { mode: 'point', range: 30 };
+  return spellAim(a.spell, a.slot);
+}
+const aimName = (me, a) => (a.kind === 'breath' ? `Breath Weapon (${a.shape === 'line' ? '30-ft Line' : '15-ft Cone'})` : a.kind === 'jaunt' ? "Cloud's Jaunt" : SPELLS[a.spell].name);
+
+function startAim(b, me, a) {
+  const aim = { picks: [], point: null, err: null, ...a };
+  if (aim.kind === 'spell') {
+    const c = canCast(b, me, aim.spell, aim.slot || 0);
+    aim.slot = c.ok ? c.slot : aim.slot || SPELLS[aim.spell].level;
+    if (aimOf(aim).mode === 'self') { act({ a: 'cast', spell: aim.spell, slot: aim.slot }); return; }
+  }
+  app.target = null; app.preview = null; app.spells = false;
+  app.aim = aim;
+  if (aim.point && pointError(b, me, aimOf(aim), aim.point.x, aim.point.y)) aim.point = null;
+  renderBattle(app.S);
+}
+
+// Squares to highlight: the creatures it can target, or the squares it can go.
+function aimSquares(b, me, a) {
+  const aim = aimOf(a);
+  const out = [];
+  if (['creature', 'split', 'group'].includes(aim.mode)) {
+    for (const c of Object.values(b.creatures)) if (!targetError(b, me, c, a.spell, aim)) out.push({ x: c.x, y: c.y });
+    return out;
+  }
+  if (aim.mode === 'area' && aim.from === 'self') return [];     // any square gives a direction
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!pointError(b, me, aim, x, y)) out.push({ x, y });
+  return out;
+}
+function aimArea(b, me, a) {
+  const aim = aimOf(a);
+  if (aim.mode !== 'area' || !a.point) return [];
+  return areaSquares(b, me, aim, a.point.x, a.point.y);
+}
+function trimPicks(b, me) {
+  const aim = aimOf(app.aim);
+  if (aim.n) app.aim.picks = app.aim.picks.slice(0, aim.n);
+}
+
+function aimTap(b, me, x, y) {
+  const a = app.aim;
+  const aim = aimOf(a);
+  a.err = null;
+  if (['creature', 'split', 'group'].includes(aim.mode)) {
+    const occ = occupantAt(b, x, y);
+    const e = occ ? targetError(b, me, occ, a.spell, aim) : 'Tap a creature.';
+    if (e) { a.err = e; renderBattle(app.S); return; }
+    if (aim.mode === 'creature') {
+      if (a.picks[0] === occ.id) { castAim(b, me); return; }
+      a.picks = [occ.id];
+    } else if (aim.mode === 'split') {
+      if (a.picks.length < aim.n) a.picks.push(occ.id);
+      else a.err = `All ${aim.n} ${aim.what}s are aimed. Tap Cast, or Undo one.`;
+    } else {
+      const i = a.picks.indexOf(occ.id);
+      if (i >= 0) a.picks.splice(i, 1);
+      else if (a.picks.length < aim.n) a.picks.push(occ.id);
+      else a.err = `${SPELLS[a.spell].name} takes up to ${aim.n} creatures here. Tap one again to drop it.`;
+    }
+  } else {
+    const e = pointError(b, me, aim, x, y);
+    if (e) { a.err = e; renderBattle(app.S); return; }
+    if (a.point && a.point.x === x && a.point.y === y) { castAim(b, me); return; }
+    a.point = { x, y };
+  }
+  renderBattle(app.S);
+}
+
+function aimIntent(a) {
+  if (a.kind === 'breath') return a.point ? { a: 'breath', shape: a.shape, x: a.point.x, y: a.point.y } : null;
+  if (a.kind === 'jaunt') return a.point ? { a: 'jaunt', x: a.point.x, y: a.point.y } : null;
+  const mode = aimOf(a).mode;
+  if (mode === 'point' || mode === 'area') return a.point ? { a: 'cast', spell: a.spell, slot: a.slot, x: a.point.x, y: a.point.y } : null;
+  if (!a.picks.length) return null;
+  return { a: 'cast', spell: a.spell, slot: a.slot, target: a.picks[0], targets: [...a.picks] };
+}
+function castAim() {
+  const i = aimIntent(app.aim);
+  if (i) act(i);
+}
+
+// What a spell will do to one creature, in a line (hit or save chances).
+function spellOdds(b, me, sid, T, slot) {
   const sp = SPELLS[sid];
-  const squares = [];
-  for (let y = 0; y < 10; y++) {
-    for (let x = 0; x < 8; x++) {
-      if ((x === me.x && y === me.y) || cheb(me, { x, y }) * 5 > sp.range) continue;
-      if (!canEndAt(b, me, x, y) || !lineOfSight(b, me, { x, y })) continue;
-      squares.push({ x, y });
+  const sc = scaled(sid, slot);
+  if (sp.kind === 'attack' || sp.kind === 'rays' || sp.kind === 'spiritual') {
+    const atk = spellAttack(me, sid, { melee: sp.kind === 'spiritual' || !!sp.melee });
+    const f = attackFactors(b, me, T, atk);
+    const pct = Math.round(hitChance(hitBonus(atk), acAgainst(b, me, T, atk).value, f.mode, me.luck) * 100);
+    return [`${pct}% to hit ${esc(T.name)}`, `${sc.dice} ${sp.type}`, ...reasons(f)].join(' · ');
+  }
+  const ab = sp.save || (sp.kind === 'command' || sp.kind === 'hold' ? 'wis' : null);
+  if (ab && hostile(me, T)) {
+    const dc = spellDC(me, sid);
+    return `${Math.round((1 - saveChance(b, T, ab, dc)) * 100)}% ${esc(T.name)} fails a DC ${dc} ${ab.toUpperCase()} save`;
+  }
+  return '';
+}
+const hostile = (p, q) => p.side !== q.side;
+
+// One short line on how a spell aims and what it does.
+function aimSummary(sid, slot) {
+  const sp = SPELLS[sid];
+  const aim = spellAim(sid, slot);
+  const sc = scaled(sid, slot);
+  const rng = aim.range <= 5 ? 'touch' : `${aim.range} ft`;
+  switch (aim.mode) {
+    case 'self': return 'Self';
+    case 'creature': return `${aim.who === 'dying' ? 'A dying creature' : 'One creature'}, ${rng}`;
+    case 'split': return `${aim.n} ${aim.what}s, aim each at any creature, ${rng}`;
+    case 'group': return `Up to ${aim.n} creature${aim.n === 1 ? '' : 's'}, ${rng}`;
+    case 'point': return `A square you can see, ${rng}`;
+    case 'area': return aim.from === 'self' ? `${areaLabel(aim)} from you` : `${areaLabel(aim)} anywhere within ${rng}`;
+    default:
+      if (sp.time === 'reaction') return 'Reaction: offered when it applies';
+      return sc && sp.kind === 'utility' ? 'Outside of fights' : '';
+  }
+}
+
+// The ✨ Spells list: every spell you know, castable or not, and why.
+function spellsCard(b, me) {
+  const list = spellList(me).sort((p, q) => p.level - q.level || p.name.localeCompare(q.name));
+  const fight = list.filter((sp) => sp.kind !== 'utility');
+  const other = list.filter((sp) => sp.kind === 'utility');
+  let rows = '';
+  for (const sp of fight) {
+    const { c, tag } = spellCost(b, me, sp.id);
+    const slot = c.ok ? c.slot : sp.level;
+    const react = sp.time === 'reaction';
+    const why = react ? `${esc(aimSummary(sp.id, slot))} · ${tag}` : c.ok ? `${esc(aimSummary(sp.id, slot))} · ${tag}` : esc(c.error);
+    rows += `<div class="opt"><span class="ob"><button class="btn ${react ? '' : 'primary'}" data-aim='${esc(JSON.stringify({ kind: 'spell', spell: sp.id }))}' ${c.ok && !react ? '' : 'disabled'}>${esc(sp.name)}</button></span>
+      <span class="why"><a class="rl" data-rule="${sp.id}">${sp.level ? `Level ${sp.level}` : 'Cantrip'}</a> · ${why}</span></div>`;
+  }
+  if (other.length) rows += `<div class="why dim">Outside of fights: ${other.map((sp) => `<a class="rl" data-rule="${sp.id}">${esc(sp.name)}</a>`).join(', ')}.</div>`;
+  return `<div class="target ally spells"><div class="th"><b>✨ Your spells</b><span><button class="btn small ghost" id="btn-spells-x">✕</button></span></div>${rows}</div>`;
+}
+document.addEventListener('click', (e) => { if (e.target.id === 'btn-spells-x') { app.spells = false; renderBattle(app.S); } });
+
+// While aiming: what's picked, who's caught, and the Cast button.
+function aimCard(b, me, a) {
+  const aim = aimOf(a);
+  const name = aimName(me, a);
+  let tag = '';
+  let slotBtns = '';
+  const sp = a.kind === 'spell' ? SPELLS[a.spell] : null;
+  if (sp) {
+    tag = spellCost(b, me, a.spell).tag;
+    if (sp.level && me.casting?.slots && Object.keys(sp.up || {}).length) {
+      for (const lv of Object.keys(me.casting.slots).map(Number).sort((p, q) => p - q)) {
+        if (lv < sp.level) continue;
+        const c = canCast(b, me, a.spell, lv);
+        if (!c.ok || (c.slot !== lv && !(c.pay === 'free' && lv === sp.level))) continue;
+        slotBtns += `<button class="btn small up ${a.slot === lv ? 'on' : ''}" data-aimslot="${lv}" title="Cast with a level ${lv} slot">Lv ${lv}${lv > sp.level ? `: ${esc(upText(a.spell, lv))}` : ''}</button>`;
+      }
+      if (slotBtns) slotBtns = `<div class="opt slots">${slotBtns}</div>`;
     }
   }
-  app.target = null; app.preview = null;
-  app.pick = { spell: sid, label: sp.name, squares };
-  renderBattle(app.S);
+  const how = {
+    creature: aim.who === 'dying' ? 'Tap a dying creature in range.' : 'Tap a creature in range (highlighted). Tap it again, or Cast.',
+    split: `Tap a creature for each ${aim.what} (${a.picks.length}/${aim.n}). Tap the same one again to stack them. Any left over follow the last one.`,
+    group: `Tap up to ${aim.n} creature${aim.n === 1 ? '' : 's'} (${a.picks.length}/${aim.n}). Tap one again to drop it.`,
+    point: 'Tap a highlighted square. Tap it again, or Cast.',
+    area: aim.from === 'self' ? `Tap any square to point the ${areaLabel(aim)} that way. Tap it again, or Cast.` : `Tap a highlighted square to place the ${areaLabel(aim)}. Tap it again, or Cast.`,
+  }[aim.mode] || '';
+  let body = `<div class="why">${esc(how)}</div>`;
+  if (a.err) body += `<div class="why bad">${esc(a.err)}</div>`;
+  if (['creature', 'split', 'group'].includes(aim.mode) && a.picks.length) {
+    const counts = new Map();
+    for (const id of a.picks) counts.set(id, (counts.get(id) || 0) + 1);
+    const bits = [...counts].map(([id, n]) => {
+      const T = b.creatures[id];
+      const pal = !hostile(me, T) && ['attack', 'save', 'missile', 'rays', 'command', 'hold', 'spiritual'].includes(sp?.kind);
+      return `${esc(T.name)}${n > 1 ? ` ×${n}` : ''}${pal ? ' <b class="bad">(your ally!)</b>' : ''}`;
+    });
+    body += `<div class="why">On: ${bits.join(', ')}</div>`;
+    const T = b.creatures[a.picks[a.picks.length - 1]];
+    const odds = sp ? spellOdds(b, me, a.spell, T, a.slot) : '';
+    if (odds) body += `<div class="why">${odds}</div>`;
+  }
+  if (aim.mode === 'area' && a.point) {
+    const hit = areaTargets(b, me, aim, a.point.x, a.point.y);
+    const pals = hit.filter((c) => !hostile(me, c));
+    const dc = a.kind === 'breath' ? me.breath.dc.reduce((s2, p) => s2 + p.value, 0) : spellDC(me, a.spell);
+    const ab = a.kind === 'breath' ? 'dex' : sp.save;
+    const dmg = a.kind === 'breath' ? `${me.breath.dice} ${me.breath.type}, half on a save` : sp.effect ? 'outlined in light: attacks against it have Advantage' : `${scaled(a.spell, a.slot).dice} ${sp.type}${sp.half ? ', half on a save' : ''}${sp.push ? `, pushed ${sp.push} ft on a failure` : ''}`;
+    body += `<div class="why">${hit.length ? `Catches ${hit.map((c) => esc(c.name)).join(', ')}` : 'Catches nobody there yet'}${pals.length ? ` <b class="bad">(including ${pals.map((c) => (c === me ? 'you' : esc(c.name))).join(' and ')}!)</b>` : ''} · DC ${dc} ${ab.toUpperCase()} save, ${dmg}</div>`;
+  }
+  const ready = !!aimIntent(a);
+  const undo = aim.mode === 'split' && a.picks.length ? '<button class="btn small ghost" id="btn-aim-undo">Undo</button>' : '';
+  const rule = a.kind === 'breath' ? 'breath-weapon' : a.kind === 'jaunt' ? 'giant-ancestry' : a.spell;
+  return `<div class="target aiming"><div class="th"><b><a class="rl" data-rule="${rule}">${esc(name)}</a></b><span>${tag} <button class="btn small ghost" id="btn-aim-x">✕</button></span></div>
+    ${slotBtns}${body}<div class="opt"><button class="btn primary" id="btn-aim-go" ${ready ? '' : 'disabled'}>${a.kind === 'breath' ? 'Breathe' : a.kind === 'jaunt' ? 'Teleport' : 'Cast'}</button>${undo}</div></div>`;
 }
 
 const reasons = (o) => {
@@ -635,6 +819,12 @@ function targetCard(b, me, T) {
         if (!cond) continue;
         const ok = self || near;
         rows += row(sp.name, { ...intent, cond: cond.id }, ok && c.ok, !ok ? 'Touch: move next to them first.' : c.ok ? `Ends ${esc(CONDS[cond.id] || cond.id)} · ${tag}` : esc(c.error));
+      } else if (sp.kind === 'armor' || sp.kind === 'stride' || (sp.kind === 'temp' && self)) {
+        const aim = spellAim(sp.id, c.slot);
+        const e = sp.kind === 'temp' ? null : targetError(b, me, T, sp.id, aim);
+        const what = sp.kind === 'armor' ? `AC 13 + DEX for ${esc(T.name)}` : sp.kind === 'stride' ? `+10 ft Speed for ${esc(T.name)}` : `${sp.dice} + ${scaled(sp.id, c.slot).flat} Temporary Hit Points`;
+        if (sp.kind === 'armor' && T.armorId !== 'none') continue;
+        rows += row(sp.name, sp.kind === 'temp' ? { a: 'cast', spell: sp.id } : { a: 'cast', spell: sp.id, target: T.id, targets: [T.id] }, !e && c.ok, e ? esc(e) : c.ok ? `${what} · ${tag}` : esc(c.error));
       } else if (sp.kind === 'buff' && T.hp > 0) {
         const ok = inRange(sp.range);
         if (sp.buff === 'faith') {
@@ -674,20 +864,26 @@ function targetCard(b, me, T) {
       const why = o.ok ? bits.join(' · ') : esc(o.why || `Out of ${o.atk.kind === 'melee' ? 'reach: move next to it first' : 'range'}.`);
       rows += row(o.atk.name, { a: 'attack', target: T.id, attack: o.atk.id }, o.ok && canAttack(t), why);
     }
+    for (const atk of me.attacks) {
+      const off = offhandFor(b, me, atk);
+      if (off.error) continue;
+      const can = canTarget(b, me, T, off.atk);
+      const flat = off.atk.dmgFlat.reduce((s2, x) => s2 + x.value, 0);
+      rows += row(`${atk.name}: extra attack`, { a: 'attack', target: T.id, attack: atk.id, offhand: true }, can.ok,
+        can.ok ? `${R0('light', 'Light')} weapon extra attack${off.nick ? ` (${R0('mastery-nick', 'Nick')}: part of the Attack action)` : ', a <b>Bonus Action</b>'} · ${off.atk.dice}${flat ? signed(flat) : ''} ${off.atk.type}${me.twf ? ` (${R0('two-weapon-fighting', 'Two-Weapon Fighting')})` : ', no ability modifier to damage'}` : esc(can.why), false);
+    }
     for (const sp of spellList(me)) {
-      if (!['attack', 'save', 'missile', 'rays', 'cone', 'cube', 'command', 'hold', 'spiritual'].includes(sp.kind)) continue;
+      if (!['attack', 'save', 'missile', 'rays', 'area', 'command', 'hold', 'spiritual'].includes(sp.kind)) continue;
       const { c, tag } = spellCost(b, me, sp.id);
-      if (sp.kind === 'cone' || sp.kind === 'cube') {
-        let x = T.x, y = T.y;
-        if (sp.kind === 'cube') { x = me.x + Math.sign(T.x - me.x); y = me.y + Math.sign(T.y - me.y); }
-        const hit = sp.kind === 'cone' ? coneTargets(b, me, x, y) : cubeTargets(b, me, x, y);
-        const pals = hit.filter((h) => h.side === me.side);
-        const foes = hit.filter((h) => h.side !== me.side);
-        const shape = sp.kind === 'cone' ? '15-ft Cone' : '15-ft Cube';
-        const why = !foes.length ? `Too far: a ${shape} toward ${esc(T.name)} wouldn't reach it. Get within 15 feet.`
-          : `${shape} toward ${esc(T.name)}: catches ${hit.map((h) => esc(h.name)).join(', ')}${pals.length ? ` <b class="bad">(including your ally!)</b>` : ''} · DC ${spellDC(me, sp.id)} ${sp.save.toUpperCase()} save, ${sp.dice} ${sp.type}, half on a save${sp.push ? `, pushed ${sp.push} ft on a failure` : ''} · ${tag}`;
-        const intent = { a: 'cast', spell: sp.id, x, y };
-        rows += row(sp.name, intent, c.ok && foes.length > 0, c.ok ? why : esc(c.error), true, upButtons(b, me, sp, intent, c.ok && foes.length > 0));
+      if (sp.kind === 'area') {
+        if (sp.effect && !sp.area) continue;
+        const aim = spellAim(sp.id, c.slot);
+        const at = aim.from === 'self' && aim.shape === 'cube' ? { x: me.x + Math.sign(T.x - me.x), y: me.y + Math.sign(T.y - me.y) } : { x: T.x, y: T.y };
+        const okAt = !pointError(b, me, aim, at.x, at.y);
+        const hit = okAt ? areaTargets(b, me, aim, at.x, at.y) : [];
+        const why = !c.ok ? esc(c.error) : !hit.includes(T) ? `${areaLabel(aim)}${aim.from === 'self' ? ' from you' : ` within ${aim.range} ft`}: aimed at ${esc(T.name)} it wouldn't reach. Tap Aim to place it anywhere.`
+          : `${areaLabel(aim)}: aimed here it catches ${hit.map((h) => esc(h.name)).join(', ')}${hit.some((h) => h.side === me.side) ? ' <b class="bad">(including your side!)</b>' : ''}. Aim to adjust · ${tag}`;
+        rows += `<div class="opt"><span class="ob"><button class="btn primary" data-aim='${esc(JSON.stringify({ kind: 'spell', spell: sp.id, point: okAt ? at : null }))}' ${c.ok ? '' : 'disabled'}>Aim ${esc(sp.name)}</button></span><span class="why">${why}</span></div>`;
         continue;
       }
       const intent = { a: 'cast', spell: sp.id, target: T.id };
@@ -714,12 +910,13 @@ function targetCard(b, me, T) {
       rows += row(sp.name, intent, ok && c.ok, why, true, upButtons(b, me, sp, intent, ok && c.ok));
     }
     if (me.breath) {
-      const hit = coneTargets(b, me, T.x, T.y);
-      const pals = hit.filter((x) => x.side === me.side);
-      const ok = me.breath.uses > 0 && canAttack(t) && hit.some((x) => x.side !== me.side);
-      const dc = me.breath.dc.reduce((s, p) => s + p.value, 0);
-      rows += row(`Breath Weapon (${me.breath.uses})`, { a: 'breath', x: T.x, y: T.y }, ok,
-        `<a class="rl" data-rule="breath-weapon">Replaces an attack</a>: 15-ft Cone, catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody (get within 15 feet)'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''} · DC ${dc} DEX save, ${me.breath.dice} ${me.breath.type}`);
+      const ok = me.breath.uses > 0 && canAttack(t);
+      for (const shape of ['cone', 'line']) {
+        const hit = areaTargets(b, me, BREATH_AREAS[shape], T.x, T.y);
+        const pals = hit.filter((x) => x.side === me.side);
+        rows += `<div class="opt"><span class="ob"><button class="btn" data-aim='${esc(JSON.stringify({ kind: 'breath', shape, point: { x: T.x, y: T.y } }))}' ${ok ? '' : 'disabled'}>Breath: ${shape === 'line' ? 'Line' : 'Cone'} (${me.breath.uses})</button></span>
+          <span class="why"><a class="rl" data-rule="breath-weapon">Replaces an attack</a>: ${shape === 'line' ? '30-ft Line' : '15-ft Cone'} toward ${esc(T.name)} catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody yet'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''}</span></div>`;
+      }
     }
     if (me.channel && me.level >= 2) {
       const ok = inRange(30) && t.action && !t.magicUsed && me.channel.uses > 0;

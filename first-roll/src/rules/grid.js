@@ -40,6 +40,7 @@ export function occupantAt(b, x, y) {
   return null;
 }
 
+const SIZES = { tiny: 0, small: 1, medium: 2, large: 3, huge: 4 };
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 // Cheapest cost (in feet) to every square the mover can reach within budget.
@@ -58,7 +59,9 @@ export function reachMap(b, mover, budget) {
       const nx = x + dx, ny = y + dy;
       if (!inBounds(nx, ny) || blocked(b, nx, ny)) continue;
       const occ = occupantAt(b, nx, ny);
-      if (occ && occ !== mover && hostile(occ, mover) && !incap(occ)) continue;
+      // Hostile creatures block, unless Incapacitated; a halfling (Halfling
+      // Nimbleness) can move through a creature a size larger.
+      if (occ && occ !== mover && hostile(occ, mover) && !incap(occ) && !(mover.nimbleness && SIZES[occ.size || 'medium'] > SIZES[mover.size || 'medium'])) continue;
       const nd = d + (occ && occ !== mover ? 2 * FT : FT);
       if (nd > budget) continue;
       const k = key(nx, ny);
@@ -179,5 +182,37 @@ export function cubeSquares(origin, dir, size = 3) {
       if (inBounds(x, y)) out.push({ x, y });
     }
   }
+  return out;
+}
+
+// A Line from origin toward a square, `len` squares long and one square
+// wide: every square the line's centre passes through.
+export function lineSquares(origin, toward, len) {
+  const dx = toward.x - origin.x, dy = toward.y - origin.y;
+  const dl = Math.hypot(dx, dy);
+  if (!dl) return [];
+  const out = [];
+  const seen = new Set([key(origin.x, origin.y)]);
+  for (let t = 0.5; t <= len + 0.01; t += 0.05) {
+    const x = Math.floor(origin.x + 0.5 + (dx / dl) * t), y = Math.floor(origin.y + 0.5 + (dy / dl) * t);
+    const k = key(x, y);
+    if (!seen.has(k) && inBounds(x, y)) { seen.add(k); out.push({ x, y }); }
+  }
+  return out;
+}
+
+// Squares within r squares of p (a Sphere around a point, or an Emanation).
+export function squaresWithin(p, r) {
+  const out = [];
+  for (let y = p.y - r; y <= p.y + r; y++) for (let x = p.x - r; x <= p.x + r; x++) if (inBounds(x, y)) out.push({ x, y });
+  return out;
+}
+
+// An n-square Cube placed on a point: the point is its centre square (or the
+// square just up-left of centre when n is even).
+export function cubeAt(p, n) {
+  const lo = Math.floor((n - 1) / 2);
+  const out = [];
+  for (let y = p.y - lo; y < p.y - lo + n; y++) for (let x = p.x - lo; x < p.x - lo + n; x++) if (inBounds(x, y)) out.push({ x, y });
   return out;
 }

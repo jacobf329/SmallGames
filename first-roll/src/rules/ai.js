@@ -15,9 +15,10 @@
 import { cheb, incap, down, hasCond, condOf, reachMap, canEndAt, pathFrom, key, onBoard, lineOfSight, feetBetween } from './grid.js';
 import {
   attackOptions, enemiesOf, alliesOf, previewMove, canCast, canAttack, spellAttack, spellDC,
-  attackFactors, hitChance, hitBonus, saveChance, coneTargets, cubeTargets, spellMod, scaled,
-  provokers, speedOf, seenBy, preservePlan, damageMult, acAgainst, reachOf,
+  attackFactors, hitChance, hitBonus, saveChance, spellMod, scaled, areaTargets, pointError, offhandFor, canTarget,
+  provokers, speedOf, seenBy, preservePlan, damageMult, acAgainst, reachOf, BREATH_AREAS, spellAim,
 } from './combat.js';
+import { inBounds } from './grid.js';
 import { SPELLS } from './data.js';
 import { avgDice } from './rng.js';
 
@@ -48,6 +49,25 @@ function weaponOptions(b, me, { kind = null } = {}) {
   return out;
 }
 
+// The Light property's extra attack, if one is open this turn.
+export function offhandOptions(b, me) {
+  const out = [];
+  const t = b.turn;
+  if (!t?.light || t.offhandUsed) return out;
+  for (const atk of me.attacks) {
+    const off = offhandFor(b, me, atk);
+    if (off.error) continue;
+    for (const T of targetsOf(b, me)) {
+      if (!canTarget(b, me, T, off.atk).ok) continue;
+      const f = attackFactors(b, me, T, off.atk);
+      const p = hitChance(hitBonus(off.atk), acAgainst(b, me, T, off.atk).value, f.mode, me.luck);
+      const avg = (avgDice(off.atk.dice) + off.atk.dmgFlat.reduce((s2, x) => s2 + x.value, 0)) * damageMult(T, off.atk.type);
+      out.push({ intent: { a: 'attack', target: T.id, attack: atk.id, offhand: true }, score: p * avg + finishing(T, avg), why: { T, p, nick: off.nick }, time: off.nick ? 'free' : 'bonus' });
+    }
+  }
+  return out.sort((p, q) => q.score - p.score);
+}
+
 // Every spell and special option the creature has right now, scored by
 // expected damage (or how much it helps). Leveled spells pay for the slot,
 // so cantrips are preferred when they're nearly as good. `light` skips the
@@ -64,26 +84,28 @@ export function specialOptions(b, me, { light = false } = {}) {
     const can = canCast(b, me, sid);
     if (!can.ok) continue;
     if (light && !['attack', 'save', 'missile', 'rays', 'command', 'hold', 'spiritual'].includes(s.kind)) continue;
+    const range = s.touch ? 5 : s.range || 0;
     if (s.conc && me.conc) continue;      // keep the spell already going
     const cost = slotCost(can);
     const sc = scaled(sid, can.slot);
     const dc = spellDC(me, sid);
     switch (s.kind) {
       case 'attack': case 'rays': {
-        const atk = spellAttack(me, sid);
+        const atk = spellAttack(me, sid, { melee: !!s.melee });
         for (const T of foes) {
-          if (!sees(b, me, T, s.range)) continue;
+          if (!sees(b, me, T, range)) continue;
           const f = attackFactors(b, me, T, atk);
           const p = hitChance(hitBonus(atk), acAgainst(b, me, T, atk).value, f.mode, me.luck);
-          const each = avgDice(sc.dice) * damageMult(T, s.type) + (me.firesBurn?.uses && s.kind === 'attack' ? 5.5 : 0);
+          const giant = me.giant?.uses && s.kind === 'attack' ? (me.giant.kind === 'fire' ? 5.5 : me.giant.kind === 'frost' ? 3.5 : 0) : 0;
+          const each = avgDice(sc.dice) * damageMult(T, s.type) + giant;
           const n = s.kind === 'rays' ? sc.rays : 1;
-          add({ a: 'cast', spell: sid, target: T.id }, n * p * each + finishing(T, each) - cost + (s.rider === 'guided' ? 1.5 : 0) + (s.rider === 'chill' ? 0.5 : 0), { T, p, mode: f.mode, n });
+          add({ a: 'cast', spell: sid, target: T.id }, n * p * each + finishing(T, each) - cost + (s.rider === 'guided' ? 1.5 : 0) + (s.rider === 'chill' || s.rider === 'shocked' || s.rider === 'sicken' ? 0.5 : 0), { T, p, mode: f.mode, n });
         }
         break;
       }
       case 'save': {
         for (const T of foes) {
-          if (!sees(b, me, T, s.range)) continue;
+          if (!sees(b, me, T, range)) continue;
           const pFail = 1 - saveChance(b, T, s.save, dc);
           const avg = avgDice(sc.dice) * damageMult(T, s.type);
           add({ a: 'cast', spell: sid, target: T.id }, (pFail + (s.half ? (1 - pFail) / 2 : 0)) * avg + finishing(T, avg) - cost, { T, pFail, dc });
@@ -125,34 +147,47 @@ export function specialOptions(b, me, { light = false } = {}) {
         }
         break;
       }
-      case 'cone': {
+      case 'area': {
+        const aim = spellAim(sid, can.slot);
+        const near = threatened(b, me);
+        const spots = new Map();
+        const consider = (x, y) => { if (inBounds(x, y) && !pointError(b, me, aim, x, y)) spots.set(`${x},${y}`, { x, y }); };
+        if (aim.from === 'self') for (const [dx, dy] of DIRS) consider(me.x + dx, me.y + dy);
         for (const T of foes) {
-          const hit = coneTargets(b, me, T.x, T.y);
-          const fs = hit.filter((c) => c.side !== me.side && !down(c));
+          consider(T.x, T.y);
+          if (aim.from !== 'self') for (const [dx, dy] of DIRS) consider(T.x + dx, T.y + dy);
+        }
+        for (const { x, y } of spots.values()) {
+          const hit = areaTargets(b, me, aim, x, y);
+          const fs = hit.filter((c) => c.side !== me.side && !down(c) && !c.dead);
           const pals = hit.filter((c) => c.side === me.side);
-          if (fs.length < 2 || pals.length) continue;
+          if (!fs.length || pals.length) continue;
+          if (s.effect) {
+            const fresh = fs.filter((c) => !b.effects.some((x2) => x2.type === s.effect && x2.target === c.id));
+            if (fresh.length < 2) continue;
+            const exp = fresh.reduce((acc, c) => acc + (1 - saveChance(b, c, s.save, dc)) * 2.5, 0);
+            add({ a: 'cast', spell: sid, x, y }, exp - cost, { foes: fresh, pals });
+            continue;
+          }
+          if (fs.length < 2 && !(near && aim.from === 'self')) continue;
           const exp = fs.reduce((acc, c) => acc + avgDice(sc.dice) * damageMult(c, s.type) * (1 - saveChance(b, c, s.save, dc) / 2), 0);
-          add({ a: 'cast', spell: sid, x: T.x, y: T.y }, exp - cost, { foes: fs, pals });
+          add({ a: 'cast', spell: sid, x, y }, exp + (near && aim.from === 'self' ? 2 : 0) - cost, { foes: fs, pals });
         }
         break;
       }
-      case 'cube': {
-        const near = threatened(b, me);
-        for (const [dx, dy] of DIRS) {
-          const x = me.x + dx, y = me.y + dy;
-          const hit = cubeTargets(b, me, x, y);
-          const fs = hit.filter((c) => c.side !== me.side && !down(c));
-          const pals = hit.filter((c) => c.side === me.side);
-          if (!fs.length || pals.length || (fs.length < 2 && !near)) continue;
-          const exp = fs.reduce((acc, c) => acc + avgDice(sc.dice) * damageMult(c, s.type) * (1 - saveChance(b, c, s.save, dc) / 2), 0);
-          add({ a: 'cast', spell: sid, x, y }, exp + (near ? 2 : 0) - cost, { foes: fs, pals });
-        }
+      case 'temp': {
+        if ((me.tempHp || 0) > 0 || !foes.some((T) => !down(T))) break;
+        add({ a: 'cast', spell: sid }, avgDice(sc.dice) + sc.flat - 5 - cost + (threatened(b, me) ? 2 : 0), { T: me });
+        break;
+      }
+      case 'armor': {
+        if (me.armorId !== 'none' || me.mageArmor || threatened(b, me)) break;
+        add({ a: 'cast', spell: sid, target: me.id }, 6 - cost, { T: me });
         break;
       }
       case 'heal': {
         for (const F of friends) {
-          if (!sees(b, me, F, Math.max(5, s.range)) && F !== me) continue;
-          if (s.range === 5 && F !== me && cheb(me, F) > 1) continue;
+          if (!sees(b, me, F, range) && F !== me) continue;
           const need = F.hp <= 0 ? 20 : F.hp <= F.hpMax / 3 ? 9 : 0;
           if (need) add({ a: 'cast', spell: sid, target: F.id }, need + (s.time === 'bonus' ? 2 : 0) - cost, { T: F, heal: avgDice(sc.dice) + spellMod(me, sid) }, s.time);
         }
@@ -195,13 +230,15 @@ export function specialOptions(b, me, { light = false } = {}) {
     }
   }
   if (me.breath?.uses > 0 && canAttack(t) && !light) {
-    for (const T of foes) {
-      const hit = coneTargets(b, me, T.x, T.y);
-      const fs = hit.filter((c) => c.side !== me.side && !down(c));
-      if (!fs.length || hit.some((c) => c.side === me.side)) continue;
-      const dc = me.breath.dc.reduce((s, p) => s + p.value, 0);
-      const exp = fs.reduce((acc, c) => acc + avgDice(me.breath.dice) * damageMult(c, me.breath.type) * (1 - saveChance(b, c, 'dex', dc) / 2), 0);
-      add({ a: 'breath', x: T.x, y: T.y }, exp + (fs.length > 1 ? 2 : -2), { foes: fs });
+    const dc = me.breath.dc.reduce((s, p) => s + p.value, 0);
+    for (const shape of ['cone', 'line']) {
+      for (const T of foes) {
+        const hit = areaTargets(b, me, BREATH_AREAS[shape], T.x, T.y);
+        const fs = hit.filter((c) => c.side !== me.side && !down(c));
+        if (!fs.length || hit.some((c) => c.side === me.side)) continue;
+        const exp = fs.reduce((acc, c) => acc + avgDice(me.breath.dice) * damageMult(c, me.breath.type) * (1 - saveChance(b, c, 'dex', dc) / 2), 0);
+        add({ a: 'breath', shape, x: T.x, y: T.y }, exp + (fs.length > 1 ? 2 : -2), { foes: fs, shape });
+      }
     }
   }
   if (me.web?.ready && t.action) {
@@ -460,6 +497,12 @@ export function aiNext(b, id) {
     return here.intent;
   }
 
+  // The Light property's extra attack (part of the action with Nick, else the Bonus Action).
+  if (!canAttack(t)) {
+    const off = offhandOptions(b, me)[0];
+    if (off && off.score > 1) return off.intent;
+  }
+
   // Action used: Action Surge for another go.
   if (!t.action && !t.attacksLeft && me.actionSurge?.uses > 0 && !t.surged) {
     const w = weaponOptions(b, me);
@@ -513,7 +556,7 @@ export function coach(b, id) {
     case 'attack': {
       const o = attackOptions(b, me, T).find((x) => x.atk.id === intent.attack);
       const pct = Math.round(o.p * 100);
-      text = `Attack ${T.name} with your ${o.atk.name}: ${pct}% to hit`;
+      text = intent.offhand ? `Make the extra Light-weapon attack at ${T.name} with your ${o.atk.name}${me.twf ? '' : ' (no ability modifier to its damage)'}: ${pct}% to hit` : `Attack ${T.name} with your ${o.atk.name}: ${pct}% to hit`;
       if (o.mode === 'advantage') text += ', with Advantage';
       if (o.mode === 'disadvantage') text += ', but with Disadvantage';
       if (o.sneak) text += ', and Sneak Attack applies';
@@ -523,13 +566,15 @@ export function coach(b, id) {
     }
     case 'cast': {
       const s = SPELLS[intent.spell];
-      const o = specialOptions(b, me).find((x) => x.intent.spell === intent.spell && x.intent.target === intent.target && x.intent.x === intent.x);
+      const o = specialOptions(b, me).find((x) => x.intent.spell === intent.spell && x.intent.target === intent.target && x.intent.x === intent.x && x.intent.y === intent.y);
       const can = canCast(b, me, intent.spell);
       const lvl = s.level === 0 ? 'a cantrip, free to cast' : can.pay === 'free' ? (me.casting.known[intent.spell].perDay ? 'a daily use' : 'your free Magic Initiate cast') : `uses a level ${can.slot} spell slot`;
       const conc = s.conc ? ' It needs Concentration.' : '';
       if (s.kind === 'heal') text = `${T.name} needs help: cast ${s.name} (${lvl}${s.time === 'bonus' ? ', a Bonus Action' : ''}).`;
       else if (s.kind === 'stabilize') text = `${T.name} is dying! Cast ${s.name} to make them Stable (${lvl}).`;
-      else if (s.kind === 'cone' || s.kind === 'cube') text = `Cast ${s.name}: it catches ${o?.why.foes.map((c) => c.name).join(' and ')} (${lvl}).`;
+      else if (s.kind === 'area') text = `Cast ${s.name} on the marked square: it catches ${(o?.why.foes || []).map((c) => c.name).join(' and ')} and none of your allies (${lvl}).${conc}`;
+      else if (s.kind === 'temp') text = `Cast ${s.name} for Temporary Hit Points (${lvl}).`;
+      else if (s.kind === 'armor') text = `Cast ${s.name} while nobody is next to you: AC 13 + DEX until your next Long Rest (${lvl}).`;
       else if (s.kind === 'save') text = `Cast ${s.name} on ${T.name}: it must beat DC ${o?.why.dc} on a ${s.save.toUpperCase()} save, so ${Math.round((o?.why.pFail || 0) * 100)}% it fails (${lvl}).`;
       else if (s.kind === 'missile') text = `Cast ${s.name} at ${T.name}: it never misses (${lvl}).`;
       else if (s.kind === 'buff') text = `Cast ${s.name} on your allies (${lvl}).${conc}`;
@@ -540,7 +585,7 @@ export function coach(b, id) {
       else text = `Cast ${s.name} at ${T.name}: ${Math.round((o?.why.p || 0) * 100)}% to hit (${lvl}).`;
       break;
     }
-    case 'breath': text = 'Use your Breath Weapon: it replaces one attack and catches everything in the cone.'; break;
+    case 'breath': text = `Use your Breath Weapon as a ${intent.shape === 'line' ? '30-ft Line' : '15-ft Cone'}: it replaces one attack and catches everything in it.`; break;
     case 'move': {
       const near = enemiesOf(b, me).filter((e) => !incap(e)).sort((p, q) => cheb(p, intent) - cheb(q, intent))[0];
       const pv = previewMove(b, id, intent.x, intent.y);

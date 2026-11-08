@@ -2,7 +2,7 @@
 // is drawn once; overlays are redrawn on every state; tokens are persistent
 // nodes so moves slide with a CSS transition.
 
-import { W, H, onBoard, coneSquares } from '../rules/grid.js';
+import { W, H, onBoard } from '../rules/grid.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = (tag, attrs = {}, text) => {
@@ -14,7 +14,7 @@ const el = (tag, attrs = {}, text) => {
 
 const EFFECT_ICONS = {
   dodge: '🛡', sap: '💫', vex: '🎯', helped: '🤝', disengage: '💨', guided: '✨', chill: '❄️', shield: '🔰',
-  aim: '🏹', bless: '🙏', faith: '⛨',
+  aim: '🏹', bless: '🙏', faith: '⛨', outlined: '🌟', grave: '🪦', shocked: '⚡', slowed: '🐌', stride: '👟',
 };
 // Conditions, shown on the token.
 export const COND_ICONS = {
@@ -97,10 +97,18 @@ export function createBoard(svg, onTap) {
         over.append(el('rect', { x: h.x - 0.97, y: h.y - 0.97, width: 2.94, height: 2.94, rx: 0.3, class: 'threat' }));
       }
     }
-    if (view.cone && view.mine) {
-      for (const q of coneSquares(b.creatures[view.mine], view.cone)) over.append(el('rect', { x: q.x + 0.05, y: q.y + 0.05, width: 0.9, height: 0.9, rx: 0.1, class: 'cone' }));
-    }
     for (const q of view.picks || []) over.append(el('rect', { x: q.x + 0.06, y: q.y + 0.06, width: 0.88, height: 0.88, rx: 0.2, class: 'pick' }));
+    // An area spell's template where it's aimed now.
+    for (const q of view.area || []) over.append(el('rect', { x: q.x + 0.05, y: q.y + 0.05, width: 0.9, height: 0.9, rx: 0.1, class: 'cone' }));
+    // Creatures picked as targets, with how many darts or rays each gets.
+    const counts = new Map();
+    for (const id of view.chosen || []) counts.set(id, (counts.get(id) || 0) + 1);
+    for (const [id, n] of counts) {
+      const c = b.creatures[id];
+      if (!c) continue;
+      over.append(el('circle', { cx: c.x + 0.5, cy: c.y + 0.5, r: 0.49, class: 'aim chosen' }));
+      if (n > 1) over.append(el('text', { x: c.x + 0.86, y: c.y + 0.95, class: 'feet' }, `×${n}`));
+    }
     for (const e of b.effects) {
       if (e.type !== 'spiritual') continue;
       over.append(el('text', { x: e.x + 0.5, y: e.y + 0.66, class: 'spirit' }, '🗡️'));

@@ -124,6 +124,7 @@ input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
 .board .feet { font-size: .26px; font-weight: 800; fill: var(--gold); text-anchor: middle; }
 .board .threat { fill: rgba(255, 107, 107, .12); stroke: var(--bad); stroke-width: .05; stroke-dasharray: .12 .08; }
 .board .aim { fill: none; stroke: var(--bad); stroke-width: .07; }
+.board .aim.chosen { stroke: #ba68c8; }
 .tok { transition: transform .32s ease; }
 .tok .ring { fill: none; stroke: #c25b45; stroke-width: .06; }
 .tok .disc { fill: #3b2723; }
@@ -306,3 +307,13 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 .levelup .feat { margin: 4px 0; font-size: 13px; }
 .restlog { list-style: none; padding: 0; margin: 6px 0; font-size: 13px; }
 .restlog li { margin: 3px 0; }
+
+/* Spells and aiming */
+.btns.one { grid-template-columns: 1fr; margin-bottom: 6px; }
+.btn.spellsbtn { background: #3b2f57; border-color: #ba68c8; font-weight: 800; }
+.btn.spellsbtn.on { background: #5a3f86; }
+.target.aiming { border-color: #ba68c8; }
+.target.spells { max-height: 46vh; overflow-y: auto; }
+.target .opt.slots { flex-wrap: wrap; }
+.btn.up.on { border-color: var(--gold); background: #4a3a20; }
+.why.bad { color: var(--bad); }

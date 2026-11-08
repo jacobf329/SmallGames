@@ -2,14 +2,26 @@
 // derived number keeps its parts ({ label, value, rule }) so the UI can show
 // where it came from.
 //
-// spec = { cls, species, background, scores: { str..cha } (the standard array
-//          assigned to abilities), plus: { ability: 2, ability: 1 } or three
-//          +1s among the background's abilities, ancestry (dragonborn only), name }
+// spec = {
+//   cls, species, background, name,
+//   method: 'array' | 'pointbuy' | 'roll', scores: { str..cha }, rolls (for 'roll'),
+//   plus: the background's increases ({ a: 2, b: 1 } or three +1s),
+//   ancestry (dragonborn), lineage (elf, gnome, goliath, tiefling),
+//   speciesAbility (int | wis | cha, for species spells), speciesSkill (human, elf),
+//   bgFeat: { cantrips, spell, ability } (a background's Magic Initiate),
+//   versatile: { feat, list, cantrips, spell, ability, skills } (human Origin feat),
+//   skills (class picks), expertise (rogue), style (fighter), kit, masteries,
+//   order (cleric), cantrips, book (wizard spellbook), prepared, scholar (wizard 2+)
+// }
+// validateSpec fills any missing choice with a sensible default and drops
+// choices the rules don't allow, so older saved heroes still load.
 
 import {
   ABILITIES, ABILITY_NAMES, abilityMod, WEAPONS, MASTERIES, ARMOR, SPECIES, BACKGROUNDS, FEATS,
   CLASSES, SKILLS, SKILL_NAMES, SPELLS, STANDARD_ARRAY, DRAGON_ANCESTRY, GOBLIN_WARRIOR,
-  SLOTS_BY_LEVEL, SUBCLASSES, MAX_LEVEL, HP_PER_LEVEL, signed,
+  SLOTS_BY_LEVEL, SUBCLASSES, MAX_LEVEL, HP_PER_LEVEL, signed, POINT_COST, POINT_BUDGET,
+  KITS, FIGHTING_STYLES, SPELL_LISTS, CANTRIPS_KNOWN, PREPARED_BY_LEVEL, SPELLBOOK_SIZE, DOMAIN_SPELLS,
+  DEFAULT_LINEAGE, ORIGIN_FEATS, MI_DEFAULT_ABILITY,
 } from './data.js';
 import { die } from './rng.js';
 
@@ -17,6 +29,10 @@ export const PB_BY_LEVEL = [0, 2, 2, 2, 2, 3];
 export { SPELLS };
 export const DEFAULT_BACKGROUND = { fighter: 'soldier', rogue: 'criminal', cleric: 'acolyte', wizard: 'sage' };
 const sumParts = (parts) => parts.reduce((s, p) => s + p.value, 0);
+const uniq = (xs) => [...new Set(xs)];
+const CAST_ABILITIES = ['int', 'wis', 'cha'];
+export const SCHOLAR_SKILLS = ['arcana', 'history', 'investigation', 'medicine', 'nature', 'religion'];
+export const HUMAN_SKILL_DEFAULTS = ['perception', 'insight', 'athletics', 'medicine', 'stealth', 'persuasion'];
 
 // ---------------------------------------------------------------- specs ----
 
@@ -31,30 +47,163 @@ export function suggestPlus(cls, background, scores) {
 
 export function defaultSpec(cls, { species = 'human', background = DEFAULT_BACKGROUND[cls], name = '', ancestry = 'red' } = {}) {
   const scores = { ...CLASSES[cls].suggested };
-  return { cls, species, background, scores, plus: suggestPlus(cls, background, scores), ancestry, name };
+  return validateSpec({ cls, species, background, method: 'array', scores, plus: suggestPlus(cls, background, scores), ancestry, name });
 }
 
+export const pointCost = (scores) => ABILITIES.reduce((s, a) => s + (POINT_COST[scores[a]] ?? 99), 0);
+export const rollTotal = (r) => [...r].sort((x, y) => y - x).slice(0, 3).reduce((s, v) => s + v, 0);
+export const maxSpellLevel = (level) => Math.max(...Object.keys(SLOTS_BY_LEVEL[level]).map(Number));
+
+// Pick n from `want` (in order) that pass ok(), then fill from `fill`.
+function pickN(n, want, fill, ok) {
+  const out = [];
+  for (const x of [...(Array.isArray(want) ? want : []), ...fill]) {
+    if (out.length >= n) break;
+    if (typeof x === 'string' && ok(x) && !out.includes(x)) out.push(x);
+  }
+  return out;
+}
+
+// Which spells a Magic Initiate list offers.
+export const miCantrips = (list) => SPELL_LISTS[list][0];
+export const miSpells = (list) => SPELL_LISTS[list][1];
+
+function cleanMI(raw, list, taken) {
+  raw = raw && typeof raw === 'object' ? raw : {};
+  const cantrips = pickN(2, raw.cantrips, miCantrips(list), (s) => miCantrips(list).includes(s) && !taken.has(s));
+  const spells = miSpells(list);
+  const spell = spells.includes(raw.spell) ? raw.spell : spells.find((s) => !taken.has(s) && SPELLS[s].kind !== 'utility') || spells[0];
+  const ability = CAST_ABILITIES.includes(raw.ability) ? raw.ability : MI_DEFAULT_ABILITY[list];
+  return { list, cantrips, spell, ability };
+}
+
+// The cleric's and wizard's own spells, at this level.
+export function classSpellCounts(cls, level, order) {
+  return {
+    cantrips: (CANTRIPS_KNOWN[cls]?.[level] || 0) + (order === 'thaumaturge' ? 1 : 0),
+    prepared: PREPARED_BY_LEVEL[cls]?.[level] || 0,
+    book: cls === 'wizard' ? SPELLBOOK_SIZE[level] : 0,
+  };
+}
+export const domainSpells = (cls, level) => (cls === 'cleric' && level >= 3 ? DOMAIN_SPELLS[3] : []);
+
 // Check a spec sent by a phone. Returns a clean copy or throws a readable Error.
-export function validateSpec(spec) {
+export function validateSpec(spec, { level = 1 } = {}) {
   if (!spec || typeof spec !== 'object') throw new Error('No hero.');
+  level = Math.max(1, Math.min(MAX_LEVEL, level | 0 || 1));
   const cls = String(spec.cls), species = String(spec.species), background = String(spec.background);
   if (!CLASSES[cls]) throw new Error('Pick a class.');
   if (!SPECIES[species]) throw new Error('Pick a species.');
   if (!BACKGROUNDS[background]) throw new Error('Pick a background.');
+  const C = CLASSES[cls], SP = SPECIES[species], B = BACKGROUNDS[background], D = C.defaults;
+
+  // Ability scores, by the method the player used.
+  const method = ['array', 'pointbuy', 'roll'].includes(spec.method) ? spec.method : 'array';
   const scores = {};
   for (const a of ABILITIES) scores[a] = Number(spec.scores?.[a]);
-  const used = ABILITIES.map((a) => scores[a]).sort((x, y) => y - x);
-  if (used.join() !== STANDARD_ARRAY.join()) throw new Error('Use each number of the standard array (15, 14, 13, 12, 10, 8) once.');
+  if (!ABILITIES.every((a) => Number.isInteger(scores[a]))) throw new Error('Give every ability a score.');
+  let rolls = null;
+  if (method === 'array') {
+    const used = ABILITIES.map((a) => scores[a]).sort((x, y) => y - x);
+    if (used.join() !== STANDARD_ARRAY.join()) throw new Error('Use each number of the standard array (15, 14, 13, 12, 10, 8) once.');
+  } else if (method === 'pointbuy') {
+    if (ABILITIES.some((a) => scores[a] < 8 || scores[a] > 15)) throw new Error('With point buy, each score is 8 to 15.');
+    if (pointCost(scores) > POINT_BUDGET) throw new Error(`That costs ${pointCost(scores)} points; you have ${POINT_BUDGET}.`);
+  } else {
+    rolls = Array.isArray(spec.rolls) ? spec.rolls.slice(0, 6).map((r) => (Array.isArray(r) ? r.slice(0, 4).map((v) => v | 0) : [])) : [];
+    if (rolls.length !== 6 || rolls.some((r) => r.length !== 4 || r.some((v) => v < 1 || v > 6))) throw new Error('Roll 4d6 six times first.');
+    const want = rolls.map(rollTotal).sort((x, y) => y - x).join();
+    if (ABILITIES.map((a) => scores[a]).sort((x, y) => y - x).join() !== want) throw new Error('Put each rolled total on one ability.');
+  }
   const plus = {};
   for (const [a, v] of Object.entries(spec.plus || {})) {
-    if (!BACKGROUNDS[background].abilities.includes(a)) throw new Error(`${BACKGROUNDS[background].name} can't raise ${ABILITY_NAMES[a] || a}.`);
+    if (!B.abilities.includes(a)) throw new Error(`${B.name} can't raise ${ABILITY_NAMES[a] || a}.`);
     if (+v) plus[a] = +v;
   }
   const pattern = Object.values(plus).sort().join();
   if (pattern !== '1,2' && pattern !== '1,1,1') throw new Error('Background increases are +2 and +1, or +1 to all three.');
+  for (const a of ABILITIES) if (scores[a] + (plus[a] || 0) > 20) throw new Error(`${ABILITY_NAMES[a]} can't go above 20.`);
+  const final = Object.fromEntries(ABILITIES.map((a) => [a, scores[a] + (plus[a] || 0)]));
+
   const ancestry = DRAGON_ANCESTRY[spec.ancestry] ? spec.ancestry : 'red';
   const name = String(spec.name || '').trim().slice(0, 20);
-  return { cls, species, background, scores, plus, ancestry, name };
+  const lineage = SP.lineages ? (SP.lineages[spec.lineage] ? spec.lineage : DEFAULT_LINEAGE[species]) : null;
+  const castMain = C.spellcasting?.ability;
+  const bestCast = CAST_ABILITIES.includes(castMain) ? castMain : [...CAST_ABILITIES].sort((x, y) => final[y] - final[x])[0];
+  const speciesAbility = SP.castAbility ? (CAST_ABILITIES.includes(spec.speciesAbility) ? spec.speciesAbility : bestCast) : null;
+
+  // Equipment and class options.
+  const order = cls === 'cleric' ? (spec.order === 'thaumaturge' ? 'thaumaturge' : 'protector') : null;
+  let kit = C.kits.includes(spec.kit) ? spec.kit : D.kit;
+  if (KITS[cls][kit].needs && KITS[cls][kit].needs !== order) kit = D.kit;
+  const carried = uniq(KITS[cls][kit].weapons);
+  const style = cls === 'fighter' ? (FIGHTING_STYLES[spec.style] ? spec.style : D.style) : null;
+  const masteries = pickN(C.masteryCount, spec.masteries, [...(D.masteries || []), ...carried], (w) => carried.includes(w));
+
+  // Skills, in the order the rules hand them out: background, class, species, feats.
+  const prof = new Set(B.skills);
+  const skills = pickN(C.skillChoices.n, spec.skills, D.skills, (s) => C.skillChoices.from.includes(s) && !prof.has(s));
+  for (const s of skills) prof.add(s);
+  let speciesSkill = null;
+  if (species === 'human' || species === 'elf') {
+    const from = SP.skillFrom || Object.keys(SKILLS);
+    [speciesSkill] = pickN(1, [spec.speciesSkill], [...HUMAN_SKILL_DEFAULTS.filter((x) => from.includes(x)), ...from], (s) => from.includes(s) && !prof.has(s));
+    if (speciesSkill) prof.add(speciesSkill);
+  }
+
+  // The class's own spells.
+  let cantrips = [], book = [], prepared = [];
+  if (C.spellcasting) {
+    const n = classSpellCounts(cls, level, order);
+    const top = maxSpellLevel(level);
+    const list = SPELL_LISTS[cls];
+    cantrips = pickN(n.cantrips, spec.cantrips, D.cantrips, (s) => list[0].includes(s));
+    const leveled = Object.entries(list).filter(([lv]) => +lv >= 1 && +lv <= top).flatMap(([, xs]) => xs);
+    if (cls === 'wizard') {
+      book = pickN(n.book, spec.book, D.book, (s) => leveled.includes(s));
+      // The first six must be level 1 spells (the starting book).
+      const firsts = book.filter((s) => SPELLS[s].level === 1);
+      if (firsts.length < 6) book = pickN(n.book, [...firsts, ...D.book.filter((s) => SPELLS[s].level === 1), ...book], [], (s) => leveled.includes(s));
+      prepared = pickN(n.prepared, spec.prepared, [...D.prepared, ...book], (s) => book.includes(s));
+    } else {
+      const dom = domainSpells(cls, level);
+      prepared = pickN(n.prepared, spec.prepared, D.prepared, (s) => leveled.includes(s) && !dom.includes(s));
+    }
+  }
+
+  // Feats: the background's, then the human's Versatile feat.
+  const taken = new Set([...cantrips, ...prepared, ...book]);
+  let bgFeat = null;
+  if (B.feat === 'magic-initiate') {
+    bgFeat = cleanMI(spec.bgFeat, B.featList, taken);
+    for (const x of [...bgFeat.cantrips, bgFeat.spell]) taken.add(x);
+  }
+  let versatile = null;
+  if (species === 'human') {
+    const v = spec.versatile && typeof spec.versatile === 'object' ? spec.versatile : {};
+    let feat = ORIGIN_FEATS.includes(v.feat) ? v.feat : 'skilled';
+    // A feat you already have can be taken again only if it says so.
+    if (feat === B.feat && !FEATS[feat].repeatable) feat = 'skilled';
+    if (feat === 'magic-initiate') {
+      let list = FEATS[feat].lists.includes(v.list) ? v.list : (B.featList === 'cleric' ? 'wizard' : 'cleric');
+      if (B.feat === 'magic-initiate' && list === B.featList) list = FEATS[feat].lists.find((l) => l !== B.featList);
+      versatile = { feat, ...cleanMI(v, list, taken) };
+    } else if (feat === 'skilled') {
+      const sk = pickN(3, v.skills, [...HUMAN_SKILL_DEFAULTS, ...Object.keys(SKILLS)], (s) => !!SKILLS[s] && !prof.has(s));
+      for (const s of sk) prof.add(s);
+      versatile = { feat, skills: sk };
+    } else versatile = { feat };
+  }
+
+  const expertise = cls === 'rogue' ? pickN(2, spec.expertise, [...D.expertise, ...prof], (s) => prof.has(s)) : [];
+  const scholar = cls === 'wizard' && level >= 2
+    ? (pickN(1, [spec.scholar], D.scholar, (s) => SCHOLAR_SKILLS.includes(s) && prof.has(s) && !expertise.includes(s))[0] || null) : (SCHOLAR_SKILLS.includes(spec.scholar) ? spec.scholar : null);
+
+  return {
+    cls, species, background, method, scores, ...(rolls ? { rolls } : {}), plus, ancestry, name,
+    lineage, speciesAbility, speciesSkill, bgFeat, versatile,
+    skills, expertise, style, kit, masteries, order, cantrips, book, prepared, scholar,
+  };
 }
 
 // --------------------------------------------------------------- heroes ----
@@ -68,166 +217,215 @@ function spellStats(m, pb, ability) {
   };
 }
 
-const SPECIES_RESIST = { dwarf: ['Poison'], tiefling: ['Fire'] };
+const SPECIES_RESIST = { dwarf: ['Poison'] };
+
+// Armor Class parts for what the hero wears (Mage Armor replaces "no armor").
+export function armorParts(h) {
+  const m = h.mods;
+  const armor = h.mageArmor && h.armorId === 'none' ? { name: 'Mage Armor', base: 13, dex: true, rule: 'mage-armor' } : ARMOR[h.armorId];
+  const parts = [{ label: armor.name, value: armor.base, rule: armor.rule || 'armor-class' }];
+  if (armor.dex) {
+    const d = armor.maxDex != null ? Math.min(m.dex, armor.maxDex) : m.dex;
+    parts.push({ label: `DEX modifier${armor.maxDex != null && m.dex > armor.maxDex ? ` (max ${armor.maxDex})` : ''}`, value: d, rule: 'ability-modifier' });
+  }
+  if (h.hasShield) parts.push({ label: 'Shield', value: 2, rule: 'armor-class' });
+  if (h.style === 'defense' && ARMOR[h.armorId].type) parts.push({ label: 'Defense fighting style', value: 1, rule: 'defense' });
+  return parts;
+}
 
 export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
-  const spec = validateSpec(rawSpec);
   level = Math.max(1, Math.min(MAX_LEVEL, level | 0 || 1));
+  const spec = validateSpec(rawSpec, { level });
   const C = CLASSES[spec.cls], S = SPECIES[spec.species], B = BACKGROUNDS[spec.background];
-  const feat = FEATS[B.feat];
+  const lin = S.lineages ? S.lineages[spec.lineage] : null;
+  const kit = KITS[spec.cls][spec.kit];
   const pb = PB_BY_LEVEL[level];
   const scores = {};
   for (const a of ABILITIES) scores[a] = spec.scores[a] + (spec.plus[a] || 0);
   const m = Object.fromEntries(ABILITIES.map((a) => [a, abilityMod(scores[a])]));
   const L = (n) => level >= n;
   const sub = L(3) ? SUBCLASSES[spec.cls] : null;
+  const feats = [B.feat, spec.versatile?.feat].filter(Boolean);
+  const has = (f) => feats.includes(f);
 
   // Armor Class
-  const armor = ARMOR[C.armor];
-  const acParts = [{ label: armor.name, value: armor.base, rule: 'armor-class' }];
-  if (armor.dex) {
-    const d = armor.maxDex != null ? Math.min(m.dex, armor.maxDex) : m.dex;
-    acParts.push({ label: `DEX modifier${armor.maxDex != null && m.dex > armor.maxDex ? ` (max ${armor.maxDex})` : ''}`, value: d, rule: 'ability-modifier' });
-  }
-  if (C.shield) acParts.push({ label: 'Shield', value: 2, rule: 'armor-class' });
+  const armor = ARMOR[kit.armor];
+  const acParts = armorParts({ mods: m, armorId: kit.armor, hasShield: kit.shield, style: spec.style });
+
+  // Speed: the species', and heavy armor without the Strength for it costs 10 ft.
+  const speedParts = [{ label: `${S.name}${lin?.speed ? ` (${lin.name})` : ''}`, value: lin?.speed || S.speed, rule: 'speed' }];
+  if (armor.str && scores.str < armor.str) speedParts.push({ label: `${armor.name} needs Strength ${armor.str}`, value: -10, rule: 'armor-class' });
 
   // Hit Points: the Hit Die's maximum + CON at level 1, then its fixed value
-  // + CON for each level after (plus species and feats, per level).
+  // + CON for each level after (plus species, per level).
   const hpParts = [{ label: `d${C.hitDie} maximum`, value: C.hitDie, rule: 'hit-points' }, { label: 'CON modifier', value: m.con, rule: 'ability-modifier' }];
   if (level > 1) hpParts.push({ label: `Levels 2${level > 2 ? `-${level}` : ''}: ${level - 1} × (${HP_PER_LEVEL[C.hitDie]} + CON)`, value: (level - 1) * (HP_PER_LEVEL[C.hitDie] + m.con), rule: 'level-up' });
   if (spec.species === 'dwarf') hpParts.push({ label: 'Dwarven Toughness', value: level, rule: 'dwarven-toughness' });
-  if (spec.species === 'human') hpParts.push({ label: 'Tough feat (Versatile)', value: 2 * level, rule: 'tough' });
   const hpMax = Math.max(1, sumParts(hpParts));
 
   // Initiative: a Dexterity check, plus PB with the Alert feat.
   const initParts = [{ label: 'DEX modifier', value: m.dex, rule: 'ability-modifier' }];
-  if (B.feat === 'alert') initParts.push({ label: 'Alert feat (PB)', value: pb, rule: 'alert' });
+  if (has('alert')) initParts.push({ label: 'Alert feat (PB)', value: pb, rule: 'alert' });
 
-  // Skills: background, then the class's choices, then species extras.
-  const prof = new Set(B.skills);
-  let n = C.skillChoices.n;
-  for (const s of C.skillChoices.from) { if (n && !prof.has(s)) { prof.add(s); n--; } }
-  if (spec.species === 'human') { const s = ['perception', 'insight', 'athletics', 'medicine'].find((x) => !prof.has(x)); if (s) prof.add(s); }
-  if (spec.species === 'elf') { const s = ['perception', 'insight', 'survival'].find((x) => !prof.has(x)); if (s) prof.add(s); }
-  const expertise = C.expertise ? C.expertise.filter((s) => prof.has(s)) : [];
-  let scholar = null;
-  if (spec.cls === 'wizard' && L(2)) {
-    scholar = ['investigation', 'arcana', 'history', 'nature', 'religion', 'medicine'].find((s) => prof.has(s));
-    if (scholar) expertise.push(scholar);
-  }
+  // Skills
+  const prof = new Set([...B.skills, ...spec.skills, ...(spec.speciesSkill ? [spec.speciesSkill] : []), ...(spec.versatile?.skills || [])]);
+  const expertise = [...spec.expertise];
+  const scholar = spec.cls === 'wizard' && L(2) ? spec.scholar : null;
+  if (scholar) expertise.push(scholar);
   const skills = {};
   for (const [s, ab] of Object.entries(SKILLS)) {
     skills[s] = m[ab] + (prof.has(s) ? (expertise.includes(s) ? 2 : 1) * pb : 0);
+    if (spec.order === 'thaumaturge' && (s === 'arcana' || s === 'religion')) skills[s] += Math.max(1, m.wis);
   }
 
   // Saving throws
   const saves = {};
   for (const a of ABILITIES) saves[a] = m[a] + (C.saves.includes(a) ? pb : 0);
 
-  // Weapons
-  const attacks = C.weapons.map((wid) => {
+  // Weapons: each carried weapon, and a thrown version of the throwable ones.
+  const attacks = [];
+  for (const wid of kit.weapons) {
     const w = WEAPONS[wid];
     const ability = w.kind === 'ranged' ? 'dex' : (w.finesse && m.dex > m.str ? 'dex' : 'str');
-    const hit = [
-      { label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'ability-modifier' },
-      { label: 'Proficiency Bonus', value: pb, rule: 'proficiency' },
-    ];
-    const dmgFlat = [{ label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'damage' }];
-    if (C.style === 'dueling' && w.kind === 'melee') dmgFlat.push({ label: 'Dueling fighting style', value: 2, rule: 'dueling' });
-    const mastery = C.masteries.includes(wid) && ['sap', 'vex'].includes(w.mastery) ? w.mastery : null;
-    return {
-      id: wid, name: w.name, kind: w.kind, dice: w.dice, type: w.type,
-      finesse: !!w.finesse, range: w.range || null, props: w.props, hit, dmgFlat, mastery,
-      masteryText: mastery ? MASTERIES[mastery].text : null,
+    const two = !kit.shield && !!w.versatile;
+    const mastery = spec.masteries.includes(wid) && MASTERIES[w.mastery] ? w.mastery : null;
+    const mk = (variant) => {
+      const ranged = variant === 'thrown' || w.kind === 'ranged';
+      const hit = [
+        { label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'ability-modifier' },
+        { label: 'Proficiency Bonus', value: pb, rule: 'proficiency' },
+      ];
+      if (spec.style === 'archery' && w.kind === 'ranged') hit.push({ label: 'Archery fighting style', value: 2, rule: 'archery' });
+      const dmgFlat = [{ label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'damage' }];
+      const dice = variant === 'melee' && two ? w.versatile : w.dice;
+      return {
+        id: variant === 'thrown' ? `${wid}-thrown` : wid, base: wid,
+        name: variant === 'thrown' ? `${w.name} (thrown)` : `${w.name}${variant === 'melee' && two ? ' (two hands)' : ''}`,
+        kind: ranged ? 'ranged' : 'melee', thrown: variant === 'thrown', dice, type: w.type,
+        finesse: !!w.finesse, light: !!w.light, range: variant === 'thrown' ? w.thrown : w.range || null, props: w.props, hit, dmgFlat, mastery,
+        ability, abilityMod: m[ability],
+        gwf: spec.style === 'great-weapon' && variant === 'melee' && (w.twoHanded || two),
+        masteryText: mastery ? MASTERIES[mastery].text : null,
+      };
     };
-  });
+    attacks.push(mk(w.kind === 'ranged' ? 'ranged' : 'melee'));
+    if (w.thrown) attacks.push(mk('thrown'));
+  }
 
-  // Spells: the class's own, Magic Initiate from the background, species extras.
+  // Spells: the class's own, Origin feats, species extras.
   const known = {};
   const statsBy = {};
-  const learn = (sid, ability, source, { free = 0, slot = false } = {}) => {
+  const learn = (sid, ability, source, { free = 0, slot = false, perDay = false } = {}) => {
     const k = known[sid];
-    if (k) { k.free += free; k.slot = k.slot || slot; return; }
-    known[sid] = { ability, source, free, slot };
+    if (k) {
+      k.free += free; k.freeMax = (k.freeMax || 0) + free; k.slot = k.slot || slot;
+      if (free && !k.freeWhy) k.freeWhy = source;
+      if (perDay) k.perDay = k.perDay || perDay;
+      return;
+    }
+    known[sid] = { ability, source, free, slot, freeMax: free, ...(free ? { freeWhy: source } : {}) };
     statsBy[ability] ||= spellStats(m, pb, ability);
   };
   let slots = null;
   if (C.spellcasting) {
     const sc = C.spellcasting;
-    for (const s of sc.cantrips) learn(s, sc.ability, C.name);
-    for (let lv = 1; lv <= level; lv++) {
-      for (const s of sc.prepared[lv] || []) learn(s, sc.ability, lv === 3 && spec.cls === 'cleric' ? 'Life Domain' : C.name, { slot: true });
-    }
+    for (const s of spec.cantrips) learn(s, sc.ability, C.name);
+    for (const s of spec.prepared) learn(s, sc.ability, C.name, { slot: true });
+    for (const s of domainSpells(spec.cls, level)) learn(s, sc.ability, 'Life Domain', { slot: true });
     slots = {};
     for (const [lv, k] of Object.entries(SLOTS_BY_LEVEL[level])) slots[lv] = { max: k, left: k };
   }
-  if (feat.list) {
-    const extra = feat.cantrips.filter((s) => !known[s]).slice(0, 2);
-    for (const s of extra) learn(s, feat.ability, feat.name);
-    const spell = feat.spells.find((s) => !known[s]) || feat.spells[0];
-    learn(spell, feat.ability, feat.name, { free: 1 });
-  }
-  if (spec.species === 'tiefling') {
-    const best = ['int', 'wis', 'cha'].sort((a, b) => m[b] - m[a])[0];
-    learn('fire-bolt', best, 'Infernal Legacy');
-    learn('thaumaturgy', best, 'Otherworldly Presence');
-  }
+  const featFeature = [];
+  const miLearn = (mi, label) => {
+    for (const s of mi.cantrips) learn(s, mi.ability, label);
+    learn(mi.spell, mi.ability, label, { free: 1, slot: true });
+    featFeature.push({ name: label, rule: 'magic-initiate',
+      text: `${mi.cantrips.map((x) => SPELLS[x].name).join(' and ')}; ${SPELLS[mi.spell].name} once per Long Rest free (or with a slot). Ability: ${ABILITY_NAMES[mi.ability]}.` });
+  };
+  if (spec.bgFeat) miLearn(spec.bgFeat, `Magic Initiate (${spec.bgFeat.list === 'cleric' ? 'Cleric' : 'Wizard'})`);
+  if (spec.versatile?.feat === 'magic-initiate') miLearn(spec.versatile, `Magic Initiate (${spec.versatile.list === 'cleric' ? 'Cleric' : 'Wizard'})`);
+  const sa = spec.speciesAbility;
+  if (lin?.cantrip) learn(lin.cantrip, sa, lin.name);
+  if (lin?.cantrip2) learn(lin.cantrip2, sa, lin.name);
+  if (lin?.spell3 && L(3)) learn(lin.spell3, sa, lin.name, { free: 1, slot: true });
+  if (lin?.always) learn(lin.always, sa, lin.name, { free: pb, slot: true });
+  if (spec.species === 'tiefling') learn('thaumaturgy', sa, 'Otherworldly Presence');
   const casting = Object.keys(known).length ? { known, stats: statsBy, slots } : null;
 
   // Features for the character sheet
   const features = [];
   for (const t of S.traits) features.push({ ...t, source: S.name });
-  features.push({ name: feat.name, rule: feat.rule, text: feat.text, source: `${B.name} background` });
+  if (lin) features.push({ name: lin.name, rule: spec.species === 'goliath' ? 'giant-ancestry' : 'species', text: lin.text, source: S.name });
+  if (spec.speciesSkill) features.push({ name: `${spec.species === 'human' ? 'Skillful' : 'Keen Senses'}: ${SKILL_NAMES[spec.speciesSkill]}`, rule: 'skills', text: `Proficiency in ${SKILL_NAMES[spec.speciesSkill]}.`, source: S.name });
+  for (const f of feats) {
+    if (f === 'magic-initiate') continue;
+    const F0 = FEATS[f];
+    const extra = f === 'skilled' ? `: ${spec.versatile.skills.map((x) => SKILL_NAMES[x]).join(', ')}` : '';
+    features.push({ name: F0.name + extra, rule: F0.rule, text: F0.text, source: f === B.feat ? `${B.name} background` : 'Versatile (Human)' });
+  }
+  for (const f of featFeature) features.push({ ...f, source: f === featFeature[0] && spec.bgFeat ? `${B.name} background` : 'Versatile (Human)' });
   const F = (lv, name, rule, text) => { if (L(lv)) features.push({ name, rule, text, source: `${C.name} ${lv}` }); };
+  const mastText = () => spec.masteries.map((w) => `${WEAPONS[w].name}: ${MASTERIES[WEAPONS[w].mastery].name}`).join(', ');
   if (spec.cls === 'fighter') {
-    F(1, 'Fighting Style: Dueling', 'dueling', '+2 damage with a melee weapon held in one hand, with no other weapon.');
+    const st = FIGHTING_STYLES[spec.style];
+    F(1, `Fighting Style: ${st.name}`, st.rule, st.text);
     F(1, 'Second Wind', 'second-wind', 'Bonus Action: regain 1d10 + Fighter level Hit Points. 2 uses, one back on a Short Rest, all on a Long Rest.');
-    F(1, 'Weapon Mastery', 'weapon-mastery', 'Use the mastery property of 3 kinds of weapons. Longsword: Sap.');
+    F(1, 'Weapon Mastery', 'weapon-mastery', `Use the mastery property of 3 kinds of weapons. ${mastText()}.`);
     F(2, 'Action Surge', 'action-surge', 'Once per Short or Long Rest, take one extra action on your turn (not the Magic action).');
     F(2, 'Tactical Mind', 'tactical-mind', 'When you fail an ability check, you can spend a use of Second Wind to add 1d10 to it.');
     F(3, 'Champion: Improved Critical', 'improved-critical', 'Your weapon attack rolls score a Critical Hit on a roll of 19 or 20.');
     F(3, 'Champion: Remarkable Athlete', 'remarkable-athlete', 'Advantage on Initiative rolls and Strength (Athletics) checks.');
   } else if (spec.cls === 'rogue') {
     F(1, 'Sneak Attack', 'sneak-attack', `Once per turn, +${L(3) ? '2d6' : '1d6'} damage with a Finesse or Ranged weapon if you have Advantage, or an ally is next to the target.`);
-    F(1, 'Expertise', 'expertise', 'Double Proficiency Bonus in Stealth and Perception.');
-    F(1, 'Weapon Mastery', 'weapon-mastery', 'Use the mastery property of 2 kinds of weapons. Shortsword and Shortbow: Vex.');
+    F(1, 'Expertise', 'expertise', `Double Proficiency Bonus in ${spec.expertise.map((x) => SKILL_NAMES[x]).join(' and ')}.`);
+    F(1, "Thieves' Cant", null, 'You know the secret mix of slang and signs rogues use, and one more language.');
+    F(1, 'Weapon Mastery', 'weapon-mastery', `Use the mastery property of 2 kinds of weapons. ${mastText()}.`);
     F(2, 'Cunning Action', 'cunning-action', 'Take the Dash, Disengage or Hide action as a Bonus Action.');
     F(3, 'Steady Aim', 'steady-aim', "Bonus Action, if you haven't moved this turn: Advantage on your next attack roll this turn, but your Speed is 0 until the end of the turn.");
     F(3, 'Thief: Fast Hands', 'fast-hands', 'Bonus Action: a Sleight of Hand check, or the Utilize action (pick a lock, use an object).');
     F(3, 'Thief: Second-Story Work', 'second-story-work', 'You climb at your full Speed.');
   } else if (spec.cls === 'cleric') {
-    F(1, 'Spellcasting', 'spellcasting', 'Cantrips at will; leveled spells use spell slots. Wisdom is your spellcasting ability.');
-    F(1, 'Divine Order: Protector', null, 'Training with heavy armor and martial weapons.');
+    F(1, 'Spellcasting', 'spellcasting', `Cantrips at will; prepared spells use spell slots. Wisdom is your spellcasting ability. You prepare ${PREPARED_BY_LEVEL.cleric[level]} spells from the Cleric list and can change them after a Long Rest.`);
+    if (spec.order === 'thaumaturge') F(1, 'Divine Order: Thaumaturge', 'divine-order', `One extra cantrip, and +${Math.max(1, m.wis)} (your Wisdom modifier, at least 1) to Intelligence (Arcana and Religion) checks.`);
+    else F(1, 'Divine Order: Protector', 'divine-order', 'Training with Heavy armor and Martial weapons.');
     F(2, 'Channel Divinity', 'channel-divinity', 'Two uses (one back on a Short Rest, all on a Long Rest): Divine Spark (heal or harm, 1d8 + WIS) or Turn Undead.');
     F(3, 'Life Domain: Disciple of Life', 'disciple-of-life', 'Healing spells cast with a spell slot restore 2 + the slot\'s level extra Hit Points.');
     F(3, 'Life Domain: Preserve Life', 'preserve-life', 'Channel Divinity: share out 5 × your Cleric level Hit Points among Bloodied allies within 30 feet (up to half their maximum).');
-    F(3, 'Life Domain Spells', 'spellcasting', 'Always prepared: Aid, Bless, Cure Wounds, Lesser Restoration.');
+    F(3, 'Life Domain Spells', 'spellcasting', 'Always prepared, not counted: Aid, Bless, Cure Wounds, Lesser Restoration.');
   } else if (spec.cls === 'wizard') {
-    F(1, 'Spellcasting', 'spellcasting', 'Cantrips at will; leveled spells use spell slots. Intelligence is your spellcasting ability.');
+    F(1, 'Spellcasting', 'spellcasting', `Cantrips at will; prepared spells use spell slots. Intelligence is your spellcasting ability. Your spellbook holds ${spec.book.length} spells; you prepare ${PREPARED_BY_LEVEL.wizard[level]} of them and can change them after a Long Rest.`);
     F(1, 'Ritual Adept', 'rituals', 'Cast Ritual spells from your spellbook without preparing them.');
     F(1, 'Arcane Recovery', 'arcane-recovery', 'Once a day, when you finish a Short Rest, regain spent spell slots whose levels add up to half your Wizard level (rounded up).');
     if (scholar) F(2, `Scholar: ${SKILL_NAMES[scholar]}`, 'expertise', `Expertise in ${SKILL_NAMES[scholar]}.`);
     F(3, 'Evoker: Potent Cantrip', 'potent-cantrip', 'When a creature succeeds on a save against your damaging cantrip, or your cantrip attack misses, it still takes half the damage.');
     F(3, 'Evoker: Evocation Savant', null, 'Copying Evocation spells into your spellbook takes half the time and gold.');
   }
+  features.push({ name: `Equipment: ${kit.name}`, rule: null, text: kit.text, source: C.name });
 
   const ancestry = DRAGON_ANCESTRY[spec.ancestry];
   const resist = [...(SPECIES_RESIST[spec.species] || [])];
   if (spec.species === 'dragonborn') resist.push(ancestry.type);
+  if (lin?.resist) resist.push(lin.resist);
+  const giant = spec.species === 'goliath' ? { kind: spec.lineage, uses: pb, max: pb } : null;
   return {
     id, side: 'hero', cls: spec.cls, kind: spec.cls, className: C.name, emoji: C.emoji, subclass: sub,
     name: (name || spec.name || C.name).slice(0, 20), level, pb, spec,
-    species: S.name, speciesId: spec.species, background: B.name, size: spec.species === 'halfling' || spec.species === 'gnome' ? 'small' : 'medium',
+    species: lin && spec.species !== 'goliath' ? `${lin.name}${spec.species === 'tiefling' ? ' Tiefling' : ''}` : S.name, speciesId: spec.species, lineage: spec.lineage,
+    background: B.name, size: spec.species === 'halfling' || spec.species === 'gnome' ? 'small' : 'medium',
     scores, mods: m, saves, saveProfs: [...C.saves],
+    armorId: kit.armor, hasShield: kit.shield, style: spec.style, mageArmor: false,
     ac: sumParts(acParts), acParts, hp: hpMax, hpMax, hpParts, tempHp: 0,
     hitDice: { die: C.hitDie, max: level, left: level },
-    speed: S.speed, initParts, attacks, skills, profSkills: [...prof], expertise, features, casting,
+    speed: sumParts(speedParts), speedParts, initParts, attacks, skills, profSkills: [...prof], expertise, features, casting,
+    spellbook: spec.cls === 'wizard' ? [...spec.book] : null,
     resist, vuln: [], immune: [], condImmune: [],
     luck: spec.species === 'halfling',
+    nimbleness: spec.species === 'halfling',
     mentalSaveAdv: spec.species === 'gnome',
     poisonSaveAdv: spec.species === 'dwarf',
     braveSaveAdv: spec.species === 'halfling',
-    savage: B.feat === 'savage-attacker',
+    savage: has('savage-attacker'),
+    twf: spec.style === 'two-weapon',
     sneak: spec.cls === 'rogue' ? (L(3) ? '2d6' : '1d6') : null,
     secondWind: spec.cls === 'fighter' ? { uses: 2, max: 2 } : null,
     actionSurge: spec.cls === 'fighter' && L(2) ? { uses: 1, max: 1 } : null,
@@ -240,7 +438,8 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     preserveLife: spec.cls === 'cleric' && L(3),
     potentCantrip: spec.cls === 'wizard' && L(3),
     arcaneRecovery: spec.cls === 'wizard' ? { used: false } : null,
-    firesBurn: spec.species === 'goliath' ? { uses: pb, max: pb } : null,
+    giant,
+    twins: kit.twins || [],
     adrenaline: spec.species === 'orc' ? { uses: pb, max: pb } : null,
     relentless: spec.species === 'orc' ? { used: false } : null,
     breath: spec.species === 'dragonborn' ? {
@@ -251,8 +450,17 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     creature: 'humanoid', conds: [], autoInspire: true,
     multiattack: 1,
     reaction: true, deathSaves: { s: 0, f: 0 }, stable: false, dead: false,
-    x: 0, y: 0, ai: { fighter: 'melee', rogue: 'skirmisher', cleric: 'support', wizard: 'caster' }[spec.cls],
+    x: 0, y: 0, ai: { fighter: kit.weapons.includes('longbow') ? 'archer' : 'melee', rogue: 'skirmisher', cleric: 'support', wizard: 'caster' }[spec.cls],
   };
+}
+
+// Put on or take off Mage Armor (it only works with no armor on).
+export function setMageArmor(h, on) {
+  if (h.armorId !== 'none') return false;
+  h.mageArmor = !!on;
+  h.acParts = armorParts(h);
+  h.ac = sumParts(h.acParts);
+  return true;
 }
 
 // ------------------------------------------------- the party between fights ----
@@ -261,7 +469,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
 // last until a rest). Each count keeps its max so a level-up can add the
 // difference to what's left.
 
-const USES = ['secondWind', 'actionSurge', 'channel', 'firesBurn', 'adrenaline', 'breath'];
+const USES = ['secondWind', 'actionSurge', 'channel', 'giant', 'adrenaline', 'breath'];
 
 export function heroState(h) {
   const st = {
@@ -269,13 +477,13 @@ export function heroState(h) {
     hd: { ...h.hitDice }, slots: {}, free: {}, uses: {},
     relentless: !!h.relentless?.used, arcane: !!h.arcaneRecovery?.used,
     exhaustion: h.exhaustion || 0, poisoned: !!h.conds?.some((c) => c.id === 'poisoned' && c.lasting), inspiration: !!h.inspiration,
+    tempHp: h.tempHp || 0, mageArmor: !!h.mageArmor,
   };
   for (const [lv, s] of Object.entries(h.casting?.slots || {})) st.slots[lv] = { ...s };
-  for (const [sid, k] of Object.entries(h.casting?.known || {})) if (k.free || FEATS_FREE(h, sid)) st.free[sid] = k.free;
+  for (const [sid, k] of Object.entries(h.casting?.known || {})) if (k.freeMax) st.free[sid] = k.free;
   for (const u of USES) if (h[u]) st.uses[u] = { uses: h[u].uses, max: h[u].max };
   return st;
 }
-const FEATS_FREE = (h, sid) => h.casting?.known?.[sid]?.source?.startsWith('Magic Initiate');
 
 const carry = (left, oldMax, newMax) => Math.max(0, Math.min(newMax, left + (newMax - oldMax)));
 
@@ -300,6 +508,8 @@ export function applyState(h, st) {
   h.exhaustion = st.exhaustion || 0;
   h.conds = st.poisoned ? [{ id: 'poisoned', lasting: true, rule: 'poisoned' }] : [];
   h.inspiration = !!st.inspiration;
+  h.tempHp = st.tempHp || 0;
+  if (st.mageArmor) setMageArmor(h, true);
   return h;
 }
 
@@ -347,6 +557,7 @@ export function longRest(h) {
   if (h.hp < h.hpMax) got.push('all Hit Points');
   h.hp = h.hpMax;
   h.tempHp = 0;
+  if (h.mageArmor) { setMageArmor(h, false); got.push('Mage Armor has worn off'); }
   h.dead = false; h.stable = false; h.deathSaves = { s: 0, f: 0 };
   if (h.hitDice.left < h.hitDice.max) got.push('all Hit Point Dice');
   h.hitDice.left = h.hitDice.max;
@@ -354,7 +565,7 @@ export function longRest(h) {
   for (const s of Object.values(h.casting?.slots || {})) { if (s.left < s.max) slots = true; s.left = s.max; }
   if (slots) got.push('all spell slots');
   const fresh = buildHero(h.spec, { id: h.id, name: h.name, level: h.level });
-  for (const [sid, k] of Object.entries(h.casting?.known || {})) k.free = fresh.casting.known[sid].free;
+  for (const [sid, k] of Object.entries(h.casting?.known || {})) k.free = fresh.casting.known[sid]?.free ?? k.free;
   for (const u of USES) if (h[u]) h[u].uses = h[u].max;
   if (h.relentless) h.relentless.used = false;
   if (h.arcaneRecovery) h.arcaneRecovery.used = false;
