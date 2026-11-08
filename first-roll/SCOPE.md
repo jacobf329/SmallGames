@@ -256,7 +256,7 @@ Co-op is built in from the first prototype rather than added on later.
 | **1. Vertical slice (early access)** | Lobby with hero builder (4 classes, 9 species, 4 backgrounds), chapters 0–3, reactions, Help, votes, pings, AI companions for empty or dropped seats, saves and rejoin. Firestore rule updated. Deployed to `/play/first-roll/` | 4–5 sessions |
 | **2. Full curriculum** | Chapters 4–8, spells, conditions, rests, death saves, level 2–3 and subclasses, shared glossary, per-player coaching levels, "use my own dice", turn timer | 4–6 sessions |
 | **3. Polish** | Sound, animation, accessibility pass (colour-blind-safe player colours, screen-reader log), credits and attribution, replayable **Skirmish** mode (random co-op encounters for an evening), LAN mode | 2–3 sessions |
-| **Later** | Remaining 8 classes; levels 4–5; TURN relay for strict networks; host migration; AI narrator for scene text | separate scope |
+| **Later** | Levels 4–5; TURN relay for strict networks; host migration; AI narrator for scene text | separate scope |
 
 ### What Phase 2 built, and what moved to Phase 3
 
@@ -278,6 +278,12 @@ players choose their own cantrips and spells at creation, at each level-up and
 after a Long Rest, and spells aim the way the rules say (self, ally, creature,
 split, point, or an area placed on any square with a preview). Weapon Mastery
 Nick, Graze, Slow and Topple and the Light weapon's extra attack now work too.
+
+Also on Nov 8, the other 8 classes went in ahead of Phase 3: Barbarian
+(Berserker), Bard (Lore), Druid (Land), Monk (Open Hand), Paladin (Devotion),
+Ranger (Hunter), Sorcerer (Draconic) and Warlock (Fiend), levels 1 to 3, with
+their fight buttons, AI play, builder and level-up choices, and Rules book
+entries. Cleave works for the Greataxe.
 
 Moved to Phase 3:
 

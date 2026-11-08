@@ -261,3 +261,21 @@ test('Entangle restrains until a Strength (Athletics) check; Sleep; Bane; Barksk
   ok(perform(b2, 'bard', { a: 'cast', spell: 'sleep', x: 3, y: 5 }));
   assert.ok(g3.conds.some((c) => c.id === 'incapacitated' && c.sleep));
 });
+
+test('Cleave: a greataxe hit carries on into a second enemy next to the first, without the ability modifier', () => {
+  const bar = H('barbarian', 1, {}, { x: 3, y: 5 });
+  const b = fight([bar, gob('g1', 4, 5), gob('g2', 4, 4)], 'barbarian');
+  const axe = bar.attacks.find((a) => a.mastery === 'cleave');
+  assert.ok(axe, 'the barbarian starts with a greataxe');
+  dice(b, 18, 6, 6, 18, 6, 6);
+  ok(perform(b, 'barbarian', { a: 'attack', target: 'g1', attack: axe.id }));
+  const hits = b.log.filter((r) => r.kind === 'attack' && r.by === 'barbarian');
+  assert.deepEqual(hits.map((r) => r.target), ['g1', 'g2']);
+  assert.ok(!hits[1].damage.parts.some((p) => /modifier/.test(p.label)), 'no ability modifier on the Cleave hit');
+  // Only once per turn.
+  bar.attacksLeft = 1; b.turn.attacksLeft = 1;
+  const n = b.log.length;
+  dice(b, 18, 6, 6);
+  perform(b, 'barbarian', { a: 'attack', target: 'g1', attack: axe.id });
+  assert.ok(!b.log.slice(n).some((r) => r.rule === 'mastery-cleave'));
+});

@@ -4,7 +4,7 @@
 // on each of the player's turns every target card, the Misty Step picker and
 // the character sheets are drawn too. Any exception fails the run.
 //
-//   node tools/ui-smoke.mjs [fighter|rogue|cleric|wizard] [species] [--bundle]
+//   node tools/ui-smoke.mjs [class] [species] [--bundle]
 //
 // --bundle runs the app from dist/first-roll.html (run tools/bundle.mjs first).
 //
@@ -65,6 +65,8 @@ process.on('uncaughtException', (e) => { errors.push(e.stack || String(e)); });
 
 const { defaultSpec } = await import('../src/rules/character.js');
 const { SCENES } = await import('../src/game/campaign.js');
+const { CLASSES } = await import('../src/rules/data.js');
+const { levelChoices } = await import('../src/rules/character.js');
 const { sheetHtml } = await import('../src/ui/sheet.js');
 const { detail } = await import('../src/ui/explain.js');
 if (fromBundle) {
@@ -111,12 +113,12 @@ for (let step = 0; step < 60000 && SCENES[app.S?.story?.scene]?.kind !== 'end'; 
       if (sc.check.mode === 'single') { await say({ t: 'claim', hero: app.me }); await say({ t: 'roll' }); } else await say({ t: 'roll' });
     } else if (sc.kind === 'save' && !S.story.result) await say({ t: 'roll' });
     else if (sc.kind === 'rest' && sc.rest === 'short' && !S.story.rest.results) { await say({ t: 'hitdie' }); guard('rest', () => app.render()); await say({ t: 'continue' }); }
-    else if ((sc.kind === 'level' || (sc.kind === 'rest' && sc.rest === 'long')) && ['cleric', 'wizard'].includes(cls) && !counts.picked.has(S.story.scene)) {
+    else if ((sc.kind === 'level' ? CLASSES[cls].spellcasting || levelChoices(cls, sc.level).length : sc.kind === 'rest' && sc.rest === 'long' && ['any', 'one'].includes(CLASSES[cls].spellcasting?.change)) && !counts.picked.has(S.story.scene)) {
       // The spell screen for a level-up or a Long Rest: open it, take the picks, save.
       counts.picked.add(S.story.scene);
       guard(`spells ${S.story.scene}`, () => app.openSpells(sc.kind === 'level' ? 'levelup' : 'rest'));
       $('err').textContent = '';
-      guard(`save spells ${S.story.scene}`, () => $('build-next').onclick());
+      for (let i = 0; i < 4 && app.overlay; i++) guard(`save spells ${S.story.scene}`, () => $('build-next').onclick());
       await flush(); await flush();
       if ($('err').textContent) errors.push(`spell screen at ${S.story.scene}: ${$('err').textContent}`);
       if (app.overlay) errors.push(`spell screen did not close at ${S.story.scene}`);
@@ -133,6 +135,7 @@ for (let step = 0; step < 60000 && SCENES[app.S?.story?.scene]?.kind !== 'end'; 
     guard('over', () => app.render());
     for (const r of b.log) { counts.records.add(r.kind + (r.save ? `:${r.save}` : '')); guard(`detail ${r.kind}`, () => detail(r, b)); }
     if (b.over === 'victory') counts.fights++; else counts.retries++;
+    if (process.env.SMOKE_DEBUG) console.log('over', S.battleScene, b.over, 'round', b.round, Object.values(b.creatures).filter((c) => c.side === 'hero').map((c) => `${c.name}:${c.hp}`).join(' '), b.log.slice(-4).map((r) => r.text).join(' | '));
     await say({ t: b.over === 'victory' ? 'continue' : 'retry' });
     continue;
   }
@@ -157,8 +160,14 @@ for (let step = 0; step < 60000 && SCENES[app.S?.story?.scene]?.kind !== 'end'; 
       const aims = Object.keys(me.casting.known).filter((sid) => !['self', 'none'].includes(spellAim(sid).mode)).map((spell) => ({ kind: 'spell', spell }));
       if (me.breath) aims.push({ kind: 'breath', shape: 'cone' }, { kind: 'breath', shape: 'line' });
       if (me.giant?.kind === 'cloud') aims.push({ kind: 'jaunt' });
+      if (me.landsAid) aims.push({ kind: 'landsaid' });
+      if (b.effects.some((e) => e.type === 'dbreath' && e.target === me.id)) aims.push({ kind: 'exhale' });
+      const { metaError } = await import('../src/rules/combat.js');
       for (const a of aims) {
         guard(`aim ${a.spell || a.kind}`, () => app.aimAt(a));
+        // A Sorcerer aims with the first Metamagic option that fits, to draw those buttons too.
+        const m = a.spell && (me.metamagic || []).find((x) => !metaError(b, me, a.spell, x));
+        if (m && app.aim) { app.aim.meta = m; guard(`aim ${a.spell} ${m}`, () => app.render()); }
         const done = new Set();
         const tap = (x, y) => { const k = `${x},${y}`; if (done.has(k) || !app.aim) return; done.add(k); counts.aims++; guard(`aim tap ${a.spell || a.kind} ${k}`, () => app.tap(x, y)); };
         for (const c of Object.values(b.creatures)) if (!(c.side === 'foe' && c.hp <= 0)) tap(c.x, c.y);
@@ -170,7 +179,10 @@ for (let step = 0; step < 60000 && SCENES[app.S?.story?.scene]?.kind !== 'end'; 
     guard('panel', () => app.render());
     const { coach } = await import('../src/rules/ai.js');
     const tip = coach(b, app.me);
+    $('err').textContent = '';
     await say({ t: 'act', intent: tip?.intent || { a: 'end' } });
+    // The Coach must only suggest moves the rules allow.
+    if ($('err').textContent) { errors.push(`coach suggested ${JSON.stringify(tip?.intent)}: ${$('err').textContent}`); await say({ t: 'act', intent: { a: 'end' } }); }
   }
 }
 const end = app.S?.story?.scene;

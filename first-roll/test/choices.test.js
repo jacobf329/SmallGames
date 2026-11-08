@@ -68,7 +68,7 @@ test("a wizard's book: six level 1 spells, then two a level; level 2 spells only
 });
 
 // ------------------------------------------------------- level-up picks ----
-function atLevelScene() {
+function atLevelScene(cls = 'wizard', { rest = false } = {}) {
   let saved = null;
   const store = { load: () => saved, save: (s) => { saved = s; }, remove: () => { saved = null; } };
   let room = createRoom({ store, seed: 3 });
@@ -76,7 +76,7 @@ function atLevelScene() {
   let h = room.connect({ send: (s) => got.push(JSON.parse(s)), close() {} });
   h.message(JSON.stringify({ t: 'hello', name: 'Ana' }));
   const token = got.find((m) => m.t === 'welcome').token;
-  h.message(JSON.stringify({ t: 'hero', spec: defaultSpec('wizard') }));
+  h.message(JSON.stringify({ t: 'hero', spec: defaultSpec(cls) }));
   h.message(JSON.stringify({ t: 'companions', n: 0 }));
   h.message(JSON.stringify({ t: 'start' }));
   const S = JSON.parse(saved);
@@ -87,7 +87,7 @@ function atLevelScene() {
   h = room.connect({ send: (s) => got.push(JSON.parse(s)), close() {} });
   const say = (m) => h.message(JSON.stringify(m));
   say({ t: 'hello', name: 'Ana', token });
-  say({ t: 'continue' });                 // the Long Rest ends; everyone reaches level 2
+  if (!rest) say({ t: 'continue' });     // the Long Rest ends; everyone reaches level 2
   const last = (t) => [...got].reverse().find((m) => m.t === t);
   return { room, say, last, saved: () => JSON.parse(saved) };
 }
@@ -109,6 +109,47 @@ test('gaining a level: a wizard writes two new spells in the book, swaps one can
   assert.ok(r.last('state').party[0].spec.book.includes('feather-fall'));
   r.say({ t: 'levelpick', pick: { cantrips: ['fire-bolt', 'ray-of-frost', 'poison-spray'], book: [...book.slice(1), 'feather-fall'], prepared: me.spec.prepared } });
   assert.match(r.last('error').text, /stay in a wizard's spellbook/);
+});
+
+test('gaining a level brings each class its own choices: invocations, a Fighting Style, Expertise', () => {
+  // Warlock 2: three invocations; the earlier one can be swapped (one per level).
+  let r = atLevelScene('warlock');
+  const before = r.last('state').party[0].spec.invocations;
+  r.say({ t: 'levelpick', pick: { invocations: ['agonizing-blast', 'eldritch-mind', 'fiendish-vigor'], prepared: r.last('state').party[0].spec.prepared } });
+  assert.deepEqual(r.last('state').party[0].spec.invocations, ['agonizing-blast', 'eldritch-mind', 'fiendish-vigor']);
+  assert.equal(before.length, 1);
+  // Paladin 2: a Fighting Style (Blessed Warrior brings two Cleric cantrips), and the level 1 spells stay.
+  r = atLevelScene('paladin');
+  const pal = validateSpec(defaultSpec('paladin'), { level: 1 });
+  r.say({ t: 'levelpick', pick: { style: 'blessed-warrior', warriorCantrips: ['guidance', 'sacred-flame'], prepared: pal.prepared } });
+  const ps = r.last('state').party[0].spec;
+  assert.equal(ps.style, 'blessed-warrior');
+  assert.deepEqual(ps.warriorCantrips, ['guidance', 'sacred-flame']);
+  assert.deepEqual(pal.prepared, ['divine-favor', 'bless']);
+  r.say({ t: 'levelpick', pick: { style: 'defense', prepared: ['bless', 'heroism', 'command'] } });
+  assert.match(r.last('error').text, /keep every prepared spell/);
+  // Bard 2: two Expertise skills from the ones the bard knows; a Long Rest can't touch them.
+  r = atLevelScene('bard');
+  const bs = r.last('state').party[0].spec;
+  const prof = validateSpec(bs, { level: 2 });
+  r.say({ t: 'levelpick', pick: { expertise: prof.skills.slice(0, 2), prepared: prof.prepared } });
+  assert.deepEqual(r.last('state').party[0].spec.expertise, prof.skills.slice(0, 2));
+});
+
+test('after a Long Rest: a Paladin swaps one prepared spell, a Sorcerer keeps theirs until a level-up', () => {
+  let r = atLevelScene('paladin', { rest: true });
+  const pal = validateSpec(defaultSpec('paladin'), { level: 1 });
+  const list = ['bless', 'cure-wounds', 'divine-favor', 'heroism', 'shield-of-faith', 'command', 'protection-from-evil-and-good'];
+  const fresh = list.filter((x) => !pal.prepared.includes(x));
+  r.say({ t: 'levelpick', pick: { prepared: [pal.prepared[0], fresh[0]] } });
+  assert.deepEqual(r.last('state').party[0].spec.prepared, [pal.prepared[0], fresh[0]]);
+  r.say({ t: 'levelpick', pick: { prepared: [fresh[1], fresh[2]] } });
+  assert.match(r.last('error').text, /swap one prepared spell/);
+  r = atLevelScene('sorcerer', { rest: true });
+  const sor = validateSpec(defaultSpec('sorcerer'), { level: 1 });
+  assert.deepEqual(sor.prepared, ['magic-missile', 'shield']);
+  r.say({ t: 'levelpick', pick: { prepared: ['magic-missile', 'sleep'] } });
+  assert.match(r.last('error').text, /keep every prepared spell/);
 });
 
 test('changing spells only happens at a level-up or after a Long Rest', () => {

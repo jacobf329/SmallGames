@@ -2715,6 +2715,21 @@ export function perform(b, id, intent) {
       attack(b, A, next, atk);
     }
   }
+  // Cleave (weapon mastery): once per turn, a hit with a melee attack lets you
+  // attack a second creature within 5 feet of the first and within your reach,
+  // without your ability modifier on its damage.
+  if (intent.a === 'attack' && !intent.offhand && A.cleaveKey !== turnKey(b) && !b.over && !b.pending && b.turn === t && T) {
+    const atk = A.attacks.find((a) => a.id === intent.attack);
+    const hit = b.log.some((r) => r.seq > before && r.kind === 'attack' && r.by === id && r.target === T.id && (r.outcome === 'hit' || r.outcome === 'crit'));
+    if (atk?.mastery === 'cleave' && atk.kind === 'melee' && hit) {
+      const next = enemiesOf(b, A).find((X) => X !== T && cheb(X, T) <= 1 && canTarget(b, A, X, atk).ok);
+      if (next) {
+        A.cleaveKey = turnKey(b);
+        emit(b, { kind: 'note', by: id, text: `Cleave: ${A.name} swings on into ${next.name}, next to ${T.name}.`, rule: 'mastery-cleave' });
+        attack(b, A, next, { ...atk, name: `${atk.name} (Cleave)`, dmgFlat: atk.dmgFlat.filter((p) => p.rule !== 'damage' || p.value < 0) });
+      }
+    }
+  }
   t.steps++;
 
   return { ok: true, records: b.log.filter((r) => r.seq > before) };

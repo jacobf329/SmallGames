@@ -17,7 +17,7 @@
 //   ping {x, y}
 // host -> phone:  welcome {pid, token}   state {...}   ping {pid, x, y}   error {text}
 
-import { buildHero, validateSpec, heroState, applyState, spendHitDie, finishShortRest, longRest } from '../rules/character.js';
+import { buildHero, validateSpec, heroState, applyState, spendHitDie, finishShortRest, longRest, levelChoices, swapLimit, droppedPicks, PICK_FIELDS } from '../rules/character.js';
 import { SKILLS, SKILL_NAMES } from '../rules/data.js';
 import { createBattle, rollInitiative, perform, current, resolveReaction, rollD20 } from '../rules/combat.js';
 import { makeRng } from '../rules/rng.js';
@@ -183,7 +183,7 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     // the book keeps every spell already written in it.
     const prior = Object.fromEntries(party().map((p) => {
       const v = validateSpec(p.spec, { level: from });
-      return [p.id, { cantrips: v.cantrips, book: v.book }];
+      return [p.id, { cantrips: v.cantrips, book: v.book, prepared: v.prepared, skills: v.skills, expertise: v.expertise, invocations: v.invocations, metamagic: v.metamagic }];
     }));
     S.level = level;
     S.story.levelUp = party().map((p) => {
@@ -378,8 +378,8 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     return r;
   }
 
-  function react(yes) {
-    resolveReaction(S.battle, yes);
+  function react(yes, opts = {}) {
+    resolveReaction(S.battle, yes, opts);
     deadline = 0;
     onTurnChange();
   }
@@ -426,22 +426,28 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
       case 'levelpick': {
         if (S.phase !== 'story' || !s.spec) return err('Only a hero can change spells, between scenes.');
         const when = sc?.kind === 'level' ? 'level' : sc?.kind === 'rest' && sc.rest === 'long' ? 'rest' : null;
-        if (!when) return err('You can change spells when you gain a level or after a Long Rest.');
+        if (!when) return err('You can make these choices when you gain a level or after a Long Rest.');
         const pick = m.pick && typeof m.pick === 'object' ? m.pick : {};
         let was, next;
         try {
           was = validateSpec(s.spec, { level: S.level });
-          next = validateSpec({
-            ...s.spec,
-            cantrips: when === 'level' ? pick.cantrips : was.cantrips,
-            book: when === 'level' ? pick.book : was.book,
-            prepared: pick.prepared,
-            scholar: when === 'level' ? pick.scholar : was.scholar,
-          }, { level: S.level });
+          const cls = was.cls;
+          // A level-up can change its spells and the choices this level brings; a Long Rest, prepared spells only.
+          const open = when === 'level' ? new Set(['cantrips', 'book', 'prepared', 'scholar', ...levelChoices(cls, S.level)]) : new Set(['prepared']);
+          if (open.has('style')) open.add('warriorCantrips');
+          if (open.has('invocations')) open.add('pactWeapon');
+          const take = {};
+          for (const k of PICK_FIELDS) take[k] = open.has(k) && k in pick ? pick[k] : was[k];
+          next = validateSpec({ ...s.spec, ...take }, { level: S.level });
         } catch (e) { return err(e.message); }
         const base = (when === 'level' && S.story.levelUp?.find((x) => x.id === s.pid)?.was) || was;
-        if (next.cantrips.filter((x) => !base.cantrips.includes(x)).length > 1) return err('When you gain a level you can swap one cantrip, not more.');
-        if (base.book.some((x) => !next.book.includes(x))) return err("Spells stay in a wizard's spellbook once they're written in.");
+        const NAMES = { cantrips: 'cantrip', prepared: 'prepared spell', invocations: 'invocation', metamagic: 'Metamagic option', skills: 'skill', expertise: 'Expertise skill', book: 'spellbook spell' };
+        for (const [k, label] of Object.entries(NAMES)) {
+          const n = droppedPicks(next.cls, S.level, next.land, base[k] || [], next[k] || []).length;
+          const lim = swapLimit(next.cls, when, k);
+          if (n > lim && k === 'book') return err("Spells stay in a wizard's spellbook once they're written in.");
+          if (n > lim) return err(lim === 0 ? `You keep every ${label} you already have${when === 'rest' && k === 'prepared' ? ' after a Long Rest; you can swap one when you gain a level' : ''}.` : `You can swap one ${label}, not more.`);
+        }
         s.spec = next;
         return changed();
       }
@@ -555,7 +561,7 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
         if (!S.battle?.pending) return;
         const R = S.battle.creatures[S.battle.pending.reactor];
         if (actorFor(R, now()) !== s.pid) return;
-        react(!!m.yes);
+        react(!!m.yes, { slot: m.slot | 0 });
         return changed();
       }
       case 'hitdie': {

@@ -21,8 +21,9 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
 - **1–4 players**, each on their own phone, with **AI companions** filling the
   party (Auto keeps at least three heroes). Fights scale to the party's size
   with the 2024 XP budget.
-- **Heroes:** Fighter, Rogue, Cleric and Wizard, with all 9 SRD species and the
-  4 SRD backgrounds. Every species trait that matters in a fight works:
+- **Heroes:** all 12 SRD classes (Barbarian, Bard, Cleric, Druid, Fighter,
+  Monk, Paladin, Ranger, Rogue, Sorcerer, Warlock, Wizard), with all 9 SRD
+  species and the 4 SRD backgrounds. Every species trait that matters in a fight works:
   - Halfling Luck
   - Dwarven Toughness
   - the Human's Skillful skill and Versatile Origin feat (Alert, Magic Initiate,
@@ -33,18 +34,31 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
   - the Wood Elf's 35 ft speed
   - Gnomish Cunning
   - every Elf, Gnome, Goliath and Tiefling lineage, with its spells
-- **Levels 1 to 3** with the 2024 features: Action Surge, Tactical Mind,
-  Champion (Improved Critical, Remarkable Athlete); Cunning Action, Steady Aim,
-  Thief; Channel Divinity (Divine Spark, Turn Undead), Life Domain (Disciple of
-  Life, Preserve Life); Arcane Recovery, Evoker (Potent Cantrip).
-- **Character choices by the 2024 rules:** every skill pick, Expertise, the
-  Fighter's kit, Fighting Style and Weapon Mastery, the Cleric's Divine Order
-  and kit, Magic Initiate's list, cantrips, spell and ability, and the
-  Wizard's Scholar skill. Players pick their own cantrips and prepared
-  spells (a Wizard fills a six-spell book and prepares from it), pick new ones
-  when they level up (two new book spells, one cantrip swap), and change
-  prepared spells after a Long Rest.
-- **Spells:** about 50 from the SRD on the Cleric and Wizard lists (fight
+- **Levels 1 to 3** with the 2024 features and one SRD subclass each:
+  - Barbarian: Rage, Unarmored Defense, Danger Sense, Reckless Attack, Berserker (Frenzy)
+  - Bard: Bardic Inspiration, Jack of All Trades, Expertise, College of Lore (Cutting Words)
+  - Cleric: Channel Divinity (Divine Spark, Turn Undead), Life Domain (Disciple of Life, Preserve Life)
+  - Druid: Primal Order, Wild Shape (a wolf), Circle of the Land (Land's Aid, land spells)
+  - Fighter: Second Wind, Action Surge, Tactical Mind, Champion (Improved Critical, Remarkable Athlete)
+  - Monk: Martial Arts, Focus (Flurry of Blows, Patient Defense, Step of the Wind), Uncanny Metabolism, Deflect Attacks, Open Hand Technique
+  - Paladin: Lay on Hands, Fighting Style, Paladin's Smite (Divine Smite), Channel Divinity, Oath of Devotion (Sacred Weapon)
+  - Ranger: Favored Enemy (Hunter's Mark), Deft Explorer, Fighting Style, Hunter (Colossus Slayer or Horde Breaker)
+  - Rogue: Sneak Attack, Cunning Action, Steady Aim, Thief
+  - Sorcerer: Innate Sorcery, Font of Magic, Metamagic, Draconic Sorcery (Draconic Resilience, dragon spells)
+  - Warlock: Pact Magic, Eldritch Invocations (Pact of the Blade included), Magical Cunning, Fiend Patron (Dark One's Blessing)
+  - Wizard: Arcane Recovery, Scholar, Evoker (Potent Cantrip)
+- **Character choices by the 2024 rules:** every skill pick, Expertise, each
+  class's kit, Fighting Style (Blessed and Druidic Warrior with their
+  cantrips) and Weapon Mastery, Divine and Primal Orders, the Druid's land,
+  the Hunter's prey, invocations and the pact weapon, Metamagic, Magic
+  Initiate's list, cantrips, spell and ability, and the Wizard's Scholar
+  skill. Players pick their own cantrips and prepared spells (a Wizard fills a
+  six-spell book and prepares from it). A level-up shows only that level's new
+  choices, keeps earlier picks, and allows the swaps the rules allow: one
+  cantrip, one invocation or Metamagic option, and one spell for a Bard,
+  Sorcerer or Warlock. After a Long Rest a Cleric, Druid or Wizard can change
+  every prepared spell, and a Paladin or Ranger one.
+- **Spells:** about 75 from the SRD across all eight casters' lists (fight
   spells and the ones for outside of fights), Concentration, casting with a
   higher slot, Magic Initiate's free casts, and the 2024 one-spell-slot-per-turn
   rule.

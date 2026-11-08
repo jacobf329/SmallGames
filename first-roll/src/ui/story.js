@@ -3,7 +3,8 @@
 
 import { SCENES, CHAPTERS } from '../game/campaign.js';
 import { skillParts } from '../game/room.js';
-import { buildHero, applyState } from '../rules/character.js';
+import { buildHero, applyState, levelChoices } from '../rules/character.js';
+import { CLASSES } from '../rules/data.js';
 import { SKILL_NAMES, SKILLS, ABILITY_NAMES, signed } from '../rules/data.js';
 import { $ } from './dom.js';
 import { esc, short, detail } from './explain.js';
@@ -99,7 +100,9 @@ export function renderStory(ctx) {
     if (r.kind === 'long') {
       html += `<div class="checkbox"><div class="ck-head">${R('long-rest', 'Long Rest')}</div><ul class="restlog">${(r.results || []).map((x) =>
         `<li><b>${esc(x.name)}</b>: ${x.got.length ? esc(x.got.join(', ')) : 'nothing to get back'}.</li>`).join('')}</ul></div>`;
-      if (mine?.h.casting && ['cleric', 'wizard'].includes(mine.spec.cls)) html += '<button class="btn wide" id="s-prep">✨ Change your prepared spells</button>';
+      const change = mine && CLASSES[mine.spec.cls].spellcasting?.change;
+      if (change === 'any') html += '<button class="btn wide" id="s-prep">✨ Change your prepared spells</button>';
+      if (change === 'one') html += '<button class="btn wide" id="s-prep">✨ Swap one prepared spell</button>';
       html += isHost ? '<button class="btn primary wide" id="s-continue">Continue</button>' : '<p class="note">Waiting for the host to continue…</p>';
     } else {
       html += `<div class="checkbox"><div class="ck-head">${R('short-rest', 'Short Rest')}: spend ${R('hit-point-dice', 'Hit Point Dice')} to heal</div><div class="ck-list">${heroes.map((p) => {
@@ -118,9 +121,12 @@ export function renderStory(ctx) {
     html += (st.levelUp || []).map((x) => `<div class="levelup"><b>${esc(x.name)}</b>: level ${x.to}${x.subclass ? `, ${esc(x.subclass)}` : ''}
       <div class="dim">${R('level-up', 'Hit Point maximum')} ${x.hpMaxBefore} → ${x.hpMax}${x.slots ? ` · ${R('spell-slots', 'spell slots')} ${Object.entries(x.slots).map(([lv, n]) => `${n} of level ${lv}`).join(', ')}` : ''}</div>
       ${x.features.map((f) => `<p class="feat">${R(f.rule, f.name)}: ${esc(f.text)}</p>`).join('')}</div>`).join('');
-    if (mine?.h.casting && ['cleric', 'wizard'].includes(mine.spec.cls)) {
-      html += `<button class="btn wide" id="s-spells">✨ Choose ${mine.spec.cls === 'wizard' ? 'your new spellbook spells and ' : ''}your prepared spells</button>
-        <p class="note">Skip it and you keep the suggested picks. You can change prepared spells again after a Long Rest.</p>`;
+    const picks = mine ? levelChoices(mine.spec.cls, S.level || 1).length : 0;
+    const caster = !!CLASSES[mine?.spec.cls]?.spellcasting;
+    if (mine && (picks || caster)) {
+      const what = picks && caster ? 'your new choices and spells' : picks ? 'your new choices' : mine.spec.cls === 'wizard' ? 'your new spellbook spells and your prepared spells' : 'your spells for this level';
+      html += `<button class="btn wide" id="s-spells">✨ Choose ${what}</button>
+        <p class="note">Skip it and you keep the suggested picks.${['cleric', 'druid', 'wizard'].includes(mine.spec.cls) ? ' You can change prepared spells again after a Long Rest.' : ''}</p>`;
     }
     html += isHost ? '<button class="btn primary wide" id="s-continue">Continue</button>' : '<p class="note">Waiting for the host to continue…</p>';
   } else if (sc.kind === 'end') {

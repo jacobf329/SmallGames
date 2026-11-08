@@ -52,7 +52,7 @@ globalThis.window = globalThis;
 globalThis.scrollTo = () => {};
 
 const { openBuilder } = await import('../src/ui/builder.js');
-const { validateSpec, buildHero, defaultSpec } = await import('../src/rules/character.js');
+const { validateSpec, buildHero, defaultSpec, levelChoices, swapLimit, droppedPicks } = await import('../src/rules/character.js');
 const { SPECIES, CLASSES, SPELLS } = await import('../src/rules/data.js');
 
 let seed = 1;
@@ -61,7 +61,7 @@ Math.random = rand;
 const pick = (xs) => xs[Math.floor(rand() * xs.length)];
 const body = () => document.getElementById('build-body');
 const fails = [];
-const stats = { done: 0, taps: 0, methods: new Set(), feats: new Set(), lists: new Set() };
+const stats = { done: 0, taps: 0, methods: new Set(), feats: new Set(), lists: new Set(), paths: new Set() };
 
 function tapSomething() {
   const kids = body().kids.filter((k) => k.tag !== 'input');
@@ -84,7 +84,9 @@ function drive(opts, maxTaps) {
     if (r < 0.12) next.onclick();
     else if (r < 0.15) { back.onclick(); if (cancelled) return { cancelled }; }
     else tapSomething();
-    if (body()._html.includes('class="bad"') && /undefined|NaN|\[object/.test(body()._html)) throw new Error(`bad text: ${body()._html.match(/class="bad">([^<]*)/)?.[1]}`);
+    for (const m of body()._html.matchAll(/data-(?:tog|set|sel)="([\w.]+)[:="]/g)) stats.paths.add(m[1]);
+    const odd = body()._html.match(/.{0,60}(?:undefined|NaN|\[object).{0,30}/);
+    if (odd) throw new Error(`bad text: ${odd[0]}`);
   }
   // Then finish: Next until done, filling a list if a step asks for more.
   for (let i = 0; i < 400 && !out; i++) {
@@ -101,8 +103,8 @@ function drive(opts, maxTaps) {
 for (let run = 0; run < RUNS; run++) {
   seed = run * 7919 + 13;
   const level = 1 + (run % 3);
-  const cls = Object.keys(CLASSES)[run % 4];
-  const sp = Object.keys(SPECIES)[Math.floor(run / 4) % Object.keys(SPECIES).length];
+  const cls = Object.keys(CLASSES)[run % Object.keys(CLASSES).length];
+  const sp = Object.keys(SPECIES)[Math.floor(run / Object.keys(CLASSES).length) % Object.keys(SPECIES).length];
   try {
     const start = run % 2 ? defaultSpec(cls, { species: sp }) : null;
     const { out, cancelled } = drive({ spec: start, playerName: 'Ana', level }, 60 + (run % 5) * 30);
@@ -114,20 +116,31 @@ for (let run = 0; run < RUNS; run++) {
     stats.done++;
     stats.methods.add(out.method);
     if (out.versatile) stats.feats.add(out.versatile.feat + (out.versatile.list ? `:${out.versatile.list}` : ''));
-    // The level-up and Long Rest screens, for casters.
-    if (CLASSES[out.cls].spellcasting && level < 3) {
+    // The level-up and Long Rest screens.
+    const C = CLASSES[out.cls];
+    if ((C.spellcasting || levelChoices(out.cls, level + 1).length) && level < 3) {
       const prior = validateSpec(out, { level });
-      const up = drive({ spec: out, playerName: 'Ana', level: level + 1, mode: 'levelup', before: { cantrips: prior.cantrips, book: prior.book } }, 40);
+      const keys = ['cantrips', 'book', 'prepared', 'skills', 'expertise', 'invocations', 'metamagic'];
+      const before = Object.fromEntries(keys.map((k) => [k, prior[k]]));
+      const check = (what, from, to, when) => {
+        for (const k of keys) {
+          const n = droppedPicks(to.cls, level + 1, to.land, from[k] || [], to[k] || []).length;
+          if (n > swapLimit(to.cls, when, k)) throw new Error(`${what} dropped ${n} ${k}`);
+        }
+      };
+      const up = drive({ spec: out, playerName: 'Ana', level: level + 1, mode: 'levelup', before }, 40);
       if (!up.cancelled) {
         if (!up.out) throw new Error('level-up never finished: ' + (body()._html.match(/class="bad">([^<]*)/)?.[1] || ''));
-        if (up.out.cantrips.filter((s) => !prior.cantrips.includes(s)).length > 1) throw new Error('level-up swapped more than one cantrip');
-        if (prior.book.some((s) => !up.out.book.includes(s))) throw new Error('level-up dropped a book spell');
+        check('level-up', before, up.out, 'level');
         stats.lists.add('levelup');
-        const rest = drive({ spec: up.out, playerName: 'Ana', level: level + 1, mode: 'rest' }, 30);
-        if (rest.out) {
-          if (rest.out.cantrips.join() !== up.out.cantrips.join()) throw new Error('rest changed cantrips');
-          if (rest.out.book.join() !== up.out.book.join()) throw new Error('rest changed the book');
-          stats.lists.add('rest');
+        if (['any', 'one'].includes(C.spellcasting?.change)) {
+          const rest = drive({ spec: up.out, playerName: 'Ana', level: level + 1, mode: 'rest' }, 30);
+          if (rest.out) {
+            if (rest.out.cantrips.join() !== up.out.cantrips.join()) throw new Error('rest changed cantrips');
+            if (rest.out.book.join() !== up.out.book.join()) throw new Error('rest changed the book');
+            check('rest', up.out, rest.out, 'rest');
+            stats.lists.add('rest');
+          }
         }
       }
     }
@@ -136,6 +149,6 @@ for (let run = 0; run < RUNS; run++) {
     fails.push(`run ${run} (${cls} ${sp} L${level}): ${e.stack || e}`);
   }
 }
-console.log(`${stats.done} heroes built in ${RUNS} runs, ${stats.taps} taps; methods ${[...stats.methods].join(', ')}; human feats ${[...stats.feats].join(', ')}; ${[...stats.lists].join(', ')}`);
+console.log(`${stats.done} heroes built in ${RUNS} runs, ${stats.taps} taps; methods ${[...stats.methods].join(', ')}; human feats ${[...stats.feats].join(', ')}; ${[...stats.lists].join(', ')}; picked ${[...stats.paths].sort().join(' ')}`);
 if (fails.length) { console.error(`FAIL: ${fails.length}\n${fails.slice(0, 6).join('\n---\n')}`); process.exit(1); }
 console.log('PASS');

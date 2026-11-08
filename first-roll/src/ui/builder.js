@@ -5,31 +5,36 @@
 // caster, then a name and the finished sheet. Every step starts on a
 // sensible recommendation, so "Next" all the way works.
 //
-// The same screen, in mode 'levelup', lets a caster pick the spells a new
-// level brings; in mode 'rest' it changes prepared spells after a Long Rest.
+// The same screen, in mode 'levelup', takes the choices a new level brings
+// (spells, skills, a Fighting Style, invocations and so on); in mode 'rest'
+// it changes prepared spells after a Long Rest.
 
 import {
   CLASSES, BACKGROUNDS, SPECIES, FEATS, ORIGIN_FEATS, SKILLS, SKILL_NAMES, ABILITIES, ABILITY_NAMES, STANDARD_ARRAY,
   DRAGON_ANCESTRY, KITS, FIGHTING_STYLES, WEAPONS, MASTERIES, SPELLS, SPELL_LISTS, POINT_COST, POINT_BUDGET,
+  DRUID_ORDERS, LAND_SPELLS, HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, PACT_WEAPONS, METAMAGIC, stylesFor,
   abilityMod, signed,
 } from '../rules/data.js';
 import {
   buildHero, defaultSpec, suggestPlus, validateSpec, DEFAULT_BACKGROUND, classSpellCounts, domainSpells,
   maxSpellLevel, miCantrips, miSpells, pointCost, rollTotal, speciesCantrips, bookLimit, SCHOLAR_SKILLS,
+  extraSkills, expertiseCount, styleAt, metamagicCount, levelChoices, swapLimit, droppedPicks, alwaysPrepared, alwaysCantrips,
 } from '../rules/character.js';
 import { GLOSSARY } from '../rules/glossary.js';
 import { $, show } from './dom.js';
 import { esc } from './explain.js';
 import { sheetHtml, ruleLink as R } from './sheet.js';
 
+const andList = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0] || '');
+const castersOf = (a) => andList(Object.values(CLASSES).filter((c) => c.spellcasting?.ability === a).map((c) => c.name));
 const ABILITY_USES = {
   str: 'Melee attacks, Athletics', dex: 'AC, ranged and Finesse attacks, Stealth, Initiative',
-  con: 'Hit Points, staying alive', int: 'Wizard spells, Investigation, Arcana',
-  wis: 'Cleric spells, Perception, Insight, Medicine', cha: 'Persuasion, Intimidation, Deception',
+  con: 'Hit Points, staying alive', int: `${castersOf('int')} spells, Investigation, Arcana`,
+  wis: `${castersOf('wis')} spells, Perception, Insight, Medicine`, cha: `${castersOf('cha')} spells, Persuasion, Intimidation, Deception`,
 };
 const CAST = ['int', 'wis', 'cha'];
 const TIME = { action: 'Action', bonus: 'Bonus Action', reaction: 'Reaction' };
-const LIST_NAME = { cleric: 'Cleric', wizard: 'Wizard' };
+const LIST_NAME = Object.fromEntries(Object.entries(CLASSES).map(([k, c]) => [k, c.name]));
 const ORDERS = {
   protector: { name: 'Protector', text: 'Trained for battle: you can use Martial weapons and wear Heavy armor.' },
   thaumaturge: { name: 'Thaumaturge', text: 'One extra cantrip, and your Wisdom modifier (at least +1) added to Intelligence (Arcana and Religion) checks.' },
@@ -68,9 +73,20 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
 
   const C = () => CLASSES[d.cls];
   const counts = () => classSpellCounts(d.cls, level, d.order);
-  const steps = () => (mode === 'new'
-    ? ALL_STEPS.filter((s) => s.id !== 'spells' || C().spellcasting)
-    : [{ id: 'spells', title: mode === 'rest' ? 'Change your prepared spells' : `Level ${level}: your spells`, rule: 'spellcasting' }]);
+  const when = mode === 'levelup' ? 'level' : mode === 'rest' ? 'rest' : null;
+  function steps() {
+    if (mode === 'new') return ALL_STEPS.filter((s) => s.id !== 'spells' || C().spellcasting);
+    const out = [];
+    if (mode === 'levelup' && levelChoices(d.cls, level).length) out.push({ id: 'levelopts', title: `Level ${level}: your new choices`, rule: null });
+    if (C().spellcasting) out.push({ id: 'spells', title: mode === 'rest' ? 'Change your prepared spells' : `Level ${level}: your spells`, rule: 'spellcasting' });
+    return out;
+  }
+  // How many earlier picks a list can lose here, and which ones it has lost.
+  const limit = (path) => (when && was ? swapLimit(d.cls, when, path) : Infinity);
+  const dropped = (path, arr) => droppedPicks(d.cls, level, d.land, was?.[path] || [], arr);
+  const fixed = (path, x) => (path === 'book' && locked.book.includes(x)) || (limit(path) === 0 && (was?.[path] || []).includes(x));
+  const swapMsg = (path) => (limit(path) === 0 ? `You keep every ${LISTS[path].label} you already have.`
+    : `You can swap one ${LISTS[path].label}${mode === 'rest' ? ' after a Long Rest' : ' at this level'}, not more.`);
 
   // ------------------------------------------------------------ state ----
   function norm() {
@@ -90,8 +106,11 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
   }
   // Lists the player picks a set number from.
   const LISTS = {
-    skills: { cap: () => C().skillChoices.n, label: 'class skill' },
-    expertise: { cap: () => 2, label: 'Expertise skill' },
+    skills: { cap: () => C().skillChoices.n + extraSkills(d.cls, level), label: 'class skill' },
+    expertise: { cap: () => expertiseCount(d.cls, level), label: 'Expertise skill' },
+    warriorCantrips: { cap: () => 2, label: 'Fighting Style cantrip' },
+    invocations: { cap: () => (d.cls === 'warlock' ? INVOCATIONS_KNOWN[level] : 0), label: 'invocation' },
+    metamagic: { cap: () => metamagicCount(d.cls, level), label: 'Metamagic option' },
     masteries: { cap: () => C().masteryCount, label: 'weapon for Weapon Mastery' },
     cantrips: { cap: () => counts().cantrips, label: 'cantrip' },
     book: { cap: () => counts().book, label: 'spellbook spell' },
@@ -101,7 +120,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
     'versatile.skills': { cap: () => 3, label: 'Skilled skill' },
   };
   const SKILL_PATHS = ['skills', 'versatile.skills'];
-  const CANTRIP_PATHS = ['cantrips', 'bgFeat.cantrips', 'versatile.cantrips'];
+  const CANTRIP_PATHS = ['cantrips', 'bgFeat.cantrips', 'versatile.cantrips', 'warriorCantrips'];
 
   // A skill or cantrip comes from one place. Taking it in one list frees it
   // from the others, which then pick something else.
@@ -118,9 +137,11 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
   function toggle(path, v) {
     let arr = [...(get(path) || [])];
     const cap = LISTS[path].cap();
-    const fixed = (x) => path === 'book' && locked.book.includes(x);
+    const old = was?.[path] || [];
+    const fx = (x) => fixed(path, x);
     if (arr.includes(v)) {
-      if (fixed(v)) return;
+      if (fx(v)) return;
+      if (old.includes(v) && dropped(path, arr.filter((x) => x !== v)).length > limit(path)) { err = swapMsg(path); return; }
       arr = arr.filter((x) => x !== v);
       if (SKILL_PATHS.includes(path)) d.expertise = (d.expertise || []).filter((x) => x !== v);
     } else {
@@ -128,18 +149,15 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
         const lv = SPELLS[v].level;
         const same = arr.filter((x) => SPELLS[x].level === lv);
         if (same.length >= bookLimit(lv, level)) {
-          const out = same.find((x) => !fixed(x));
+          const out = same.find((x) => !fx(x));
           if (!out) { err = `Your book has no more room for level ${lv} spells yet.`; return; }
           arr = arr.filter((x) => x !== out);
         }
       }
-      // A new level swaps one cantrip at most: a second new pick replaces the first.
-      const swap = path === 'cantrips' && mode === 'levelup' && was;
-      const fresh = swap ? arr.filter((x) => !was.cantrips.includes(x)) : [];
-      if (swap && fresh.length && !was.cantrips.includes(v)) arr = arr.filter((x) => x !== fresh[0]);
+      // A full list gives up a new pick first, then an earlier one if a swap is still allowed.
       if (arr.length >= cap) {
-        const out = (swap && arr.find((x) => !was.cantrips.includes(x))) || arr.find((x) => !fixed(x));
-        if (!out) return;
+        const out = arr.find((x) => !old.includes(x) && !fx(x)) || (dropped(path, arr).length < limit(path) ? arr.find((x) => !fx(x)) : null);
+        if (!out) { err = swapMsg(path); return; }
         arr = arr.filter((x) => x !== out);
       }
       arr.push(v);
@@ -165,7 +183,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
   }
   function setClass(cls) {
     d.cls = cls;
-    for (const k of ['skills', 'expertise', 'masteries', 'kit', 'style', 'order', 'cantrips', 'book', 'prepared', 'scholar']) delete d[k];
+    for (const k of ['skills', 'expertise', 'masteries', 'kit', 'style', 'warriorCantrips', 'order', 'cantrips', 'book', 'prepared', 'scholar', 'invocations', 'pactWeapon', 'metamagic', 'land', 'prey']) delete d[k];
     if (!touched.background) { d.background = DEFAULT_BACKGROUND[cls]; delete d.bgFeat; }
     if (!touched.scores) { d.method = 'array'; d.scores = { ...CLASSES[cls].suggested }; }
     if (!touched.plus) d.plus = suggestPlus(cls, d.background, d.scores);
@@ -387,67 +405,42 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
         <p class="note">Tip: raising an odd score to an even one bumps its modifier. 15 → 17 gives +3.</p>`;
     },
 
-    options: () => {
-      const c = C();
-      const bg = BACKGROUNDS[d.background].skills;
-      const fromName = d.species === 'human' ? 'Human' : 'Elf';
-      let h = `<p class="lead">A ${c.name} picks ${c.skillChoices.n} skills from the class list${d.cls === 'fighter' ? ', a Fighting Style and starting gear' : d.cls === 'rogue' ? ', two Expertise skills and two weapons to master' : d.cls === 'cleric' ? ', a Divine Order and starting gear' : ''}.</p>`;
-      h += pickList('skills', c.skillChoices.from.map((s) => chip('skills', s, SKILL_NAMES[s], {
-        off: bg.includes(s),
-        note: bg.includes(s) ? '(background)' : d.speciesSkill === s ? `(${fromName})` : d.versatile?.skills?.includes(s) ? '(Skilled)' : '',
-      })), `${R('skills', 'Skills')}: pick ${c.skillChoices.n}`);
-      if (d.cls === 'rogue') {
-        const prof = [...proficient()];
-        h += pickList('expertise', prof.map((s) => chip('expertise', s, SKILL_NAMES[s])), `${R('expertise', 'Expertise')}: double your Proficiency Bonus for two skills`);
-      }
-      if (d.cls === 'cleric') {
-        h += `<div class="ph sep"><b>${R('divine-order', 'Divine Order')}</b></div>${Object.entries(ORDERS).map(([k, o]) => card({ on: d.order === k, title: o.name, body: `<span>${esc(o.text)}</span>`, attr: `data-set="order=${k}"` })).join('')}`;
-      }
-      if (d.cls === 'fighter') {
-        h += `<div class="ph sep"><b>${R('fighting-style', 'Fighting Style')}</b></div>${Object.entries(FIGHTING_STYLES).map(([k, f]) => card({ on: d.style === k, title: f.name, body: `<span>${esc(f.text)}</span>`, attr: `data-set="style=${k}"` })).join('')}`;
-      }
-      if (c.kits.length > 1 || d.cls === 'wizard' || d.cls === 'rogue') {
-        h += `<div class="ph sep"><b>Starting equipment</b></div>${c.kits.map((k) => {
-          const K = KITS[d.cls][k];
-          const off = K.needs && K.needs !== d.order;
-          return card({ on: d.kit === k, title: K.name, body: `<span>${esc(K.text)}</span>`, attr: `data-set="kit=${k}"`, off });
-        }).join('')}`;
-      }
-      if (c.masteryCount) {
-        const carried = [...new Set(KITS[d.cls][d.kit].weapons)];
-        if (carried.length > c.masteryCount) {
-          h += pickList('masteries', carried.map((w) => chip('masteries', w, WEAPONS[w].name, { note: `(${MASTERIES[WEAPONS[w].mastery].name})` })), `${R('weapon-mastery', 'Weapon Mastery')}: pick ${c.masteryCount}`);
-        } else {
-          h += `<p class="note">${R('weapon-mastery', 'Weapon Mastery')}: you can use the mastery of all ${carried.length} of your weapons (${carried.map((w) => `${WEAPONS[w].name}: ${MASTERIES[WEAPONS[w].mastery].name}`).join(', ')}).</p>`;
-        }
-      }
-      if (d.cls === 'wizard' && level >= 2) h += scholarPick();
-      return h;
-    },
+    options: () => choicesView(null),
+    levelopts: () => `<p class="lead">Level ${level} brings new choices for your ${esc(C().name)}.</p>${choicesView(new Set(levelChoices(d.cls, level)))}`,
 
     spells: () => {
       const c = C();
       const n = counts();
       const list = SPELL_LISTS[d.cls];
-      const top = maxSpellLevel(level);
+      const top = maxSpellLevel(level, d.cls);
       const leveled = Object.entries(list).filter(([lv]) => +lv >= 1 && +lv <= top).flatMap(([, xs]) => xs);
       const fromSpecies = speciesCantrips(d.species, d.lineage);
+      const fromClass = alwaysCantrips(d.cls, level, d.land);
+      const always = alwaysPrepared(d.cls, level, d.land);
+      const dom = domainSpells(d.cls, level, d.land);
       const miC = [...(d.bgFeat?.cantrips || []), ...(d.versatile?.cantrips || [])];
+      const change = c.spellcasting.change;
+      const slots = R('spell-slots', 'spell slots');
       let h = d.cls === 'wizard'
-        ? `<p class="lead">At level ${level} a Wizard knows ${n.cantrips} ${R('cantrips', 'cantrips')}, has ${n.book} spells in a spellbook, and prepares ${n.prepared} of them. Prepared spells are the ones you can cast with your ${R('spell-slots', 'spell slots')}.</p>`
-        : `<p class="lead">At level ${level} a Cleric knows ${n.cantrips} ${R('cantrips', 'cantrips')} and prepares ${n.prepared} spells from the whole Cleric list. Prepared spells are the ones you can cast with your ${R('spell-slots', 'spell slots')}.</p>`;
+        ? `<p class="lead">At level ${level} a Wizard knows ${n.cantrips} ${R('cantrips', 'cantrips')}, has ${n.book} spells in a spellbook, and prepares ${n.prepared} of them. Prepared spells are the ones you can cast with your ${slots}.</p>`
+        : `<p class="lead">At level ${level} a ${esc(c.name)} ${n.cantrips ? `knows ${n.cantrips} ${R('cantrips', 'cantrips')} and ` : ''}prepares ${n.prepared} spell${n.prepared === 1 ? '' : 's'} from the ${esc(c.name)} list. Prepared spells are the ones you can cast with your ${slots}.</p>`;
       if (mode === 'levelup' && d.cls === 'wizard' && level >= 2) h += scholarPick();
-      // Spells from the species and feats, for reference.
+      // Spells from the species, feats and features, for reference.
       let hero = null;
       try { hero = buildHero(d, { level }); } catch { /* shown on Next */ }
-      const extra = hero ? Object.entries(hero.casting?.known || {}).filter(([, k]) => k.source !== c.name && k.source !== 'Life Domain') : [];
+      const known = hero?.casting?.known || {};
+      const extra = Object.entries(known).filter(([sid, k]) => k.source !== c.name && !always.includes(sid));
       if (extra.length) h += `<p class="note">You also know ${extra.map(([sid, k]) => `${esc(SPELLS[sid].name)} (${esc(k.source)})`).join(', ')}. Those don't count toward the numbers here.</p>`;
+      const bySource = {};
+      for (const sid of always) (bySource[known[sid]?.source || c.name] ||= []).push(SPELLS[sid].name);
+      for (const [src, names] of Object.entries(bySource)) h += `<p class="note">${esc(src)}: ${esc(andList(names))} ${names.length === 1 ? 'is' : 'are'} always prepared and ${names.length === 1 ? "doesn't" : "don't"} count.</p>`;
 
-      if (mode !== 'rest') {
+      if (mode !== 'rest' && n.cantrips) {
         h += spellList('cantrips', list[0], `Cantrips: pick ${n.cantrips}`, (sid) => (fromSpecies.includes(sid)
-          ? { off: true, note: 'from your species' } : miC.includes(sid) ? { note: 'Magic Initiate now' } : {}));
+          ? { off: true, note: 'from your species' } : fromClass.includes(sid) ? { off: true, note: 'always known' } : miC.includes(sid) ? { note: 'Magic Initiate now' } : {}));
         if (mode === 'levelup') h += '<p class="note">When you gain a level, you can swap one cantrip for another.</p>';
       }
+      const mine = (sid) => (fixed('prepared', sid) ? { off: true, note: 'yours' } : {});
       if (d.cls === 'wizard') {
         if (mode !== 'rest') {
           const room = top >= 2 ? ` Up to ${bookLimit(2, level)} can be level 2.` : '';
@@ -456,11 +449,17 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
         }
         h += spellList('prepared', leveled.filter((s) => (d.book || []).includes(s)), `Prepared: pick ${n.prepared} from your book`);
       } else {
-        const dom = domainSpells(d.cls, level);
-        h += spellList('prepared', leveled.filter((s) => !dom.includes(s)), `Prepared: pick ${n.prepared}`);
-        if (dom.length) h += `<p class="note">Life Domain: ${dom.map((s) => esc(SPELLS[s].name)).join(', ')} are always prepared and don't count.</p>`;
+        h += spellList('prepared', leveled.filter((s) => !dom.includes(s)), `Prepared: pick ${n.prepared}`, mine);
       }
-      if (mode === 'new') h += '<p class="note">After every Long Rest you can change which spells are prepared.</p>';
+      const lim = limit('prepared');
+      if (mode === 'levelup' && lim === 0) h += '<p class="note">The spells you already had stay. Pick the new ones this level brings.</p>';
+      else if (mode === 'levelup' && lim === 1) h += `<p class="note">When a ${esc(c.name)} gains a level, you can swap one of your spells for another, and pick the new ones.</p>`;
+      else if (mode === 'rest' && lim === 1) h += `<p class="note">After a Long Rest a ${esc(c.name)} can swap one prepared spell for another.</p>`;
+      if (mode === 'new') {
+        h += `<p class="note">${change === 'any' ? 'After every Long Rest you can change which spells are prepared.'
+          : change === 'one' ? 'After every Long Rest you can swap one prepared spell for another.'
+            : 'Each time you gain a level you can swap one of these spells for another.'}</p>`;
+      }
       return h;
     },
 
@@ -471,6 +470,114 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
         <div class="sheet-inline">${sheetHtml(h)}</div>`;
     },
   };
+
+  // The class's own choices. only: the ones a level-up brings (null: all of them).
+  function choicesView(only) {
+    const c = C();
+    const has = (k) => !only || only.has(k);
+    const bg = BACKGROUNDS[d.background].skills;
+    const fromName = d.species === 'human' ? 'Human' : 'Elf';
+    const lockOf = (path) => (s) => fixed(path, s);
+    let h = '';
+    const carried = [...new Set(KITS[d.cls][d.kit].weapons)];
+    if (!only) {
+      const parts = [];
+      const ex = expertiseCount(d.cls, level);
+      if (ex) parts.push(`${ex} Expertise skill${ex === 1 ? '' : 's'}`);
+      if (d.cls === 'cleric') parts.push('a Divine Order');
+      if (d.cls === 'druid') parts.push('a Primal Order');
+      if (styleAt(d.cls, level)) parts.push('a Fighting Style');
+      if (d.cls === 'druid' && level >= 3) parts.push('a land');
+      if (d.cls === 'ranger' && level >= 3) parts.push("a Hunter's Prey");
+      if (d.cls === 'warlock') parts.push('Eldritch Invocations');
+      if (metamagicCount(d.cls, level)) parts.push('Metamagic');
+      if (c.kits.length > 1) parts.push('starting gear');
+      if (c.masteryCount && carried.length > c.masteryCount) parts.push('weapons to master');
+      const nSk = LISTS.skills.cap();
+      h += `<p class="lead">A ${esc(c.name)} picks ${nSk} skill${nSk === 1 ? '' : 's'} from the class list${parts.length ? `, ${andList(parts)}` : ''}.</p>`;
+    }
+    if (has('skills')) {
+      const cap = LISTS.skills.cap();
+      const lock = lockOf('skills');
+      const fresh = cap - (was?.skills?.length ?? 0);
+      h += pickList('skills', c.skillChoices.from.map((s) => chip('skills', s, SKILL_NAMES[s], {
+        // At a level-up, skills from the species or a feat stay where they are.
+        off: bg.includes(s) || (!!only && (d.speciesSkill === s || !!d.versatile?.skills?.includes(s))), lock: lock(s),
+        note: bg.includes(s) ? '(background)' : d.speciesSkill === s ? `(${fromName})` : d.versatile?.skills?.includes(s) ? '(Skilled)' : '',
+      })), only ? `${R('skills', 'Skills')}: ${fresh} more` : `${R('skills', 'Skills')}: pick ${cap}`);
+      if (only) h += `<p class="note">${d.cls === 'barbarian' ? 'Primal Knowledge: one more skill from the Barbarian list.' : d.cls === 'bard' ? 'College of Lore: three more skills.' : 'More skills.'} The ones you have stay.</p>`;
+    }
+    if (has('expertise') && expertiseCount(d.cls, level)) {
+      const prof = [...proficient()];
+      const lock = lockOf('expertise');
+      const cap = LISTS.expertise.cap();
+      h += pickList('expertise', prof.map((s) => chip('expertise', s, SKILL_NAMES[s], { lock: lock(s) })), `${R('expertise', 'Expertise')}: double your Proficiency Bonus for ${cap === 1 ? 'one skill' : `${cap} skills`}`);
+    }
+    if (!only && d.cls === 'cleric') {
+      h += `<div class="ph sep"><b>${R('divine-order', 'Divine Order')}</b></div>${Object.entries(ORDERS).map(([k, o]) => card({ on: d.order === k, title: o.name, body: `<span>${esc(o.text)}</span>`, attr: `data-set="order=${k}"` })).join('')}`;
+    }
+    if (!only && d.cls === 'druid') {
+      h += `<div class="ph sep"><b>${R('primal-order', 'Primal Order')}</b></div>${Object.entries(DRUID_ORDERS).map(([k, o]) => card({ on: d.order === k, title: o.name, body: `<span>${esc(o.text)}</span>`, attr: `data-set="order=${k}"` })).join('')}`;
+    }
+    if (has('style') && styleAt(d.cls, level)) {
+      h += `<div class="ph sep"><b>${R('fighting-style', 'Fighting Style')}</b></div>${stylesFor(d.cls).map((k) => {
+        const f = FIGHTING_STYLES[k];
+        return card({ on: d.style === k, title: f.name, body: `<span>${esc(f.text)}</span>`, attr: `data-set="style=${k}"` });
+      }).join('')}`;
+      const ws = FIGHTING_STYLES[d.style];
+      if (ws?.list) {
+        const fromSpecies = speciesCantrips(d.species, d.lineage);
+        const miC = [...(d.bgFeat?.cantrips || []), ...(d.versatile?.cantrips || [])];
+        h += pickList('warriorCantrips', SPELL_LISTS[ws.list][0].map((sid) => chip('warriorCantrips', sid, SPELLS[sid].name, {
+          off: fromSpecies.includes(sid) || miC.includes(sid),
+          note: fromSpecies.includes(sid) ? '(from your species)' : miC.includes(sid) ? '(Magic Initiate)' : SPELLS[sid].kind === 'utility' ? '(outside of fights)' : '',
+        })), `${esc(ws.name)}: two ${LIST_NAME[ws.list]} cantrips`);
+      }
+    }
+    if (has('land') && d.cls === 'druid' && level >= 3) {
+      h += `<div class="ph sep"><b>${R('lands-aid', 'Circle of the Land')}: your land</b></div>${Object.entries(LAND_SPELLS).map(([k, l]) => card({
+        on: d.land === k, title: l.name, body: `<span>Always prepared: ${esc(andList(l.spells.map((sid) => SPELLS[sid].name)))}.</span>`, attr: `data-set="land=${k}"`,
+      })).join('')}`;
+    }
+    if (has('prey') && d.cls === 'ranger' && level >= 3) {
+      h += `<div class="ph sep"><b>Hunter's Prey</b></div>${Object.entries(HUNTER_PREY).map(([k, p]) => card({ on: d.prey === k, title: p.name, body: `<span>${esc(p.text)}</span>`, attr: `data-set="prey=${k}"` })).join('')}`;
+    }
+    if (has('invocations') && d.cls === 'warlock') {
+      const eb = (d.cantrips || []).includes('eldritch-blast');
+      const needsEb = ['agonizing-blast', 'repelling-blast', 'eldritch-spear'];
+      h += pickList('invocations', Object.entries(INVOCATIONS).map(([k, x]) => chip('invocations', k, x.name, {
+        off: x.min > level || (needsEb.includes(k) && !eb),
+        note: x.min > level ? `(level ${x.min})` : needsEb.includes(k) && !eb ? '(needs Eldritch Blast)' : '',
+      })), `${R('eldritch-invocations', 'Eldritch Invocations')}: pick ${LISTS.invocations.cap()}`);
+      h += `<div class="ilist">${(d.invocations || []).map((k) => `<p class="note"><b>${esc(INVOCATIONS[k].name)}</b>: ${esc(INVOCATIONS[k].text)}</p>`).join('')}</div>`;
+      if (only) h += '<p class="note">When you gain a level, you can swap one invocation for another.</p>';
+      if ((d.invocations || []).includes('pact-of-the-blade')) {
+        h += `<label class="fld">Pact of the Blade: your pact weapon
+          <select data-sel="pactWeapon">${PACT_WEAPONS.map((w) => `<option value="${w}" ${d.pactWeapon === w ? 'selected' : ''}>${WEAPONS[w].name} (${WEAPONS[w].dice}, ${MASTERIES[WEAPONS[w].mastery].name})</option>`).join('')}</select></label>`;
+      }
+    }
+    if (has('metamagic') && metamagicCount(d.cls, level)) {
+      h += pickList('metamagic', Object.entries(METAMAGIC).map(([k, x]) => chip('metamagic', k, x.name, { note: `(${x.cost} SP)` })), `${R('metamagic', 'Metamagic')}: pick ${LISTS.metamagic.cap()}`);
+      h += `<div class="ilist">${(d.metamagic || []).map((k) => `<p class="note"><b>${esc(METAMAGIC[k].name)}</b>: ${esc(METAMAGIC[k].text)}</p>`).join('')}</div>`;
+      if (only && level > 2) h += '<p class="note">When you gain a level, you can swap one Metamagic option for another.</p>';
+    }
+    if (!only) {
+      h += `<div class="ph sep"><b>Starting equipment</b></div>${c.kits.map((k) => {
+        const K = KITS[d.cls][k];
+        const off = K.needs && K.needs !== d.order;
+        return card({ on: d.kit === k, title: K.name, body: `<span>${esc(K.text)}</span>`, attr: `data-set="kit=${k}"`, off });
+      }).join('')}`;
+      if (c.masteryCount) {
+        if (carried.length > c.masteryCount) {
+          h += pickList('masteries', carried.map((w) => chip('masteries', w, WEAPONS[w].name, { note: `(${MASTERIES[WEAPONS[w].mastery].name})` })), `${R('weapon-mastery', 'Weapon Mastery')}: pick ${c.masteryCount}`);
+        } else {
+          h += `<p class="note">${R('weapon-mastery', 'Weapon Mastery')}: you can use the mastery of all ${carried.length} of your weapons (${carried.map((w) => `${WEAPONS[w].name}: ${MASTERIES[WEAPONS[w].mastery].name}`).join(', ')}).</p>`;
+        }
+      }
+      if (d.cls === 'wizard' && level >= 2) h += scholarPick();
+    }
+    return h;
+  }
 
   function scholarPick() {
     const prof = proficient();
@@ -498,7 +605,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
       ${body}
       ${g ? `<p class="rulebox"><b>${esc(g.title)}.</b> ${esc(g.text)}</p>` : ''}`;
     $('build-back').textContent = step ? 'Back' : 'Cancel';
-    $('build-next').textContent = step < all.length - 1 ? 'Next' : mode === 'new' ? 'Done: this is my hero' : 'Save my spells';
+    $('build-next').textContent = step < all.length - 1 ? 'Next' : mode === 'new' ? 'Done: this is my hero' : mode === 'rest' ? 'Save my spells' : 'Save my choices';
     bind();
   }
 
@@ -564,7 +671,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
       const n = (get(p) || []).length, cap = LISTS[p].cap();
       if (n < cap) return `Pick ${cap - n} more ${LISTS[p].label}${cap - n === 1 ? '' : 's'}.`;
     }
-    if (mode === 'levelup' && was && (d.cantrips || []).filter((s) => !was.cantrips.includes(s)).length > 1) return 'When you gain a level you can swap one cantrip, not more.';
+    if (was) for (const p of shown) if (dropped(p, get(p) || []).length > limit(p)) return swapMsg(p);
     return '';
   }
 

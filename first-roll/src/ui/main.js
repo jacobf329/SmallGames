@@ -6,12 +6,13 @@
 
 import { createRoom } from '../game/room.js';
 import { Host, LocalNet, RtcNet, onlineSupported, normCode } from '../net/online.js';
-import { buildHero, spellList } from '../rules/character.js';
-import { CLASSES, SPELLS, MASTERIES, signed } from '../rules/data.js';
+import { buildHero, spellList, PICK_FIELDS } from '../rules/character.js';
+import { CLASSES, SPELLS, MASTERIES, METAMAGIC, signed } from '../rules/data.js';
 import {
   previewMove, reachableSquares, attackOptions, canAttack, canCast, attackFactors,
   hitChance, hitBonus, saveChance, spellAttack, spellDC, scaled, speedOf, acAgainst,
   spellAim, targetError, pointError, areaSquares, areaTargets, areaLabel, BREATH_AREAS, offhandFor, canTarget,
+  smitePay, metaError, spellDCParts,
 } from '../rules/combat.js';
 import { occupantAt, cheb, lineOfSight, onBoard, W, H } from '../rules/grid.js';
 import { coach } from '../rules/ai.js';
@@ -276,7 +277,7 @@ function openSpells(mode) {
   openBuilder({
     spec: p.spec, playerName: myName(), level: partyLevel(), mode,
     before: mode === 'levelup' ? app.S.story?.levelUp?.find((x) => x.id === app.me)?.was : null,
-    onDone: (clean) => { send({ t: 'levelpick', pick: { cantrips: clean.cantrips, book: clean.book, prepared: clean.prepared, scholar: clean.scholar } }); app.overlay = null; render(); },
+    onDone: (clean) => { send({ t: 'levelpick', pick: Object.fromEntries(PICK_FIELDS.map((k) => [k, clean[k]])) }); app.overlay = null; render(); },
     onCancel: () => { app.overlay = null; render(); },
   });
 }
@@ -473,6 +474,8 @@ function renderPanel(S, b, mine, mt, tip) {
     let text;
     if (b.pending && S.reactor === app.me) text = 'Your Reaction: decide below.';
     else if (b.pending?.kind === 'shield') text = `${esc(b.creatures[b.pending.reactor].name)} is deciding whether to cast <a class="rl" data-rule="shield">Shield</a>…`;
+    else if (b.pending?.kind === 'smite') text = `${esc(b.creatures[b.pending.reactor].name)} is deciding whether to use <a class="rl" data-rule="divine-smite">Divine Smite</a>…`;
+    else if (b.pending?.kind === 'rebuke') text = `${esc(b.creatures[b.pending.reactor].name)} is deciding whether to cast <a class="rl" data-rule="hellish-rebuke">Hellish Rebuke</a>…`;
     else if (b.pending) text = `${esc(b.creatures[b.pending.reactor].name)} is deciding on an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>…`;
     else if (!mine) text = "You're watching. Tap a token to see its sheet.";
     else text = `Waiting for ${esc(b.creatures[b.order[b.idx]]?.name)}… Tap a square to ping it for your party.`;
@@ -489,7 +492,7 @@ function renderPanel(S, b, mine, mt, tip) {
     ${slots ? `<span class="chip"><a data-rule="spell-slots">Slots ${slots}</a></span>` : ''}
     ${me.conc ? `<span class="chip"><a data-rule="concentration">🔮 ${esc(SPELLS[me.conc.spell]?.name || '')}</a></span>` : ''}
     ${(me.conds || []).filter((x) => CONDS[x.id]).map((x) => `<span class="chip bad"><a data-rule="${x.id === 'hidden' ? 'hide' : x.id === 'commanded' ? 'command' : x.id}">${CONDS[x.id]}</a></span>`).join('')}
-    ${me.tempHp ? `<span class="chip"><a data-rule="temp-hp">+${me.tempHp} temp HP</a></span>` : ''}</div>`;
+    ${me.tempHp ? `<span class="chip"><a data-rule="temp-hp">+${me.tempHp} temp HP</a></span>` : ''}${resourceChips(b, me)}</div>`;
   if (tip?.text && !app.target && !app.preview && !app.aim && !app.spells) {
     html += `<div class="coachline">💡 <span>${esc(tip.text)}</span><button class="btn" id="btn-coach">Do it</button></div>`;
   }
@@ -508,6 +511,7 @@ function renderPanel(S, b, mine, mt, tip) {
   const prone = (me.conds || []).some((x) => x.id === 'prone');
   if (prone) extra.push(btn(`Stand up (${Math.floor(speedOf(b, me) / 2)} ft)`, { a: 'stand' }, speedOf(b, me) > 0 && t.moveLeft >= Math.floor(speedOf(b, me) / 2), 'prone'));
   if ((me.conds || []).some((x) => x.id === 'grappled')) extra.push(btn('Escape the grapple', { a: 'escape' }, t.action, 'grappled'));
+  if ((me.conds || []).some((x) => x.id === 'restrained' && x.escape)) extra.push(btn('Break free (Athletics)', { a: 'escape' }, t.action, 'restrained'));
   if (me.secondWind) extra.push(btn(`Second Wind (${me.secondWind.uses})`, { a: 'second-wind' }, t.bonus && me.secondWind.uses, 'second-wind'));
   if (me.actionSurge) extra.push(btn(`Action Surge (${me.actionSurge.uses})`, { a: 'surge' }, me.actionSurge.uses && !t.surged, 'action-surge'));
   if (me.adrenaline) extra.push(btn(`Adrenaline Rush (${me.adrenaline.uses})`, { a: 'adrenaline' }, t.bonus && me.adrenaline.uses, 'adrenaline-rush'));
@@ -517,7 +521,7 @@ function renderPanel(S, b, mine, mt, tip) {
     extra.push(btn('Disengage (bonus)', { a: 'disengage', bonus: true }, t.bonus, 'cunning-action'));
     extra.push(btn('Hide (bonus)', { a: 'hide', bonus: true }, t.bonus, 'cunning-action'));
   }
-  if (me.channel && me.level >= 2) {
+  if (me.channel && me.level >= 2 && me.cls === 'cleric') {
     const undead = Object.values(b.creatures).some((c) => c.side !== me.side && c.creature === 'undead' && c.hp > 0 && cheb(me, c) * 5 <= 30);
     extra.push(btn(`Turn Undead (${me.channel.uses})`, { a: 'turn' }, t.action && !t.magicUsed && me.channel.uses && undead, 'turn-undead'));
     if (me.preserveLife) extra.push(btn(`Preserve Life (${me.channel.uses})`, { a: 'preserve' }, t.action && !t.magicUsed && me.channel.uses, 'preserve-life'));
@@ -530,6 +534,7 @@ function renderPanel(S, b, mine, mt, tip) {
   if (me.giant?.kind === 'cloud') {
     extra.push(`<button class="btn" data-aim='${esc(JSON.stringify({ kind: 'jaunt' }))}' ${me.giant.uses > 0 && t.bonus ? '' : 'disabled'} title="Cloud's Jaunt">Cloud's Jaunt (${me.giant.uses})</button>`);
   }
+  classButtons(b, me, extra, btn);
   html += `${me.casting ? `<div class="btns one"><button class="btn spellsbtn ${app.spells ? 'on' : ''}" id="btn-spells">✨ Spells</button></div>` : ''}<div class="btns">
     <button class="btn" data-act="dash" ${t.action ? '' : 'disabled'}>Dash</button>
     <button class="btn" data-act="disengage" ${t.action ? '' : 'disabled'}>Disengage</button>
@@ -547,6 +552,8 @@ function renderPanel(S, b, mine, mt, tip) {
   if ($('btn-aim-undo')) $('btn-aim-undo').onclick = () => { app.aim.picks.pop(); renderBattle(app.S); };
   if ($('btn-aim-go')) $('btn-aim-go').onclick = () => castAim(b, me);
   for (const el of P.querySelectorAll('[data-aimslot]')) el.onclick = () => { app.aim.slot = +el.dataset.aimslot; trimPicks(b, me); renderBattle(app.S); };
+  for (const el of P.querySelectorAll('[data-aimmeta]')) el.onclick = () => { app.aim.meta = app.aim.meta === el.dataset.aimmeta ? null : el.dataset.aimmeta; trimPicks(b, me); renderBattle(app.S); };
+  for (const el of P.querySelectorAll('[data-aimtype]')) el.onclick = () => { app.aim.toType = el.dataset.aimtype; renderBattle(app.S); };
   if ($('btn-coach')) $('btn-coach').onclick = () => act(tip.intent);
   if ($('btn-move')) $('btn-move').onclick = () => { const e = app.preview.path[app.preview.path.length - 1]; doMove(e.x, e.y); };
   if ($('btn-cancel')) $('btn-cancel').onclick = () => { app.preview = null; renderBattle(app.S); };
@@ -557,7 +564,61 @@ function renderPanel(S, b, mine, mt, tip) {
 }
 
 const CONDS = { prone: 'Prone', restrained: 'Restrained', grappled: 'Grappled', frightened: 'Frightened', poisoned: 'Poisoned',
-  paralyzed: 'Paralyzed', incapacitated: 'Incapacitated', hidden: 'Hidden', commanded: 'Commanded' };
+  paralyzed: 'Paralyzed', incapacitated: 'Incapacitated', hidden: 'Hidden', commanded: 'Commanded', unconscious: 'Unconscious' };
+
+// Uses left of each class resource, as chips beside the Action and slots.
+function resourceChips(b, me) {
+  const out = [];
+  const c = (label, rule, bad = false) => out.push(`<span class="chip ${bad ? 'used' : ''}"><a data-rule="${rule}">${label}</a></span>`);
+  if (me.raging) c('🔥 Raging', 'rage');
+  else if (me.rage) c(`Rage ${me.rage.uses}`, 'rage', !me.rage.uses);
+  if (me.bardic) c(`Inspiration ${me.bardic.uses}`, 'bardic-inspiration', !me.bardic.uses);
+  if (me.bardicDie) c(`🎵 d${me.bardicDie.die}`, 'bardic-inspiration');
+  if (me.shape) c('🐺 Wolf form', 'wild-shape');
+  else if (me.wildShape) c(`Wild Shape ${me.wildShape.uses}`, 'wild-shape', !me.wildShape.uses);
+  if (me.focus) c(`Focus ${me.focus.uses}/${me.focus.max}`, 'monks-focus', !me.focus.uses);
+  if (me.layOnHands) c(`Lay on Hands ${me.layOnHands.uses}`, 'lay-on-hands', !me.layOnHands.uses);
+  if (me.sorcery) c(`Sorcery ${me.sorcery.uses}/${me.sorcery.max}`, 'font-of-magic', !me.sorcery.uses);
+  if (me.innateOn) c('✨ Innate Sorcery', 'innate-sorcery');
+  if (me.sacredOn) c('✨ Sacred Weapon', 'sacred-weapon');
+  const mk = b.effects.find((e) => e.type === 'mark' && e.by === me.id);
+  if (mk) c(`🎯 ${esc(mk.name)}: ${esc(b.creatures[mk.target]?.name || '')}`, mk.spell);
+  return out.join('');
+}
+
+// The buttons for class features that need no target.
+function classButtons(b, me, extra, btn) {
+  const t = b.turn;
+  const aimBtn = (label, a, ok, title) => extra.push(`<button class="btn" data-aim='${esc(JSON.stringify(a))}' ${ok ? '' : 'disabled'} title="${esc(title)}">${esc(label)}</button>`);
+  if (me.rage) extra.push(btn(me.raging ? 'Keep raging' : `Rage (${me.rage.uses})`, { a: 'rage' }, t.bonus && (me.raging || me.rage.uses > 0), 'rage'));
+  if (me.reckless) {
+    const on = b.effects.some((e) => e.type === 'reckless' && e.by === me.id);
+    extra.push(btn(on ? 'Reckless (on)' : 'Reckless Attack', { a: 'reckless' }, !on && !t.rolled && canAttack(t), 'reckless-attack'));
+  }
+  if (me.wildShape) {
+    if (me.shape) extra.push(btn('Leave Wolf form', { a: 'unshape' }, t.bonus, 'wild-shape'));
+    else extra.push(btn(`Wild Shape: Wolf (${me.wildShape.uses})`, { a: 'shape' }, t.bonus && me.wildShape.uses > 0, 'wild-shape'));
+  }
+  if (me.landsAid) aimBtn("Land's Aid", { kind: 'landsaid' }, t.action && !t.magicUsed && me.wildShape?.uses > 0 && !me.shape, "Land's Aid");
+  if (me.focus) {
+    const fp = me.focus.uses > 0;
+    extra.push(btn('Patient Defense', { a: 'patient' }, t.bonus, 'monks-focus'));
+    extra.push(btn('Patient Defense + Dodge (1 Focus)', { a: 'patient', focus: true }, t.bonus && fp, 'monks-focus'));
+    extra.push(btn('Step of the Wind', { a: 'stepwind' }, t.bonus, 'monks-focus'));
+    extra.push(btn('Step of the Wind + Disengage (1 Focus)', { a: 'stepwind', focus: true }, t.bonus && fp, 'monks-focus'));
+  }
+  if (me.sacredWeapon) extra.push(btn(me.sacredOn ? 'Sacred Weapon (on)' : `Sacred Weapon (${me.channel?.uses || 0})`, { a: 'sacred' }, !me.sacredOn && canAttack(t) && me.channel?.uses > 0, 'sacred-weapon'));
+  if (me.innate) extra.push(btn(me.innateOn ? 'Innate Sorcery (on)' : `Innate Sorcery (${me.innate.uses})`, { a: 'innate' }, !me.innateOn && t.bonus && me.innate.uses > 0, 'innate-sorcery'));
+  if (me.sorcery) {
+    const sp = me.sorcery;
+    for (const [lv, sl] of Object.entries(me.casting?.slots || {})) {
+      if (sl.left > 0) extra.push(btn(`Level ${lv} slot → ${lv} Sorcery`, { a: 'font', mode: 'burn', level: +lv }, sp.uses < sp.max, 'font-of-magic'));
+    }
+    extra.push(btn('2 Sorcery → level 1 slot', { a: 'font', level: 1 }, t.bonus && sp.uses >= 2, 'font-of-magic'));
+    if (me.level >= 3) extra.push(btn('3 Sorcery → level 2 slot', { a: 'font', level: 2 }, t.bonus && sp.uses >= 3, 'font-of-magic'));
+  }
+  if (b.effects.some((e) => e.type === 'dbreath' && e.target === me.id)) aimBtn("Dragon's Breath: exhale", { kind: 'exhale' }, t.action && !t.magicUsed, "Dragon's Breath");
+}
 
 // ------------------------------------------------------------ aiming ----
 // Casting works like the 2024 rules: pick a spell, then aim it the way its
@@ -565,9 +626,12 @@ const CONDS = { prone: 'Prone', restrained: 'Restrained', grappled: 'Grappled', 
 function aimOf(a) {
   if (a.kind === 'breath') return { mode: 'area', ...BREATH_AREAS[a.shape], range: 0 };
   if (a.kind === 'jaunt') return { mode: 'point', range: 30 };
-  return spellAim(a.spell, a.slot);
+  if (a.kind === 'landsaid') return { mode: 'area', shape: 'sphere', size: 10, from: 'point', range: 60 };
+  if (a.kind === 'exhale') return { mode: 'area', shape: 'cone', size: 15, from: 'self', range: 0 };
+  return spellAim(a.spell, a.slot, a.meta || null);
 }
-const aimName = (me, a) => (a.kind === 'breath' ? `Breath Weapon (${a.shape === 'line' ? '30-ft Line' : '15-ft Cone'})` : a.kind === 'jaunt' ? "Cloud's Jaunt" : SPELLS[a.spell].name);
+const OTHER_AIMS = { landsaid: { name: "Land's Aid", rule: 'lands-aid', go: 'Use' }, exhale: { name: "Dragon's Breath", rule: 'dragons-breath', go: 'Exhale' } };
+const aimName = (me, a) => (a.kind === 'breath' ? `Breath Weapon (${a.shape === 'line' ? '30-ft Line' : '15-ft Cone'})` : a.kind === 'jaunt' ? "Cloud's Jaunt" : OTHER_AIMS[a.kind]?.name || SPELLS[a.spell].name);
 
 function startAim(b, me, a) {
   const aim = { picks: [], point: null, err: null, ...a };
@@ -636,10 +700,12 @@ function aimTap(b, me, x, y) {
 function aimIntent(a) {
   if (a.kind === 'breath') return a.point ? { a: 'breath', shape: a.shape, x: a.point.x, y: a.point.y } : null;
   if (a.kind === 'jaunt') return a.point ? { a: 'jaunt', x: a.point.x, y: a.point.y } : null;
+  if (OTHER_AIMS[a.kind]) return a.point ? { a: a.kind, x: a.point.x, y: a.point.y } : null;
   const mode = aimOf(a).mode;
-  if (mode === 'point' || mode === 'area') return a.point ? { a: 'cast', spell: a.spell, slot: a.slot, x: a.point.x, y: a.point.y } : null;
+  const extra = { ...(a.meta ? { meta: a.meta } : {}), ...(a.toType ? { toType: a.toType } : {}) };
+  if (mode === 'point' || mode === 'area') return a.point ? { a: 'cast', spell: a.spell, slot: a.slot, x: a.point.x, y: a.point.y, ...extra } : null;
   if (!a.picks.length) return null;
-  return { a: 'cast', spell: a.spell, slot: a.slot, target: a.picks[0], targets: [...a.picks] };
+  return { a: 'cast', spell: a.spell, slot: a.slot, target: a.picks[0], targets: [...a.picks], ...extra };
 }
 function castAim() {
   const i = aimIntent(app.aim);
@@ -721,6 +787,16 @@ function aimCard(b, me, a) {
       }
       if (slotBtns) slotBtns = `<div class="opt slots">${slotBtns}</div>`;
     }
+    // Metamagic options that change this spell, and the damage type where it's a choice.
+    let mm = '';
+    for (const m of me.metamagic || []) {
+      const e = metaError(b, me, a.spell, m);
+      if (e && METAMAGIC[m] && /doesn't change/.test(e)) continue;
+      mm += `<button class="btn small up ${a.meta === m ? 'on' : ''}" data-aimmeta="${m}" ${e ? 'disabled' : ''} title="${esc(e || METAMAGIC[m].text)}">${esc(METAMAGIC[m].name)} (${METAMAGIC[m].cost})</button>`;
+    }
+    if (mm) slotBtns += `<div class="opt slots"><a class="rl" data-rule="metamagic">Metamagic</a> ${mm}</div>`;
+    const types = sp.pickType || sp.buff === 'dbreath' ? sp.types : a.meta === 'transmuted' ? ['Acid', 'Cold', 'Fire', 'Lightning', 'Poison', 'Thunder'] : null;
+    if (types) slotBtns += `<div class="opt slots">${types.map((ty) => `<button class="btn small up ${(a.toType || (sp.buff === 'dbreath' ? 'Fire' : '')) === ty ? 'on' : ''}" data-aimtype="${ty}">${ty}</button>`).join('')}</div>`;
   }
   const how = {
     creature: aim.who === 'dying' ? 'Tap a dying creature in range.' : 'Tap a creature in range (highlighted). Tap it again, or Cast.',
@@ -747,16 +823,20 @@ function aimCard(b, me, a) {
   if (aim.mode === 'area' && a.point) {
     const hit = areaTargets(b, me, aim, a.point.x, a.point.y);
     const pals = hit.filter((c) => !hostile(me, c));
-    const dc = a.kind === 'breath' ? me.breath.dc.reduce((s2, p) => s2 + p.value, 0) : spellDC(me, a.spell);
-    const ab = a.kind === 'breath' ? 'dex' : sp.save;
-    const dmg = a.kind === 'breath' ? `${me.breath.dice} ${me.breath.type}, half on a save` : sp.effect ? 'outlined in light: attacks against it have Advantage' : `${scaled(a.spell, a.slot).dice} ${sp.type}${sp.half ? ', half on a save' : ''}${sp.push ? `, pushed ${sp.push} ft on a failure` : ''}`;
+    const db = a.kind === 'exhale' ? b.effects.find((e) => e.type === 'dbreath' && e.target === me.id) : null;
+    const sum = (parts) => parts.reduce((s2, p) => s2 + p.value, 0);
+    const dc = a.kind === 'breath' ? sum(me.breath.dc) : a.kind === 'landsaid' ? sum(me.casting.stats.wis.dc) : db ? sum(db.dcParts) : spellDC(me, a.spell);
+    const ab = a.kind === 'breath' || db ? 'dex' : a.kind === 'landsaid' ? 'con' : sp.save;
+    const dmg = a.kind === 'breath' ? `${me.breath.dice} ${me.breath.type}, half on a save` : a.kind === 'landsaid' ? '2d6 Necrotic to enemies, half on a save; one friend inside heals 2d6'
+      : db ? `${db.dice} ${db.dmgType}, half on a save`
+      : sp.cond === 'sleep' ? 'enemies only: Incapacitated, then Unconscious after a second failed save' : sp.cond ? `${R0('restrained', 'Restrained')} on a failure` : sp.effect ? 'outlined in light: attacks against it have Advantage' : `${scaled(a.spell, a.slot).dice} ${sp.type || 'damage'}${sp.half ? ', half on a save' : ''}${sp.push ? `, pushed ${sp.push} ft on a failure` : ''}`;
     body += `<div class="why">${hit.length ? `Catches ${hit.map((c) => esc(c.name)).join(', ')}` : 'Catches nobody there yet'}${pals.length ? ` <b class="bad">(including ${pals.map((c) => (c === me ? 'you' : esc(c.name))).join(' and ')}!)</b>` : ''} · DC ${dc} ${ab.toUpperCase()} save, ${dmg}</div>`;
   }
   const ready = !!aimIntent(a);
   const undo = aim.mode === 'split' && a.picks.length ? '<button class="btn small ghost" id="btn-aim-undo">Undo</button>' : '';
-  const rule = a.kind === 'breath' ? 'breath-weapon' : a.kind === 'jaunt' ? 'giant-ancestry' : a.spell;
+  const rule = a.kind === 'breath' ? 'breath-weapon' : a.kind === 'jaunt' ? 'giant-ancestry' : OTHER_AIMS[a.kind]?.rule || a.spell;
   return `<div class="target aiming"><div class="th"><b><a class="rl" data-rule="${rule}">${esc(name)}</a></b><span>${tag} <button class="btn small ghost" id="btn-aim-x">✕</button></span></div>
-    ${slotBtns}${body}<div class="opt"><button class="btn primary" id="btn-aim-go" ${ready ? '' : 'disabled'}>${a.kind === 'breath' ? 'Breathe' : a.kind === 'jaunt' ? 'Teleport' : 'Cast'}</button>${undo}</div></div>`;
+    ${slotBtns}${body}<div class="opt"><button class="btn primary" id="btn-aim-go" ${ready ? '' : 'disabled'}>${a.kind === 'breath' ? 'Breathe' : a.kind === 'jaunt' ? 'Teleport' : OTHER_AIMS[a.kind]?.go || 'Cast'}</button>${undo}</div></div>`;
 }
 
 const reasons = (o) => {
@@ -842,6 +922,11 @@ function targetCard(b, me, T) {
         const what = sp.kind === 'armor' ? `AC 13 + DEX for ${esc(T.name)}` : sp.kind === 'stride' ? `+10 ft Speed for ${esc(T.name)}` : `${sp.dice} + ${scaled(sp.id, c.slot).flat} Temporary Hit Points`;
         if (sp.kind === 'armor' && T.armorId !== 'none') continue;
         rows += row(sp.name, sp.kind === 'temp' ? { a: 'cast', spell: sp.id } : { a: 'cast', spell: sp.id, target: T.id, targets: [T.id] }, !e && c.ok, e ? esc(e) : c.ok ? `${what} · ${tag}` : esc(c.error));
+      } else if (sp.kind === 'buff' && T.hp > 0 && NEW_BUFFS[sp.buff]) {
+        const aim = spellAim(sp.id, c.slot);
+        const e = targetError(b, me, T, sp.id, aim);
+        rows += `<div class="opt"><span class="ob"><button class="btn primary" data-aim='${esc(JSON.stringify({ kind: 'spell', spell: sp.id, picks: [T.id] }))}' ${!e && c.ok ? '' : 'disabled'}>${esc(sp.name)}</button></span>
+          <span class="why">${e ? esc(e) : c.ok ? `${NEW_BUFFS[sp.buff]} · ${tag}` : esc(c.error)}</span></div>`;
       } else if (sp.kind === 'buff' && T.hp > 0) {
         const ok = inRange(sp.range);
         if (sp.buff === 'faith') {
@@ -855,7 +940,8 @@ function targetCard(b, me, T) {
         }
       }
     }
-    if (me.channel && me.level >= 2 && T.hp < T.hpMax && !T.dead) {
+    rows += friendFeatures(b, me, T, { self, near, inRange });
+    if (me.channel && me.level >= 2 && me.cls === 'cleric' && T.hp < T.hpMax && !T.dead) {
       const ok = inRange(30) && t.action && !t.magicUsed && me.channel.uses > 0;
       rows += row(`Divine Spark (${me.channel.uses})`, { a: 'spark', target: T.id }, ok,
         `${R0('divine-spark', 'Channel Divinity')}: heals 1d8 ${signed(me.mods.wis)}${inRange(30) ? '' : ' (out of range: 30 ft)'}`, false);
@@ -890,6 +976,15 @@ function targetCard(b, me, T) {
         can.ok ? `${R0('light', 'Light')} weapon extra attack${off.nick ? ` (${R0('mastery-nick', 'Nick')}: part of the Attack action)` : ', a <b>Bonus Action</b>'} · ${off.atk.dice}${flat ? signed(flat) : ''} ${off.atk.type}${me.twf ? ` (${R0('two-weapon-fighting', 'Two-Weapon Fighting')})` : ', no ability modifier to damage'}` : esc(can.why), false);
     }
     for (const sp of spellList(me)) {
+      if (sp.kind === 'mark' || sp.kind === 'bane') {
+        const { c, tag } = spellCost(b, me, sp.id);
+        const e = targetError(b, me, T, sp.id, spellAim(sp.id, c.slot));
+        const what = sp.kind === 'mark' ? `+${sp.dice} ${sp.type} each time you hit it` : `DC ${spellDC(me, sp.id)} CHA save or −1d4 on its attack rolls and saves (tap to add more targets)`;
+        const a = sp.kind === 'mark' ? null : { kind: 'spell', spell: sp.id, picks: [T.id] };
+        rows += a ? `<div class="opt"><span class="ob"><button class="btn primary" data-aim='${esc(JSON.stringify(a))}' ${!e && c.ok ? '' : 'disabled'}>${esc(sp.name)}</button></span><span class="why">${e ? esc(e) : c.ok ? `${what} · ${tag}` : esc(c.error)}</span></div>`
+          : row(sp.name, { a: 'cast', spell: sp.id, target: T.id }, !e && c.ok, e ? esc(e) : c.ok ? `${what} · ${tag}` : esc(c.error));
+        continue;
+      }
       if (!['attack', 'save', 'missile', 'rays', 'area', 'command', 'hold', 'spiritual'].includes(sp.kind)) continue;
       const { c, tag } = spellCost(b, me, sp.id);
       if (sp.kind === 'area') {
@@ -935,7 +1030,8 @@ function targetCard(b, me, T) {
           <span class="why"><a class="rl" data-rule="breath-weapon">Replaces an attack</a>: ${shape === 'line' ? '30-ft Line' : '15-ft Cone'} toward ${esc(T.name)} catches ${hit.map((x) => esc(x.name)).join(', ') || 'nobody yet'}${pals.length ? ' <b class="bad">(including your ally!)</b>' : ''}</span></div>`;
       }
     }
-    if (me.channel && me.level >= 2) {
+    rows += foeFeatures(b, me, T, { inRange });
+    if (me.channel && me.level >= 2 && me.cls === 'cleric') {
       const ok = inRange(30) && t.action && !t.magicUsed && me.channel.uses > 0;
       const dc = spellDC(me, Object.keys(me.casting?.known || {})[0]);
       rows += row(`Divine Spark (${me.channel.uses})`, { a: 'spark', target: T.id }, ok,
@@ -955,6 +1051,62 @@ function targetCard(b, me, T) {
   return `<div class="target ${T.side === me.side ? 'ally' : ''}"><div class="th"><b>${T.emoji} ${esc(T.name)}</b>
     <span>AC ${T.ac} · HP ${T.hp}/${T.hpMax}${tc ? ` · <span class="bad">${esc(tc)}</span>` : ''}${T.side !== me.side || !self ? ' <button class="btn small ghost" id="btn-tinfo2">ⓘ</button>' : ''}<button class="btn small ghost" id="btn-tx">✕</button></span></div>${rows}</div>`;
 }
+const NEW_BUFFS = {
+  heroism: "Immune to Frightened, and Temporary Hit Points equal to your modifier each turn",
+  pfe: 'Aberrations, Celestials, Elementals, Fey, Fiends and Undead have Disadvantage to hit them',
+  bark: 'Their AC can\'t be lower than 17',
+  dbreath: 'They can exhale a 15-ft Cone as a Magic action (pick the type)',
+};
+
+// Class features aimed at a friend (or yourself).
+function friendFeatures(b, me, T, { self, near, inRange }) {
+  const t = b.turn;
+  let rows = '';
+  if (me.layOnHands && !T.dead) {
+    const pool = me.layOnHands.uses;
+    const reach = self || near;
+    const need = T.hpMax - T.hp;
+    if (need > 0) {
+      const amt = Math.min(pool, need);
+      const more = amt > 5 && T.hp > 0 ? `<button class="btn small" ${intentAttr({ a: 'lay', target: T.id, amount: 5 })} ${reach && t.bonus ? '' : 'disabled'}>Just 5</button>` : T.hp <= 0 && amt > 1 ? `<button class="btn small" ${intentAttr({ a: 'lay', target: T.id, amount: 1 })} ${reach && t.bonus ? '' : 'disabled'}>Just 1</button>` : '';
+      rows += row(`Lay on Hands: ${amt} HP`, { a: 'lay', target: T.id, amount: amt }, reach && t.bonus && pool > 0,
+        !reach ? 'Touch: move next to them first.' : `${R0('lay-on-hands', 'Bonus Action')}: from your pool of ${pool}`, true, more);
+    }
+    if ((T.conds || []).some((x) => x.id === 'poisoned')) rows += row('Lay on Hands: end Poisoned', { a: 'lay', target: T.id, cure: true }, reach && t.bonus && pool >= 5, `${R0('lay-on-hands', 'Bonus Action')}: costs 5 from your pool`, false);
+  }
+  if (me.bardic && !self && T.hp > 0) {
+    const ok = t.bonus && me.bardic.uses > 0 && inRange(60) && !T.bardicDie;
+    rows += row(`Bardic Inspiration (${me.bardic.uses})`, { a: 'inspire', target: T.id }, ok,
+      T.bardicDie ? `${esc(T.name)} already has a die.` : `${R0('bardic-inspiration', 'Bonus Action')}: ${esc(T.name)} gets a d${me.bardic.die} to add when a D20 Test falls short${inRange(60) ? '' : ' (out of range: 60 ft)'}`, false);
+  }
+  return rows;
+}
+
+// Class features aimed at an enemy.
+function foeFeatures(b, me, T, { inRange }) {
+  const t = b.turn;
+  let rows = '';
+  const fist = me.martialDie && me.attacks.find((a) => a.id === 'unarmed');
+  if (fist) {
+    const o = attackOptions(b, me, T).find((x) => x.atk.id === 'unarmed');
+    const why = o?.ok ? `${Math.round(o.p * 100)}% to hit · ${o.atk.dice}${signed(o.atk.dmgFlat.reduce((s2, x) => s2 + x.value, 0))} ${o.atk.type}` : esc(o?.why || 'Move next to it first.');
+    rows += row('Unarmed Strike (Bonus Action)', { a: 'martial', target: T.id }, !!o?.ok && t.bonus, `${R0('martial-arts', 'Martial Arts')}: ${why}`, false);
+    if (me.focus) {
+      const ok = !!o?.ok && t.bonus && me.focus.uses > 0;
+      const techs = me.openHand ? ['push', 'addle'].map((k) => `<button class="btn small" ${intentAttr({ a: 'flurry', target: T.id, tech: k })} ${ok ? '' : 'disabled'}>${k === 'push' ? 'Push' : 'Addle'}</button>`).join('') : '';
+      rows += row(me.openHand ? 'Flurry: Topple' : 'Flurry of Blows', { a: 'flurry', target: T.id, ...(me.openHand ? { tech: 'topple' } : {}) }, ok,
+        `${R0('monks-focus', '1 Focus Point')}: two Unarmed Strikes as a Bonus Action${me.openHand ? `, each hit with ${R0('open-hand-technique', 'Open Hand Technique')}` : ''}`, false, techs);
+    }
+  }
+  const mk = b.effects.find((e) => e.type === 'mark' && e.by === me.id);
+  if (mk && mk.target !== T.id) {
+    const old = b.creatures[mk.target];
+    const free = !old || old.dead || old.hp <= 0;
+    rows += row(`Move ${mk.name} here`, { a: 'remark', target: T.id }, free && t.bonus && inRange(90), free ? `${R0(mk.spell, 'Bonus Action')}: its creature is down` : `Only after ${esc(old.name)} drops to 0 HP.`, false);
+  }
+  return rows;
+}
+
 const R0 = (rule, label) => (GLOSSARY[rule] ? `<a class="rl" data-rule="${rule}">${label}</a>` : label);
 const scaledDice = (b, me) => b.effects.find((e) => e.type === 'spiritual' && e.by === me.id)?.dice || '1d8';
 document.addEventListener('click', (e) => { if (e.target.id === 'btn-tinfo2' && app.target) openSheet(sheetHtml(app.S.battle.creatures[app.target])); });
@@ -991,6 +1143,27 @@ function renderReact(S, b) {
       for +5 AC until your next turn? It uses a spell slot, and ${saves ? '<b class="good">this attack would miss</b>' : '<b class="bad">this attack still hits</b> (but later ones are harder)'}.</p>
       <div class="row"><button class="btn primary" id="btn-react-yes">Cast Shield</button><button class="btn" id="btn-react-no">Take the hit</button></div>
       <div class="timer" id="react-timer"></div>`;
+  } else if (b.pending.kind === 'smite') {
+    const T = b.creatures[b.pending.target];
+    const k = R.casting.known['divine-smite'];
+    const opts = [];
+    if (k.free > 0) opts.push({ label: 'Smite (free use)', slot: 0, dice: 2 });
+    for (const lv of Object.keys(R.casting.slots || {}).map(Number).sort((p, q) => p - q)) {
+      const pay = smitePay(b, R, lv);
+      if (pay?.pay === 'slot' && pay.slot === lv && !(lv === 1 && k.free > 0)) opts.push({ label: `Level ${lv} slot`, slot: lv, dice: 1 + lv });
+    }
+    const extra = ['fiend', 'undead'].includes(T.creature) ? ` +1d8 because ${esc(T.name)} is ${T.creature === 'fiend' ? 'a Fiend' : 'Undead'}` : '';
+    el.innerHTML = `<h3>⚡ Divine Smite?</h3>
+      <p>You hit ${esc(T.name)}${b.pending.crit ? ' with a <b class="good">Critical Hit</b> (the smite dice are doubled)' : ''}. <a class="rl" data-rule="divine-smite">Divine Smite</a> adds Radiant damage: 2d8, +1d8 for each slot level above 1${extra}. It uses your Bonus Action.</p>
+      <div class="row">${opts.map((o, i) => `<button class="btn ${i ? '' : 'primary'}" data-smite="${o.slot}">${esc(o.label)}: ${o.dice}d8</button>`).join('')}<button class="btn" id="btn-react-no">No smite</button></div>
+      <div class="timer" id="react-timer"></div>`;
+    for (const x of el.querySelectorAll('[data-smite]')) x.onclick = () => { send({ t: 'react', yes: true, slot: +x.dataset.smite }); el.classList.add('hidden'); };
+  } else if (b.pending.kind === 'rebuke') {
+    const A = b.creatures[b.pending.attacker];
+    el.innerHTML = `<h3>⚡ Reaction!</h3>
+      <p>${esc(A.name)} just hurt you. Cast <a class="rl" data-rule="hellish-rebuke">Hellish Rebuke</a> at it? DC ${spellDC(R, 'hellish-rebuke')} Dexterity save, 2d10 Fire (half on a save). It uses your Reaction and a spell slot.</p>
+      <div class="row"><button class="btn primary" id="btn-react-yes">Cast Hellish Rebuke</button><button class="btn" id="btn-react-no">Let it go</button></div>
+      <div class="timer" id="react-timer"></div>`;
   } else {
     const M = b.creatures[b.pending.mover];
     const opt = attackOptions(b, R, M).filter((o) => o.atk.kind === 'melee').sort((p, q) => q.expected - p.expected)[0];
@@ -1002,7 +1175,7 @@ function renderReact(S, b) {
   }
   el.classList.remove('hidden');
   navigator.vibrate?.([30, 40, 30]);
-  $('btn-react-yes').onclick = () => { send({ t: 'react', yes: true }); el.classList.add('hidden'); };
+  if ($('btn-react-yes')) $('btn-react-yes').onclick = () => { send({ t: 'react', yes: true }); el.classList.add('hidden'); };
   $('btn-react-no').onclick = () => { send({ t: 'react', yes: false }); el.classList.add('hidden'); };
   const total = S.reactIn || 1;
   const tick = () => {

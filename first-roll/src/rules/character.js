@@ -66,13 +66,47 @@ export const pointCost = (scores) => ABILITIES.reduce((s, a) => s + (POINT_COST[
 export const rollTotal = (r) => [...r].sort((x, y) => y - x).slice(0, 3).reduce((s, v) => s + v, 0);
 // A class's spell slot table (full, half or pact), and the highest spell level it can cast.
 export const slotTable = (cls) => SLOT_TABLES[CLASSES[cls]?.spellcasting?.slots || 'full'];
-export const maxSpellLevel = (level, cls = 'wizard') => Math.max(...Object.keys(slotTable(cls)[level]).map(Number));
+export function maxSpellLevel(level, cls = 'wizard') { return Math.max(...Object.keys(slotTable(cls)[level]).map(Number)); }
 // Extra skills a class gains later: Primal Knowledge (Barbarian 3), Bonus Proficiencies (College of Lore).
 export const extraSkills = (cls, level) => (level >= 3 ? { barbarian: 1, bard: 3 }[cls] || 0 : 0);
 // How many Expertise skills a class has at this level.
 export const expertiseCount = (cls, level) => ({ rogue: 2, bard: level >= 2 ? 2 : 0, ranger: level >= 2 ? 1 : 0 }[cls] || 0);
 export const styleAt = (cls, level) => STYLE_LEVEL[cls] != null && level >= STYLE_LEVEL[cls];
 export const metamagicCount = (cls, level) => (cls === 'sorcerer' && level >= 2 ? 2 : 0);
+
+// What a hero picks on reaching this level, beyond spells: more skills or
+// Expertise, a Fighting Style, a land or prey, invocations and Metamagic.
+export function levelChoices(cls, level) {
+  const out = [];
+  if (extraSkills(cls, level) > extraSkills(cls, level - 1)) out.push('skills');
+  if (expertiseCount(cls, level) > expertiseCount(cls, level - 1)) out.push('expertise');
+  if (styleAt(cls, level) && !styleAt(cls, level - 1)) out.push('style');
+  if (cls === 'druid' && level === 3) out.push('land');
+  if (cls === 'ranger' && level === 3) out.push('prey');
+  if (cls === 'warlock' && level >= 2) out.push('invocations');
+  if (metamagicCount(cls, level)) out.push('metamagic');
+  return out;
+}
+// How many earlier picks in a list can be swapped out at a level-up ('level')
+// or after a Long Rest ('rest'). Cantrips, invocations and Metamagic: one per
+// level. Prepared spells: any (Cleric, Druid, Wizard), one after a Long Rest
+// (Paladin, Ranger) or one per level (Bard, Sorcerer, Warlock).
+export function swapLimit(cls, when, path) {
+  const ch = CLASSES[cls].spellcasting?.change;
+  if (when === 'level') {
+    if (path === 'prepared') return ch === 'any' ? Infinity : ch === 'level' ? 1 : 0;
+    return { cantrips: 1, invocations: 1, metamagic: 1, skills: 0, expertise: 0, book: 0 }[path] ?? Infinity;
+  }
+  if (path === 'prepared') return ch === 'any' ? Infinity : ch === 'one' ? 1 : 0;
+  return 0;
+}
+// Earlier picks a list no longer has (spells that are now always prepared don't count).
+export function droppedPicks(cls, level, land, was = [], now = []) {
+  const always = new Set(alwaysPrepared(cls, level, land));
+  return was.filter((x) => !now.includes(x) && !always.has(x));
+}
+// The fields a level-up or Long Rest screen can change.
+export const PICK_FIELDS = ['cantrips', 'book', 'prepared', 'scholar', 'skills', 'expertise', 'style', 'warriorCantrips', 'land', 'prey', 'invocations', 'pactWeapon', 'metamagic'];
 
 // Pick n from `want` (in order) that pass ok(), then fill from `fill`.
 function pickN(n, want, fill, ok) {
