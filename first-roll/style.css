@@ -247,6 +247,32 @@ select { width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 12px; 
 .seg button.on { background: var(--gold); color: #1b1205; }
 .seg.wide { display: flex; margin: 8px 0; }
 .seg.wide button { flex: 1; }
+/* builder: pick-n lists, spells, scores */
+.pick.off { opacity: .45; cursor: default; }
+.pick.spell { padding: 10px 12px; margin: 6px 0; }
+.pick.spell .pt b { font-size: 15px; }
+.pick .tag { font-size: 11px; font-weight: 700; color: var(--gold); }
+.picklist { margin: 12px 0; }
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 0 6px; font-size: 14px; }
+.ph.sep { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 16px; }
+.ph .count { font-size: 12px; font-weight: 800; color: var(--mute); white-space: nowrap; }
+.ph .count.good { color: var(--good); }
+.togs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tog { border: 2px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 7px 12px; font: 700 13px/1.2 inherit; font-family: inherit; cursor: pointer; }
+.tog.on { border-color: var(--gold); background: #2b2338; }
+.tog.off { opacity: .45; cursor: default; }
+.lvh { color: var(--mute); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; margin: 10px 0 2px; }
+.subpick { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 4px; }
+.rolls { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.roll { display: inline-flex; gap: 3px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; font-size: 13px; }
+.roll i { font-style: normal; width: 16px; text-align: center; }
+.roll i.drop { color: var(--mute); text-decoration: line-through; }
+.roll b { margin-left: 4px; color: var(--gold); }
+.pbleft { font-size: 14px; margin: 6px 0; }
+.pbleft b { font-size: 20px; color: var(--gold); }
+.pbleft b.good { color: var(--good); }
+.srow .pb { display: inline-flex; align-items: center; gap: 8px; }
+.srow .pb b { width: 22px; text-align: center; font-size: 16px; }
 .sheet-inline { background: var(--bg2); border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
 .sheet-inline h3 { margin-top: 0; }
 .skills { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }

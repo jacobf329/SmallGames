@@ -271,6 +271,14 @@ between fights; choices that set flags (a back door you found, cultists you
 talked out of it); the Rules book; a per-player tips toggle; the host's turn
 timer.
 
+After the first playtest (Nov 8): the builder makes every 2024 choice (Origin
+feats including the Human's Versatile feat, point buy and rolled scores,
+lineages, skills, gear, Fighting Style, Mastery, Divine Order, Magic Initiate),
+players choose their own cantrips and spells at creation, at each level-up and
+after a Long Rest, and spells aim the way the rules say (self, ally, creature,
+split, point, or an area placed on any square with a preview). Weapon Mastery
+Nick, Graze, Slow and Topple and the Light weapon's extra attack now work too.
+
 Moved to Phase 3:
 
 - **"Use my own dice"**: typing in a physical roll instead of the app rolling.
@@ -278,8 +286,8 @@ Moved to Phase 3:
 - **A glossary that fills up as chapters unlock terms**, with links back to
   where each rule first came up. Phase 2 ships the whole Rules book at once.
 - **Grappling by heroes** (monsters can grapple, heroes can only escape),
-  the Search, Study, Influence and Utilize actions in fights, Topple and Nick
-  masteries, rituals, and one more subclass per class.
+  the Search, Study, Influence and Utilize actions in fights, rituals, and one
+  more subclass per class.
 - **A Skirmish mode** of random fights, as already planned.
 
 A "session" is one focused build conversation like the ones that made Turbo

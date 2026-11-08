@@ -93,7 +93,7 @@ await say({ t: 'timer', s: 60 });
 guard('lobby', () => app.render());
 await say({ t: 'start' });
 
-const counts = { renders: 0, cards: 0, aims: 0, turns: 0, fights: 0, retries: 0, scenes: new Set(), records: new Set() };
+const counts = { picked: new Set(), renders: 0, cards: 0, aims: 0, turns: 0, fights: 0, retries: 0, scenes: new Set(), records: new Set() };
 for (let step = 0; step < 60000 && SCENES[app.S?.story?.scene]?.kind !== 'end'; step++) {
   T += 1000;
   guard('tick', () => app.room.tick());
@@ -111,6 +111,17 @@ for (let step = 0; step < 60000 && SCENES[app.S?.story?.scene]?.kind !== 'end'; 
       if (sc.check.mode === 'single') { await say({ t: 'claim', hero: app.me }); await say({ t: 'roll' }); } else await say({ t: 'roll' });
     } else if (sc.kind === 'save' && !S.story.result) await say({ t: 'roll' });
     else if (sc.kind === 'rest' && sc.rest === 'short' && !S.story.rest.results) { await say({ t: 'hitdie' }); guard('rest', () => app.render()); await say({ t: 'continue' }); }
+    else if ((sc.kind === 'level' || (sc.kind === 'rest' && sc.rest === 'long')) && ['cleric', 'wizard'].includes(cls) && !counts.picked.has(S.story.scene)) {
+      // The spell screen for a level-up or a Long Rest: open it, take the picks, save.
+      counts.picked.add(S.story.scene);
+      guard(`spells ${S.story.scene}`, () => app.openSpells(sc.kind === 'level' ? 'levelup' : 'rest'));
+      $('err').textContent = '';
+      guard(`save spells ${S.story.scene}`, () => $('build-next').onclick());
+      await flush(); await flush();
+      if ($('err').textContent) errors.push(`spell screen at ${S.story.scene}: ${$('err').textContent}`);
+      if (app.overlay) errors.push(`spell screen did not close at ${S.story.scene}`);
+      await say({ t: 'continue' });
+    }
     else await say({ t: 'continue' });
     guard(`story after ${S.story?.scene}`, () => app.render());
     for (const r of Object.values(app.S.story?.check?.rolls || {})) guard('check detail', () => detail(r, null));
@@ -164,6 +175,7 @@ for (let step = 0; step < 60000 && SCENES[app.S?.story?.scene]?.kind !== 'end'; 
 }
 const end = app.S?.story?.scene;
 console.log(`${cls}: reached ${end} at level ${app.S?.level}; ${counts.fights} fights won, ${counts.retries} lost; ${counts.turns} player turns, ${counts.cards} target cards, ${counts.aims} aim taps, ${counts.renders} renders`);
+console.log(`spell screens: ${[...counts.picked].join(', ') || 'none'}`);
 console.log(`records seen: ${[...counts.records].sort().join(', ')}`);
 if (errors.length) { console.error(`FAIL: ${errors.length} errors\n${[...new Set(errors)].slice(0, 8).join('\n---\n')}`); process.exit(1); }
 if (SCENES[end]?.kind !== 'end') { console.error('FAIL: did not reach the end'); process.exit(1); }

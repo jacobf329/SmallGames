@@ -827,7 +827,7 @@ export function areaTargets(b, A, area, x, y) {
   const sq = new Set(areaSquares(b, A, area, x, y).map((q) => key(q.x, q.y)));
   return Object.values(b.creatures).filter((c) => onBoard(c) && !c.dead && sq.has(key(c.x, c.y)) && !(area.from === 'self' && c === A));
 }
-export const coneTargets = (b, A, x, y, size = 3) => areaTargets(b, A, { shape: 'cone', size: size * FT, from: 'self' }, x, y);
+export function coneTargets(b, A, x, y, size = 3) { return areaTargets(b, A, { shape: 'cone', size: size * FT, from: 'self' }, x, y); }
 export const cubeTargets = (b, A, x, y) => areaTargets(b, A, { shape: 'cube', size: 15, from: 'self' }, x, y);
 export const BREATH_AREAS = { cone: { shape: 'cone', size: 15, from: 'self' }, line: { shape: 'line', size: 30, from: 'self' } };
 

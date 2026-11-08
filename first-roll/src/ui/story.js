@@ -99,6 +99,7 @@ export function renderStory(ctx) {
     if (r.kind === 'long') {
       html += `<div class="checkbox"><div class="ck-head">${R('long-rest', 'Long Rest')}</div><ul class="restlog">${(r.results || []).map((x) =>
         `<li><b>${esc(x.name)}</b>: ${x.got.length ? esc(x.got.join(', ')) : 'nothing to get back'}.</li>`).join('')}</ul></div>`;
+      if (mine?.h.casting && ['cleric', 'wizard'].includes(mine.spec.cls)) html += '<button class="btn wide" id="s-prep">✨ Change your prepared spells</button>';
       html += isHost ? '<button class="btn primary wide" id="s-continue">Continue</button>' : '<p class="note">Waiting for the host to continue…</p>';
     } else {
       html += `<div class="checkbox"><div class="ck-head">${R('short-rest', 'Short Rest')}: spend ${R('hit-point-dice', 'Hit Point Dice')} to heal</div><div class="ck-list">${heroes.map((p) => {
@@ -117,6 +118,10 @@ export function renderStory(ctx) {
     html += (st.levelUp || []).map((x) => `<div class="levelup"><b>${esc(x.name)}</b>: level ${x.to}${x.subclass ? `, ${esc(x.subclass)}` : ''}
       <div class="dim">${R('level-up', 'Hit Point maximum')} ${x.hpMaxBefore} → ${x.hpMax}${x.slots ? ` · ${R('spell-slots', 'spell slots')} ${Object.entries(x.slots).map(([lv, n]) => `${n} of level ${lv}`).join(', ')}` : ''}</div>
       ${x.features.map((f) => `<p class="feat">${R(f.rule, f.name)}: ${esc(f.text)}</p>`).join('')}</div>`).join('');
+    if (mine?.h.casting && ['cleric', 'wizard'].includes(mine.spec.cls)) {
+      html += `<button class="btn wide" id="s-spells">✨ Choose ${mine.spec.cls === 'wizard' ? 'your new spellbook spells and ' : ''}your prepared spells</button>
+        <p class="note">Skip it and you keep the suggested picks. You can change prepared spells again after a Long Rest.</p>`;
+    }
     html += isHost ? '<button class="btn primary wide" id="s-continue">Continue</button>' : '<p class="note">Waiting for the host to continue…</p>';
   } else if (sc.kind === 'end') {
     html += `<div class="result good"><b>The End.</b> You finished the campaign at level ${S.level || 1}.</div>`;
@@ -142,6 +147,8 @@ export function renderStory(ctx) {
   if ($('s-rollrest')) $('s-rollrest').onclick = () => send({ t: 'continue' });
   if ($('s-continue')) $('s-continue').onclick = () => send({ t: 'continue' });
   if ($('s-again')) $('s-again').onclick = () => send({ t: 'again' });
+  if ($('s-spells')) $('s-spells').onclick = () => ctx.openSpells?.('levelup');
+  if ($('s-prep')) $('s-prep').onclick = () => ctx.openSpells?.('rest');
 }
 
 // The latest check roll, for a pop-up card.

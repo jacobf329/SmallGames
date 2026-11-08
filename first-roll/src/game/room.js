@@ -179,6 +179,12 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
     const from = S.level;
     if (level <= from) { S.story.levelUp = []; return; }
     const before = Object.fromEntries(party().map((p) => [p.id, heroOf(p)]));
+    // What each caster had before: a new level swaps one cantrip at most, and
+    // the book keeps every spell already written in it.
+    const prior = Object.fromEntries(party().map((p) => {
+      const v = validateSpec(p.spec, { level: from });
+      return [p.id, { cantrips: v.cantrips, book: v.book }];
+    }));
     S.level = level;
     S.story.levelUp = party().map((p) => {
       const old = before[p.id];
@@ -186,7 +192,7 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
       keep(h);
       const had = new Set(old.features.map((f) => f.name));
       return {
-        id: p.id, name: p.name, from, to: level, hpMaxBefore: old.hpMax, hpMax: h.hpMax, hp: h.hp, subclass: h.subclass || null,
+        id: p.id, name: p.name, from, to: level, was: prior[p.id], hpMaxBefore: old.hpMax, hpMax: h.hpMax, hp: h.hp, subclass: h.subclass || null,
         features: h.features.filter((f) => !had.has(f.name)).map((f) => ({ name: f.name, text: f.text, rule: f.rule })),
         slots: h.casting?.slots ? Object.fromEntries(Object.entries(h.casting.slots).map(([lv, x]) => [lv, x.max])) : null,
       };
@@ -409,10 +415,34 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
         if (S.phase === 'battle') return err('Finish the fight first. Your hero changes from the next scene.');
         if (m.spec == null) { s.spec = null; return changed(); }
         let spec;
-        try { spec = validateSpec(m.spec); } catch (e) { return err(e.message); }
+        try { spec = validateSpec(m.spec, { level: S.phase === 'lobby' ? 1 : S.level || 1 }); } catch (e) { return err(e.message); }
         if (!s.spec && playerHeroes().length >= MAX_HEROES) return err('The party already has 4 heroes. You can watch.');
         if (JSON.stringify(s.spec) !== JSON.stringify(spec)) delete S.heroes[s.pid];
         s.spec = spec;
+        return changed();
+      }
+      // A caster's spells: new picks when the party gains a level, or a new
+      // set of prepared spells after a Long Rest. The hero keeps its state.
+      case 'levelpick': {
+        if (S.phase !== 'story' || !s.spec) return err('Only a hero can change spells, between scenes.');
+        const when = sc?.kind === 'level' ? 'level' : sc?.kind === 'rest' && sc.rest === 'long' ? 'rest' : null;
+        if (!when) return err('You can change spells when you gain a level or after a Long Rest.');
+        const pick = m.pick && typeof m.pick === 'object' ? m.pick : {};
+        let was, next;
+        try {
+          was = validateSpec(s.spec, { level: S.level });
+          next = validateSpec({
+            ...s.spec,
+            cantrips: when === 'level' ? pick.cantrips : was.cantrips,
+            book: when === 'level' ? pick.book : was.book,
+            prepared: pick.prepared,
+            scholar: when === 'level' ? pick.scholar : was.scholar,
+          }, { level: S.level });
+        } catch (e) { return err(e.message); }
+        const base = (when === 'level' && S.story.levelUp?.find((x) => x.id === s.pid)?.was) || was;
+        if (next.cantrips.filter((x) => !base.cantrips.includes(x)).length > 1) return err('When you gain a level you can swap one cantrip, not more.');
+        if (base.book.some((x) => !next.book.includes(x))) return err("Spells stay in a wizard's spellbook once they're written in.");
+        s.spec = next;
         return changed();
       }
       case 'companions': {

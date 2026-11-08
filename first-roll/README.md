@@ -4,12 +4,12 @@ A co-op, turn-based RPG that teaches the 2024 fifth-edition rules by playing
 them. Every roll shows its math, and every number links to the rule behind it.
 Scope and roadmap: [SCOPE.md](SCOPE.md).
 
-**Phase 2: the whole campaign, chapters 0 to 8, from your first d20 to level 3.**
+**Phase 2: the whole campaign, chapters 0 to 8, from your first d20 to level 3.** After the first playtest: a full 2024 character builder, your own spells, and spells aimed at any square.
 
 | Chapter | What you do | What it teaches |
 | --- | --- | --- |
 | 0 · Rolling the d20 | A hands-on dice lesson on your own phone while friends join | D20 Tests, modifiers vs DC, Advantage/Disadvantage, attack rolls vs AC, saves, Heroic Inspiration |
-| 1 · Making your hero | A six-step builder in the lobby | Class → background (its +2/+1 and Origin feat) → species → standard array → increases → name |
+| 1 · Making your hero | A builder in the lobby | Class → background (its +2/+1 and Origin feat) → species and lineage → Origin feats → standard array, point buy or 4d6 → increases → skills, gear, Fighting Style, Mastery, Divine Order → cantrips and spells → name |
 | 2 · Your First Fight | Escort a flour cart, then a goblin ambush | Initiative, surprise, turns, attack rolls, damage |
 | 3 · Weapon Mastery and Teamwork | Follow the trail to the Goblin Boss | Mastery, Help, group checks, healing, Multiattack, Redirect Attack |
 | 4 · High Ground | Goblin archers behind a field wall, wolves through the gap | Cover, line of sight, Opportunity Attacks, Prone, Pack Tactics |
@@ -25,24 +25,34 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
   4 SRD backgrounds. Every species trait that matters in a fight works:
   - Halfling Luck
   - Dwarven Toughness
-  - the Human Tough feat
+  - the Human's Skillful skill and Versatile Origin feat (Alert, Magic Initiate,
+    Savage Attacker or Skilled)
   - Orc Adrenaline Rush and Relentless Endurance
   - Goliath Fire's Burn
   - Dragonborn Breath Weapon
   - the Wood Elf's 35 ft speed
   - Gnomish Cunning
-  - Tiefling Fire Bolt
+  - every Elf, Gnome, Goliath and Tiefling lineage, with its spells
 - **Levels 1 to 3** with the 2024 features: Action Surge, Tactical Mind,
   Champion (Improved Critical, Remarkable Athlete); Cunning Action, Steady Aim,
   Thief; Channel Divinity (Divine Spark, Turn Undead), Life Domain (Disciple of
   Life, Preserve Life); Arcane Recovery, Evoker (Potent Cantrip).
-- **Spells:**
-  - Cantrips: Fire Bolt, Ray of Frost, Sacred Flame, Spare the Dying
-  - Level 1: Healing Word, Cure Wounds, Guiding Bolt, Magic Missile, Burning Hands,
-    Bless, Shield of Faith, Shield (a Reaction), Thunderwave, Command
-  - Level 2: Scorching Ray, Misty Step, Aid, Hold Person, Spiritual Weapon, Lesser Restoration
-  - Concentration, casting with a higher slot, Magic Initiate's free casts,
-    and the 2024 one-spell-slot-per-turn rule
+- **Character choices by the 2024 rules:** every skill pick, Expertise, the
+  Fighter's kit, Fighting Style and Weapon Mastery, the Cleric's Divine Order
+  and kit, Magic Initiate's list, cantrips, spell and ability, and the
+  Wizard's Scholar skill. Players pick their own cantrips and prepared
+  spells (a Wizard fills a six-spell book and prepares from it), pick new ones
+  when they level up (two new book spells, one cantrip swap), and change
+  prepared spells after a Long Rest.
+- **Spells:** about 50 from the SRD on the Cleric and Wizard lists (fight
+  spells and the ones for outside of fights), Concentration, casting with a
+  higher slot, Magic Initiate's free casts, and the 2024 one-spell-slot-per-turn
+  rule.
+- **Aiming:** the ✨ Spells button lists every spell. Each one aims the way the
+  2024 rules say: at yourself, at a friend or a foe, split between creatures
+  (Magic Missile, Scorching Ray), at a point (Misty Step), or as an area you
+  place on any square (a Cone or Line from you, a Cube or Sphere in range),
+  with a preview of who it catches, friends included.
 - **Conditions and terrain:** cover and line of sight, Prone, Restrained,
   Grappled, Frightened, Poisoned, Paralyzed, Incapacitated, Exhaustion, Hide,
   Shove. Monsters: wolves, skeletons, zombies, cultists, a Giant Spider, a
@@ -68,7 +78,9 @@ second browser, so each has its own storage. **Play solo** needs nothing at all.
 
 ```bash
 npm test                            # rules, spells, Phase 2 rules, room and campaign (node --test)
-node tools/ui-smoke.mjs cleric      # every screen rendered through the whole campaign, no browser
+node tools/ui-smoke.mjs cleric elf  # every screen rendered through the whole campaign, no browser
+node tools/builder-fuzz.mjs 300     # random taps through the builder and the level-up spell screen
+node tools/sim.mjs 20               # AI parties of each class through every fight: win rates
 node tools/e2e.mjs                  # two phones, real WebRTC, the whole campaign
 node tools/e2e.mjs --bundle         # the same against dist/first-roll.html
 ```

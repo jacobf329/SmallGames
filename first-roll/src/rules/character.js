@@ -87,6 +87,21 @@ export function classSpellCounts(cls, level, order) {
 }
 export const domainSpells = (cls, level) => (cls === 'cleric' && level >= 3 ? DOMAIN_SPELLS[3] : []);
 
+// Cantrips a species gives (they don't count toward a class's cantrips).
+export function speciesCantrips(species, lineage) {
+  const SP = SPECIES[species];
+  const lin = SP?.lineages?.[lineage || DEFAULT_LINEAGE[species]];
+  return [lin?.cantrip, lin?.cantrip2, species === 'tiefling' ? 'thaumaturgy' : null].filter(Boolean);
+}
+// How many spells of each level a wizard's book can hold: the first six are
+// level 1, then two a level, of a level the wizard can cast at that level.
+export function bookLimit(spellLevel, level) {
+  if (spellLevel === 1) return SPELLBOOK_SIZE[level];
+  let n = 0;
+  for (let j = 2; j <= level; j++) if (maxSpellLevel(j) >= spellLevel) n += 2;
+  return n;
+}
+
 // Check a spec sent by a phone. Returns a clean copy or throws a readable Error.
 export function validateSpec(spec, { level = 1 } = {}) {
   if (!spec || typeof spec !== 'object') throw new Error('No hero.');
@@ -142,7 +157,11 @@ export function validateSpec(spec, { level = 1 } = {}) {
 
   // Skills, in the order the rules hand them out: background, class, species, feats.
   const prof = new Set(B.skills);
-  const skills = pickN(C.skillChoices.n, spec.skills, D.skills, (s) => C.skillChoices.from.includes(s) && !prof.has(s));
+  // Skills the player picked for a species trait or a feat aren't used to fill
+  // the class's picks, so each choice stays where the player put it.
+  const held = new Set([spec.speciesSkill, ...(Array.isArray(spec.versatile?.skills) ? spec.versatile.skills : [])]);
+  const skillFill = [...D.skills, ...C.skillChoices.from];
+  const skills = pickN(C.skillChoices.n, spec.skills, [...skillFill.filter((s) => !held.has(s)), ...skillFill], (s) => C.skillChoices.from.includes(s) && !prof.has(s));
   for (const s of skills) prof.add(s);
   let speciesSkill = null;
   if (species === 'human' || species === 'elf') {
@@ -153,17 +172,23 @@ export function validateSpec(spec, { level = 1 } = {}) {
 
   // The class's own spells.
   let cantrips = [], book = [], prepared = [];
+  const fromSpecies = speciesCantrips(species, lineage);
   if (C.spellcasting) {
     const n = classSpellCounts(cls, level, order);
     const top = maxSpellLevel(level);
     const list = SPELL_LISTS[cls];
-    cantrips = pickN(n.cantrips, spec.cantrips, D.cantrips, (s) => list[0].includes(s));
+    const miWant = [spec.bgFeat?.cantrips, spec.versatile?.cantrips].flatMap((x) => (Array.isArray(x) ? x : []));
+    const cFill = [...D.cantrips, ...list[0]];
+    cantrips = pickN(n.cantrips, spec.cantrips, [...cFill.filter((s) => !miWant.includes(s)), ...cFill], (s) => list[0].includes(s) && !fromSpecies.includes(s));
     const leveled = Object.entries(list).filter(([lv]) => +lv >= 1 && +lv <= top).flatMap(([, xs]) => xs);
     if (cls === 'wizard') {
-      book = pickN(n.book, spec.book, D.book, (s) => leveled.includes(s));
-      // The first six must be level 1 spells (the starting book).
-      const firsts = book.filter((s) => SPELLS[s].level === 1);
-      if (firsts.length < 6) book = pickN(n.book, [...firsts, ...D.book.filter((s) => SPELLS[s].level === 1), ...book], [], (s) => leveled.includes(s));
+      // Each spell level has its own room in the book (see bookLimit).
+      book = [];
+      const room = (s) => book.filter((x) => SPELLS[x].level === SPELLS[s].level).length < bookLimit(SPELLS[s].level, level);
+      for (const s of [...(Array.isArray(spec.book) ? spec.book : []), ...D.book, ...leveled]) {
+        if (book.length >= n.book) break;
+        if (typeof s === 'string' && leveled.includes(s) && !book.includes(s) && room(s)) book.push(s);
+      }
       prepared = pickN(n.prepared, spec.prepared, [...D.prepared, ...book], (s) => book.includes(s));
     } else {
       const dom = domainSpells(cls, level);
@@ -172,7 +197,7 @@ export function validateSpec(spec, { level = 1 } = {}) {
   }
 
   // Feats: the background's, then the human's Versatile feat.
-  const taken = new Set([...cantrips, ...prepared, ...book]);
+  const taken = new Set([...cantrips, ...prepared, ...book, ...fromSpecies]);
   let bgFeat = null;
   if (B.feat === 'magic-initiate') {
     bgFeat = cleanMI(spec.bgFeat, B.featList, taken);

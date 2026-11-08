@@ -257,11 +257,26 @@ function render() {
   } else { show('battle'); renderBattle(S); }
 }
 
+// Mid-campaign, a new hero is built at the party's level.
+const partyLevel = () => (app.S && app.S.phase !== 'lobby' ? app.S.level || 1 : 1);
 function buildMine(spec) {
   app.overlay = 'build';
   openBuilder({
-    spec: spec || ls.json(K.spec), playerName: myName(),
+    spec: spec || ls.json(K.spec), playerName: myName(), level: partyLevel(),
     onDone: (clean) => { send({ t: 'hero', spec: clean }); ls.set(K.spec, JSON.stringify(clean)); app.overlay = null; render(); },
+    onCancel: () => { app.overlay = null; render(); },
+  });
+}
+
+// A caster's spell picks when gaining a level ('levelup') or after a Long Rest ('rest').
+function openSpells(mode) {
+  const p = app.S?.party.find((x) => x.id === app.me);
+  if (!p) return;
+  app.overlay = 'build';
+  openBuilder({
+    spec: p.spec, playerName: myName(), level: partyLevel(), mode,
+    before: mode === 'levelup' ? app.S.story?.levelUp?.find((x) => x.id === app.me)?.was : null,
+    onDone: (clean) => { send({ t: 'levelpick', pick: { cantrips: clean.cantrips, book: clean.book, prepared: clean.prepared, scholar: clean.scholar } }); app.overlay = null; render(); },
     onCancel: () => { app.overlay = null; render(); },
   });
 }
@@ -272,7 +287,7 @@ function renderStoryScreen(S) {
   $('story-join').innerHTML = !mine && !full
     ? '<div class="joinbar">You\'re watching. <button class="btn small primary" id="btn-join-hero">Build a hero and join in</button></div>' : '';
   if ($('btn-join-hero')) $('btn-join-hero').onclick = () => buildMine(null);
-  renderStory({ S, me: app.me, isHost: isHost(), send, openSheet, openRulesBook });
+  renderStory({ S, me: app.me, isHost: isHost(), send, openSheet, openRulesBook, openSpells });
 }
 
 // --------------------------------------------------------------- lobby ----
@@ -448,6 +463,8 @@ function openRulesBook() {
 app.openRulesBook = openRulesBook;
 app.tap = (x, y) => onTap(x, y);
 app.aimAt = (a) => startAim(app.S.battle, app.S.battle.creatures[myHeroId()], a);
+app.openSpells = (mode) => openSpells(mode);
+app.buildMine = (spec) => buildMine(spec);
 
 function renderPanel(S, b, mine, mt, tip) {
   const P = $('panel');

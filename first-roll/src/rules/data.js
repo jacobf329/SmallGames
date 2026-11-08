@@ -133,6 +133,10 @@ export const SPELLS = {
     text: 'Flame descends on a creature you can see: it makes a Dexterity saving throw or takes 1d8 Radiant damage. Cover gives no bonus to this save.' },
   'spare-the-dying': { name: 'Spare the Dying', level: 0, time: 'action', range: 15, kind: 'stabilize',
     text: 'Choose a creature within 15 feet that has 0 Hit Points and is not dead. It becomes Stable.' },
+  'guidance': { name: 'Guidance', level: 0, time: 'action', range: 5, touch: true, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. Touch a willing creature and pick a skill: it adds 1d4 to one ability check it makes with that skill before the spell ends. (Useful outside of fights.)' },
+  'resistance-cantrip': { name: 'Resistance', level: 0, time: 'action', range: 5, touch: true, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. Touch a willing creature and pick a damage type: once a turn, it takes 1d4 less damage of that type. (Not used in fights here yet.)' },
   'thaumaturgy': { name: 'Thaumaturgy', level: 0, time: 'action', range: 30, kind: 'utility',
     text: 'Minor wonders: a booming voice, flickering flames, tremors. (Useful outside of fights.)' },
   'mage-hand': { name: 'Mage Hand', level: 0, time: 'action', range: 30, kind: 'utility',
@@ -212,7 +216,7 @@ export const SPELLS = {
 // Each class's spell list (the spells of the SRD this game has).
 export const SPELL_LISTS = {
   cleric: {
-    0: ['sacred-flame', 'spare-the-dying', 'thaumaturgy', 'light', 'mending'],
+    0: ['sacred-flame', 'spare-the-dying', 'guidance', 'resistance-cantrip', 'thaumaturgy', 'light', 'mending'],
     1: ['bless', 'command', 'cure-wounds', 'detect-magic', 'guiding-bolt', 'healing-word', 'inflict-wounds', 'shield-of-faith'],
     2: ['aid', 'hold-person', 'lesser-restoration', 'spiritual-weapon'],
   },
