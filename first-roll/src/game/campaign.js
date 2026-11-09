@@ -15,9 +15,9 @@ import { defaultSpec } from '../rules/character.js';
 
 export const CHAPTERS = {
   2: { title: 'Your First Fight', teaches: ['initiative', 'your-turn', 'attack-roll', 'damage'] },
-  3: { title: 'Weapon Mastery and Teamwork', teaches: ['weapon-mastery', 'help', 'multiattack', 'group-check'] },
+  3: { title: 'Weapon Mastery and Teamwork', teaches: ['weapon-mastery', 'help', 'multiattack', 'group-check', 'long-rest'] },
   4: { title: 'High Ground', teaches: ['cover', 'line-of-sight', 'opportunity-attack', 'prone'] },
-  5: { title: 'Asking Around', teaches: ['skills', 'long-rest', 'level-up'] },
+  5: { title: 'Asking Around', teaches: ['skills', 'level-up'] },
   6: { title: 'Magic in the Cellar', teaches: ['spell-slots', 'concentration', 'saving-throw'] },
   7: { title: 'Bad Air and Worse Company', teaches: ['poisoned', 'restrained', 'grappled', 'short-rest'] },
   8: { title: 'The Barrow', teaches: ['subclass', 'level-up', 'concentration'] },
@@ -137,8 +137,16 @@ export const SCENES = {
       `The reeve of Dunmarket, Martin Ebbs, has been waiting for her to finish. He is a thin, worried man with ink on his cuffs. "Forty sacks gone from three mills since harvest," he says. "That's more than any goblin band could eat. And the Kipps girl swears there are lights in the old watchtower on Crowsfoot Hill, where nobody has lived for sixty years."`,
       `He offers fifty silver to whoever finds out who is up there, and what they want with all that flour.`,
     ],
-    choices: [{ id: 'job', label: "Take the reeve's job.", next: 'c4-hill' }],
+    choices: [{ id: 'job', label: "Take the reeve's job, and set out in the morning.", next: 'c3-rest' }],
     lesson: 'Chapter 3 done: Weapon Mastery, Help, Multiattack and group checks. Next: where you stand matters as much as how hard you hit.',
+  },
+  'c3-rest': {
+    chapter: 3, kind: 'rest', rest: 'long', title: 'A Night at the Mill', next: 'c4-hill',
+    text: [
+      `Agnes Pell won't hear of you paying for a room at the inn. She puts you in the loft over her mill, where the floorboards hum every time the wheel turns, and sends her son up the ladder with bread, a pot of mutton stew and a lantern. He stays to ask how big the Goblin Boss was. You tell him, and he goes back down grinning.`,
+      `Whoever was knocked flat in the goblin camp gets the softest pile of sacks. In the morning Agnes hands each of you a heel of bread for the walk and points north, past the millpond, to Crowsfoot Hill.`,
+    ],
+    lesson: 'A Long Rest: 8 hours, most of them asleep. You wake with all your Hit Points, all your spent Hit Point Dice and all your spell slots, and features that last until a Long Rest come back too. Anyone who dropped to 0 in the last fight is properly back on their feet.',
   },
 
   // ------------------------------------------------ chapter 4: High Ground
@@ -212,7 +220,7 @@ export const SCENES = {
     text: [
       `Nell's father, his leg strapped between two planks, insists you take the beds and sleeps in his chair by the fire. In the morning Nell makes porridge, refuses your money, and tells you the names of the six ewes again.`,
     ],
-    lesson: 'A Long Rest: 8 hours, most of them asleep. You wake with all your Hit Points, all your Hit Point Dice and all your spell slots, and features that last until a Long Rest come back too.',
+    lesson: 'Another Long Rest: Hit Points, Hit Point Dice, spell slots and features all come back. You get the benefit of only one Long Rest in 24 hours, so it takes a day on the road to earn the next one.',
   },
   'c5-level': {
     chapter: 5, kind: 'level', level: 2, title: 'Level 2', next: 'c6-night',
