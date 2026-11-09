@@ -53,6 +53,7 @@ globalThis.scrollTo = () => {};
 
 const { openBuilder } = await import('../src/ui/builder.js');
 const { validateSpec, buildHero, defaultSpec, levelChoices, swapLimit, droppedPicks } = await import('../src/rules/character.js');
+const { MAX_LEVEL } = await import('../src/rules/data.js');
 const { SPECIES, CLASSES, SPELLS } = await import('../src/rules/data.js');
 
 let seed = 1;
@@ -102,7 +103,7 @@ function drive(opts, maxTaps) {
 
 for (let run = 0; run < RUNS; run++) {
   seed = run * 7919 + 13;
-  const level = 1 + (run % 3);
+  const level = 1 + (run % MAX_LEVEL);
   const cls = Object.keys(CLASSES)[run % Object.keys(CLASSES).length];
   const sp = Object.keys(SPECIES)[Math.floor(run / Object.keys(CLASSES).length) % Object.keys(SPECIES).length];
   try {
@@ -116,9 +117,10 @@ for (let run = 0; run < RUNS; run++) {
     stats.done++;
     stats.methods.add(out.method);
     if (out.versatile) stats.feats.add(out.versatile.feat + (out.versatile.list ? `:${out.versatile.list}` : ''));
+    for (const f of out.feats || []) stats.feats.add('asi:' + f.feat);
     // The level-up and Long Rest screens.
     const C = CLASSES[out.cls];
-    if ((C.spellcasting || levelChoices(out.cls, level + 1).length) && level < 3) {
+    if ((C.spellcasting || levelChoices(out.cls, level + 1).length) && level < MAX_LEVEL) {
       const prior = validateSpec(out, { level });
       const keys = ['cantrips', 'book', 'prepared', 'skills', 'expertise', 'invocations', 'metamagic'];
       const before = Object.fromEntries(keys.map((k) => [k, prior[k]]));

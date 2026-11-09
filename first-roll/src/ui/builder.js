@@ -13,12 +13,12 @@ import {
   CLASSES, BACKGROUNDS, SPECIES, FEATS, ORIGIN_FEATS, SKILLS, SKILL_NAMES, ABILITIES, ABILITY_NAMES, STANDARD_ARRAY,
   DRAGON_ANCESTRY, KITS, FIGHTING_STYLES, WEAPONS, MASTERIES, SPELLS, SPELL_LISTS, POINT_COST, POINT_BUDGET,
   DRUID_ORDERS, LAND_SPELLS, HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, PACT_WEAPONS, METAMAGIC, stylesFor,
-  abilityMod, signed,
+  abilityMod, signed, MAX_LEVEL, ASI_FEATS, STYLE_FEATS, asiLevels,
 } from '../rules/data.js';
 import {
   buildHero, defaultSpec, suggestPlus, validateSpec, DEFAULT_BACKGROUND, classSpellCounts, domainSpells,
   maxSpellLevel, miCantrips, miSpells, pointCost, rollTotal, speciesCantrips, bookLimit, SCHOLAR_SKILLS,
-  extraSkills, expertiseCount, styleAt, metamagicCount, levelChoices, swapLimit, droppedPicks, alwaysPrepared, alwaysCantrips,
+  extraSkills, expertiseCount, styleAt, metamagicCount, levelChoices, swapLimit, droppedPicks, alwaysPrepared, alwaysCantrips, finalScores,
 } from '../rules/character.js';
 import { GLOSSARY } from '../rules/glossary.js';
 import { $, show } from './dom.js';
@@ -56,7 +56,7 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 
 export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'new', before = null, onDone, onCancel }) {
-  level = Math.max(1, Math.min(3, level | 0 || 1));
+  level = Math.max(1, Math.min(MAX_LEVEL, level | 0 || 1));
   let d = spec ? clone(spec) : defaultSpec('fighter', { name: playerName });
   if (!d.name) d.name = playerName;
   // In 'levelup' and 'rest', what the hero has now: spells already in the
@@ -132,7 +132,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
   function freeCantrip(s, except) {
     for (const p of CANTRIP_PATHS) if (p !== except && get(p)?.includes(s)) put(p, get(p).filter((x) => x !== s));
   }
-  const proficient = () => new Set([...BACKGROUNDS[d.background].skills, ...(d.skills || []), d.speciesSkill, ...(d.versatile?.skills || [])].filter(Boolean));
+  const proficient = () => new Set([...BACKGROUNDS[d.background].skills, ...(d.skills || []), d.speciesSkill, ...(d.versatile?.skills || []), ...(d.feats || []).flatMap((f) => f.skills || [])].filter(Boolean));
 
   function toggle(path, v) {
     let arr = [...(get(path) || [])];
@@ -175,6 +175,12 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
     if (path === 'species') { d.species = v; delete d.lineage; }
     else if (path === 'versatile.feat') d.versatile = { feat: v };
     else if (path === 'versatile.list') d.versatile = { feat: 'magic-initiate', list: v };
+    else if (/^feats\.\d+\.(feat|list)$/.test(path)) {
+      // A new feat (or a new Magic Initiate list) starts its own choices over.
+      const [, i, k] = path.split('.');
+      const f = d.feats[+i];
+      d.feats[+i] = k === 'feat' ? { level: f.level, feat: v } : { level: f.level, feat: f.feat, list: v };
+    } else if (/^feats\.\d+\.grab$/.test(path)) d.feats[+path.split('.')[1]].plus = { [v]: 1 };
     else {
       if (path === 'speciesSkill') freeSkill(v, 'speciesSkill');
       put(path, v);
@@ -561,6 +567,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
       h += `<div class="ilist">${(d.metamagic || []).map((k) => `<p class="note"><b>${esc(METAMAGIC[k].name)}</b>: ${esc(METAMAGIC[k].text)}</p>`).join('')}</div>`;
       if (only && level > 2) h += '<p class="note">When you gain a level, you can swap one Metamagic option for another.</p>';
     }
+    if (has('feat')) for (const lv of asiLevels(d.cls, level)) if (!only || lv === level) h += featBlock(lv);
     if (!only) {
       h += `<div class="ph sep"><b>Starting equipment</b></div>${c.kits.map((k) => {
         const K = KITS[d.cls][k];
@@ -575,6 +582,58 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
         }
       }
       if (d.cls === 'wizard' && level >= 2) h += scholarPick();
+    }
+    return h;
+  }
+
+  // An Ability Score Improvement level: the feat and what it needs.
+  function featBlock(lv) {
+    const i = (d.feats || []).findIndex((f) => f.level === lv);
+    if (i < 0) return '';
+    const f = d.feats[i];
+    const p = `feats.${i}`;
+    // Scores before this feat, to show what it changes and keep each at 20 or less.
+    const before = finalScores({ ...d, feats: d.feats.slice(0, i) });
+    const owned = new Set([BACKGROUNDS[d.background].feat, d.versatile?.feat, ...d.feats.filter((x, j) => j !== i).map((x) => x.feat)].filter(Boolean));
+    const myStyles = new Set([d.style, ...d.feats.filter((x, j) => j !== i && x.style).map((x) => x.style)].filter(Boolean));
+    const miLists = new Set([BACKGROUNDS[d.background].feat === 'magic-initiate' ? BACKGROUNDS[d.background].featList : null,
+      d.versatile?.feat === 'magic-initiate' ? d.versatile.list : null, ...d.feats.filter((x, j) => j !== i && x.feat === 'magic-initiate').map((x) => x.list)].filter(Boolean));
+    const why = (id) => {
+      const F = FEATS[id];
+      if (id === 'grappler' && !(before.str >= 13 || before.dex >= 13)) return 'Needs Strength or Dexterity 13.';
+      if (id === 'fighting-style' && !(styleAt(d.cls, 20) && STYLE_FEATS.some((x) => !myStyles.has(x)))) return 'Needs the Fighting Style feature (Fighter, Paladin, Ranger).';
+      if (id === 'magic-initiate' && F.lists.every((l) => miLists.has(l))) return 'You have it with every list already.';
+      if (owned.has(id) && !F.repeatable && id !== 'magic-initiate') return 'You already have it.';
+      return '';
+    };
+    let h = `<div class="ph sep"><b>Level ${lv}: ${R('ability-score-improvement', 'Ability Score Improvement')} or a feat</b></div>
+      <p class="note">Take the Ability Score Improvement feat, or another feat you qualify for: a General feat, an ${R('origin-feat', 'Origin feat')}${styleAt(d.cls, 20) ? ', or a Fighting Style feat' : ''}.</p>`;
+    h += ASI_FEATS.map((id) => {
+      const F = FEATS[id];
+      const no = f.feat !== id && why(id);
+      return card({ on: f.feat === id, title: F.name, sub: F.general ? 'General feat' : F.style ? 'Fighting Style feat' : 'Origin feat',
+        body: `<span>${esc(F.text)}</span>${no ? `<span class="dim">${esc(no)}</span>` : ''}`, attr: `data-set="${p}.feat=${id}"`, off: !!no });
+    }).join('');
+    if (f.feat === 'ability-score-improvement') {
+      h += `<p class="note">+2 to one score, or +1 to two. Tap +1 on a second ability to split it.</p><div class="scores">${ABILITIES.map((a) => {
+        const v = f.plus?.[a] || 0;
+        return `<div class="srow"><span><b>${ABILITY_NAMES[a]}</b><span class="dim">${before[a]} → ${before[a] + v} (${signed(abilityMod(before[a] + v))})</span></span>
+          <span class="seg">${[2, 1, 0].map((n) => `<button data-asi="${i}:${a}:${n}" class="${v === n ? 'on' : ''}" ${before[a] + n > 20 ? 'disabled' : ''}>+${n}</button>`).join('')}</span></div>`;
+      }).join('')}</div>`;
+    } else if (f.feat === 'grappler') {
+      h += `<div class="ph"><b>Grappler: +1 to</b></div>${seg(`${p}.grab`, ['str', 'dex'].filter((a) => before[a] < 20).map((a) => [a, `${ABILITY_NAMES[a]} (${before[a]} → ${before[a] + 1})`]), Object.keys(f.plus || {})[0])}`;
+    } else if (f.feat === 'fighting-style') {
+      h += STYLE_FEATS.map((k) => card({ on: f.style === k, title: FIGHTING_STYLES[k].name, body: `<span>${esc(FIGHTING_STYLES[k].text)}</span>${myStyles.has(k) ? '<span class="dim">You have it already.</span>' : ''}`,
+        attr: `data-set="${p}.style=${k}"`, off: myStyles.has(k) })).join('');
+    } else if (f.feat === 'skilled') {
+      LISTS[`${p}.skills`] = { cap: () => 3, label: 'Skilled skill' };
+      const prof = proficient();
+      h += pickList(`${p}.skills`, Object.keys(SKILLS).map((s) => chip(`${p}.skills`, s, SKILL_NAMES[s], { off: prof.has(s) && !f.skills?.includes(s), note: prof.has(s) && !f.skills?.includes(s) ? '(you have it)' : '' })), 'Skilled: any three skills');
+    } else if (f.feat === 'magic-initiate') {
+      LISTS[`${p}.cantrips`] = { cap: () => 2, label: 'Magic Initiate cantrip' };
+      const lists = FEATS['magic-initiate'].lists.filter((l) => !miLists.has(l) || l === f.list);
+      h += `<div class="ph"><b>Which spell list?</b></div>${seg(`${p}.list`, lists.map((l) => [l, LIST_NAME[l]]), f.list)}`;
+      if (f.list) h += miBlock(p, f.list);
     }
     return h;
   }
@@ -659,6 +718,27 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
           }
         }
         touched.plus = true;
+        norm(); redraw();
+      };
+    }
+    for (const el of B.querySelectorAll('[data-asi]')) {
+      el.onclick = () => {
+        const [i, a, n] = el.dataset.asi.split(':');
+        const f = d.feats[+i];
+        const cur = { ...(f.plus || {}) };
+        let next;
+        if (+n === 2) next = { [a]: 2 };
+        else if (+n === 1) {
+          // +1 here, and the other +1 stays where it was (or on the +2's ability).
+          const others = Object.keys(cur).filter((x) => x !== a);
+          next = { [others[others.length - 1] || a]: 1, [a]: 1 };
+          if (!others.length) next = { [a]: 2 };
+        } else {
+          delete cur[a];
+          const rest = Object.keys(cur);
+          next = rest.length ? { [rest[0]]: 2 } : f.plus;
+        }
+        f.plus = next;
         norm(); redraw();
       };
     }

@@ -359,16 +359,25 @@ export const SPELL_LISTS = {
 };
 // Cantrips known, and spells you can prepare, by class level (2024 tables).
 // Paladins and Rangers know no cantrips unless a Fighting Style gives them.
+// byLevel([a, b, ...]) -> { 1: a, 2: b, ... } (levels 1-20).
+export const byLevel = (xs) => Object.fromEntries(xs.map((v, i) => [i + 1, v]));
+// Cantrips known: base at level 1, one more at 4 and at 10.
+const cantripsFrom = (n) => byLevel(Array.from({ length: 20 }, (_, i) => n + (i + 1 >= 4) + (i + 1 >= 10)));
 export const CANTRIPS_KNOWN = {
-  cleric: { 1: 3, 2: 3, 3: 3 }, wizard: { 1: 3, 2: 3, 3: 3 }, bard: { 1: 2, 2: 2, 3: 2 }, druid: { 1: 2, 2: 2, 3: 2 },
-  sorcerer: { 1: 4, 2: 4, 3: 4 }, warlock: { 1: 2, 2: 2, 3: 2 },
+  cleric: cantripsFrom(3), wizard: cantripsFrom(3), bard: cantripsFrom(2), druid: cantripsFrom(2),
+  sorcerer: cantripsFrom(4), warlock: cantripsFrom(2),
 };
+const FULL_PREP = [4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18, 18, 19, 20, 21, 22];
+const HALF_PREP = [2, 3, 4, 5, 6, 6, 7, 7, 9, 9, 10, 10, 11, 11, 12, 12, 14, 14, 15, 15];
 export const PREPARED_BY_LEVEL = {
-  cleric: { 1: 4, 2: 5, 3: 6 }, wizard: { 1: 4, 2: 5, 3: 6 }, bard: { 1: 4, 2: 5, 3: 6 }, druid: { 1: 4, 2: 5, 3: 6 },
-  paladin: { 1: 2, 2: 3, 3: 4 }, ranger: { 1: 2, 2: 3, 3: 4 }, sorcerer: { 1: 2, 2: 4, 3: 6 }, warlock: { 1: 2, 2: 3, 3: 4 },
+  cleric: byLevel(FULL_PREP), bard: byLevel(FULL_PREP), druid: byLevel(FULL_PREP),
+  wizard: byLevel([4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 18, 19, 21, 22, 23, 24, 25]),
+  paladin: byLevel(HALF_PREP), ranger: byLevel(HALF_PREP),
+  sorcerer: byLevel([2, 4, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18, 18, 19, 20, 21, 22]),
+  warlock: byLevel([2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15]),
 };
 // A wizard's spellbook starts with 6 level 1 spells and gains 2 a level.
-export const SPELLBOOK_SIZE = { 1: 6, 2: 8, 3: 10 };
+export const SPELLBOOK_SIZE = byLevel(Array.from({ length: 20 }, (_, i) => 6 + 2 * i));
 // Life Domain spells: always prepared from Cleric level 3, not counted.
 export const DOMAIN_SPELLS = { 3: ['aid', 'bless', 'cure-wounds', 'lesser-restoration'] };
 
@@ -525,11 +534,23 @@ export const CLASSES = {
 // Spell slots by class level. Full casters (Bard, Cleric, Druid, Sorcerer,
 // Wizard), half casters (Paladin, Ranger) and a Warlock's Pact Magic, whose
 // slots are all of one level and come back on a Short Rest.
-export const SLOTS_BY_LEVEL = { 1: { 1: 2 }, 2: { 1: 3 }, 3: { 1: 4, 2: 2 } };
+// Written as one row per class level: the number of slots of spell level 1, 2, 3...
+const slotRows = (rows) => byLevel(rows.map((r) => Object.fromEntries(r.map((n, i) => [i + 1, n]).filter(([, n]) => n))));
+export const SLOTS_BY_LEVEL = slotRows([
+  [2], [3], [4, 2], [4, 3], [4, 3, 2], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 2], [4, 3, 3, 3, 1], [4, 3, 3, 3, 2],
+  [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1],
+  [4, 3, 3, 3, 2, 1, 1, 1, 1], [4, 3, 3, 3, 3, 1, 1, 1, 1], [4, 3, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 3, 2, 2, 1, 1],
+]);
+// Pact Magic: every slot is of the same level.
+const pactRow = ([n, lv]) => ({ [lv]: n });
 export const SLOT_TABLES = {
   full: SLOTS_BY_LEVEL,
-  half: { 1: { 1: 2 }, 2: { 1: 2 }, 3: { 1: 3 } },
-  pact: { 1: { 1: 1 }, 2: { 1: 2 }, 3: { 2: 2 } },
+  half: slotRows([
+    [2], [2], [3], [3], [4, 2], [4, 2], [4, 3], [4, 3], [4, 3, 2], [4, 3, 2],
+    [4, 3, 3], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 1], [4, 3, 3, 2], [4, 3, 3, 2], [4, 3, 3, 3, 1], [4, 3, 3, 3, 1], [4, 3, 3, 3, 2], [4, 3, 3, 3, 2],
+  ]),
+  pact: byLevel([[1, 1], [2, 1], [2, 2], [2, 2], [2, 3], [2, 3], [2, 4], [2, 4], [2, 5], [2, 5],
+    [3, 5], [3, 5], [3, 5], [3, 5], [3, 5], [3, 5], [4, 5], [4, 5], [4, 5], [4, 5]].map(pactRow)),
 };
 // Subclasses (one per class in the SRD), chosen at level 3.
 export const SUBCLASSES = {
@@ -574,7 +595,7 @@ export const INVOCATIONS = {
   'mask-of-many-faces': { name: 'Mask of Many Faces', min: 2, text: 'Cast Disguise Self at will without a spell slot. (Useful outside of fights.)' },
   'misty-visions': { name: 'Misty Visions', min: 2, text: 'Cast Silent Image at will without a spell slot. (Useful outside of fights.)' },
 };
-export const INVOCATIONS_KNOWN = { 1: 1, 2: 3, 3: 3 };
+export const INVOCATIONS_KNOWN = byLevel([1, 3, 3, 3, 5, 5, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10]);
 // A Sorcerer's Metamagic (two at level 2). cost: Sorcery Points.
 export const METAMAGIC = {
   careful: { name: 'Careful Spell', cost: 1, text: 'When your spell makes creatures save, up to your Charisma modifier (at least 1) of your allies in it succeed automatically and take no damage on a success.' },
@@ -589,8 +610,11 @@ export const METAMAGIC = {
   twinned: { name: 'Twinned Spell', cost: 1, text: 'A spell that can target one more creature when cast with a higher slot targets one more creature, as if cast one level higher.' },
 };
 // Font of Magic: Sorcery Points it costs to make a spell slot of each level.
-export const SLOT_COST = { 1: 2, 2: 3 };
-export const MAX_LEVEL = 3;
+export const SLOT_COST = { 1: 2, 2: 3, 3: 5, 4: 6, 5: 7 };
+// Font of Magic can make a slot of a level up to this, by Sorcerer level.
+export const SLOT_MIN_LEVEL = { 1: 2, 2: 3, 3: 5, 4: 7, 5: 9 };
+// The highest level the campaign reaches so far (the tables above run to 20).
+export const MAX_LEVEL = 5;
 // Hit Points gained per level after the first: the Hit Die's fixed value.
 export const HP_PER_LEVEL = { 6: 4, 8: 5, 10: 6, 12: 7 };
 
@@ -702,6 +726,26 @@ export const FEATS = {
   'skilled': { name: 'Skilled', rule: 'skilled', text: 'Proficiency in any three skills.', repeatable: true },
 };
 export const ORIGIN_FEATS = ['alert', 'magic-initiate', 'savage-attacker', 'skilled'];
+
+// General feats (level 4+) and the Fighting Style feats. At each Ability
+// Score Improvement level a hero takes Ability Score Improvement, or another
+// feat they qualify for: a General feat, an Origin feat, or a Fighting Style
+// feat if their class has the Fighting Style feature.
+Object.assign(FEATS, {
+  'ability-score-improvement': { name: 'Ability Score Improvement', rule: 'ability-score-improvement', general: true, repeatable: true,
+    text: 'Increase one ability score by 2, or two ability scores by 1 each. A score can\'t go above 20.' },
+  'grappler': { name: 'Grappler', rule: 'grappler', general: true, needs: ['str', 'dex'], plusFrom: ['str', 'dex'],
+    text: '+1 to Strength or Dexterity (needs 13 in one of them). Advantage on attack rolls against a creature you are grappling. Your Unarmed Strike can damage and Grapple in the same hit, once per turn, and dragging a creature you grapple costs no extra movement (those two aren\'t used here yet).' },
+  'fighting-style': { name: 'Fighting Style', rule: 'fighting-style', style: true, repeatable: true,
+    text: 'Learn a Fighting Style you don\'t already have (needs the Fighting Style feature).' },
+});
+// Feats a hero can take at an Ability Score Improvement level.
+export const ASI_FEATS = ['ability-score-improvement', 'grappler', 'fighting-style', ...ORIGIN_FEATS];
+// The Fighting Styles that are feats (a Paladin's and a Ranger's own cantrip styles aren't).
+export const STYLE_FEATS = ['archery', 'defense', 'great-weapon', 'two-weapon'];
+// Ability Score Improvement levels (SRD 5.2.1 class tables; level 19 is an Epic Boon).
+export const ASI_LEVELS = { fighter: [4, 6, 8, 12, 14, 16], rogue: [4, 8, 10, 12, 16] };
+export const asiLevels = (cls, level) => (ASI_LEVELS[cls] || [4, 8, 12, 16]).filter((l) => l <= level);
 export const MI_DEFAULT_ABILITY = { cleric: 'wis', druid: 'wis', wizard: 'int' };
 export const LIST_NAMES = { cleric: 'Cleric', druid: 'Druid', wizard: 'Wizard', bard: 'Bard', paladin: 'Paladin', ranger: 'Ranger', sorcerer: 'Sorcerer', warlock: 'Warlock' };
 

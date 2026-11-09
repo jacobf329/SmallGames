@@ -10,7 +10,7 @@ import {
   lineSquares, squaresWithin, cubeAt, isWall,
 } from './grid.js';
 import { setMageArmor } from './character.js';
-import { MASTERIES, SPELLS, ABILITY_NAMES, signed, METAMAGIC, SLOT_COST } from './data.js';
+import { MASTERIES, SPELLS, ABILITY_NAMES, signed, METAMAGIC, SLOT_COST, SLOT_MIN_LEVEL } from './data.js';
 
 // ------------------------------------------------------------- set-up ----
 
@@ -478,7 +478,7 @@ export function attackFactors(b, A, T, atk) {
   if (gr && gr.by !== T.id) dis.push({ text: `${A.name} is Grappled and ${T.name} isn't the grappler`, rule: 'grappled' });
   if (hasCond(A, 'hidden')) adv.push({ text: `${A.name} is Hidden`, rule: 'hide' });
   if (A.packTactics && alliesOf(b, A).some((o) => !incap(o) && cheb(o, T) <= 1)) adv.push({ text: `Pack Tactics: an ally of ${A.name} is next to ${T.name}`, rule: 'pack-tactics' });
-  if (atk.advIfGrappled && T.conds?.some((x) => x.id === 'grappled' && x.by === A.id)) adv.push({ text: `${T.name} is Grappled by ${A.name}`, rule: 'grappled' });
+  if ((atk.advIfGrappled || A.grappler) && T.conds?.some((x) => x.id === 'grappled' && x.by === A.id)) adv.push({ text: `${T.name} is Grappled by ${A.name}`, rule: A.grappler ? 'grappler' : 'grappled' });
   if (atk.kind === 'ranged') {
     const close = enemiesOf(b, A).filter((e) => !incap(e) && cheb(e, A) <= 1);
     if (close.length) dis.push({ text: `Ranged attack with ${close[0].name} next to ${A.name}`, rule: 'ranged-in-melee' });
@@ -2183,6 +2183,27 @@ export function perform(b, id, intent) {
         text: `${A.name} tries to Shove ${T.name}: DC ${dc} ${ABILITY_NAMES[ab]} save (it picks the better of Strength or Dexterity). ${sv.success ? 'It holds its ground.' : res}` });
       break;
     }
+    case 'grapple': {
+      // Unarmed Strike, Grapple option: the target saves (Strength or
+      // Dexterity, its choice) against 8 + STR + PB or is Grappled.
+      if (!canAttack(t)) return fail('You have already used your action.');
+      if (!T || !hostile(A, T) || !onBoard(T) || T.dead || cheb(A, T) > 1) return fail('Grapple needs an enemy within 5 feet of you.');
+      if (SIZE[T.size || 'medium'] > SIZE[A.size || 'medium'] + 1) return fail(`${T.name} is too big to grapple (more than one size larger).`);
+      if (T.conds?.some((x) => x.id === 'grappled' && x.by === A.id)) return fail(`You are already grappling ${T.name}.`);
+      if ((T.condImmune || []).includes('grappled')) return fail(`${T.name} can't be Grappled.`);
+      useAttack(t, A);
+      if (hasCond(A, 'hidden')) dropCond(A, 'hidden');
+      const dcParts = [{ label: 'Base', value: 8, rule: 'unarmed-strike' }, { label: 'STR modifier', value: A.mods.str, rule: 'ability-modifier' }, { label: 'Proficiency Bonus', value: A.pb, rule: 'proficiency' }];
+      const dc = sumParts(dcParts);
+      const ab = (T.saves?.str ?? T.mods.str) >= (T.saves?.dex ?? T.mods.dex) ? 'str' : 'dex';
+      const sv = savingThrow(b, T, ab, dc);
+      let res = '';
+      if (!sv.success && addCond(b, T, { id: 'grappled', by: A.id, dc, reach: 5 })) res = `${T.name} is Grappled (escape DC ${dc}): Speed 0, and Disadvantage on attacks against anyone but ${A.name}.`;
+      emit(b, { kind: 'save-spell', by: A.id, what: 'Grapple', ability: ab, dc, dcParts, damage: null, half: false, rule: 'grappled',
+        results: [{ ...sv, damage: 0, text: `${T.name} ${sv.success ? 'slips free' : 'fails'} (${sv.total}). ${res}` }],
+        text: `${A.name} tries to Grapple ${T.name}: DC ${dc} ${ABILITY_NAMES[ab]} save (it picks the better of Strength or Dexterity). ${sv.success ? 'It twists away.' : res}` });
+      break;
+    }
     case 'cut': {
       // Attack the web holding a Restrained creature (AC 10, 5 HP).
       if (!canAttack(t)) return fail('You have already used your action.');
@@ -2674,7 +2695,7 @@ export function perform(b, id, intent) {
         break;
       }
       const cost = SLOT_COST[lv];
-      if (!cost || (lv === 2 && A.level < 3)) return fail('You can make a level 1 spell slot, or a level 2 slot from Sorcerer level 3.');
+      if (!cost || A.level < SLOT_MIN_LEVEL[lv]) return fail(`You can make a spell slot of level 1 to ${Math.max(...Object.keys(SLOT_MIN_LEVEL).filter((k) => A.level >= SLOT_MIN_LEVEL[k]))} (level 3 at Sorcerer level 5, 4 at 7, 5 at 9).`);
       if (A.sorcery.uses < cost) return fail(`A level ${lv} slot costs ${cost} Sorcery Points; you have ${A.sorcery.uses}.`);
       err = needBonus(); if (err) return fail(err);
       t.bonus = 0;

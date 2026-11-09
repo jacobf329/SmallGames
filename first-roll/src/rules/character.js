@@ -26,10 +26,11 @@ import {
   KITS, FIGHTING_STYLES, SPELL_LISTS, CANTRIPS_KNOWN, PREPARED_BY_LEVEL, SPELLBOOK_SIZE, DOMAIN_SPELLS,
   DEFAULT_LINEAGE, ORIGIN_FEATS, MI_DEFAULT_ABILITY, SLOT_TABLES, ALWAYS_PREPARED, LAND_SPELLS, DRUID_ORDERS,
   HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, METAMAGIC, STYLE_LEVEL, stylesFor, LIST_NAMES, isMonkWeapon, PACT_WEAPONS,
+  ASI_FEATS, STYLE_FEATS, asiLevels,
 } from './data.js';
 import { die } from './rng.js';
 
-export const PB_BY_LEVEL = [0, 2, 2, 2, 2, 3];
+export const PB_BY_LEVEL = [0, ...Array.from({ length: 20 }, (_, i) => 2 + Math.floor(i / 4))];
 export { SPELLS };
 export const DEFAULT_BACKGROUND = {
   fighter: 'soldier', rogue: 'criminal', cleric: 'acolyte', wizard: 'sage', barbarian: 'soldier', bard: 'acolyte',
@@ -85,6 +86,7 @@ export function levelChoices(cls, level) {
   if (cls === 'ranger' && level === 3) out.push('prey');
   if (cls === 'warlock' && level >= 2) out.push('invocations');
   if (metamagicCount(cls, level)) out.push('metamagic');
+  if (asiLevels(cls, level).includes(level)) out.push('feat');
   return out;
 }
 // How many earlier picks in a list can be swapped out at a level-up ('level')
@@ -106,7 +108,7 @@ export function droppedPicks(cls, level, land, was = [], now = []) {
   return was.filter((x) => !now.includes(x) && !always.has(x));
 }
 // The fields a level-up or Long Rest screen can change.
-export const PICK_FIELDS = ['cantrips', 'book', 'prepared', 'scholar', 'skills', 'expertise', 'style', 'warriorCantrips', 'land', 'prey', 'invocations', 'pactWeapon', 'metamagic'];
+export const PICK_FIELDS = ['cantrips', 'book', 'prepared', 'scholar', 'skills', 'expertise', 'style', 'warriorCantrips', 'land', 'prey', 'invocations', 'pactWeapon', 'metamagic', 'feats'];
 
 // Pick n from `want` (in order) that pass ok(), then fill from `fill`.
 function pickN(n, want, fill, ok) {
@@ -295,6 +297,8 @@ export function validateSpec(spec, { level = 1 } = {}) {
     } else versatile = { feat };
   }
 
+  // Feats at Ability Score Improvement levels (one entry per level reached).
+  const feats = cleanFeats(spec.feats, { cls, level, final, B, versatile, style, prof, taken });
   const expertise = pickN(expertiseCount(cls, level), spec.expertise, [...(D.expertise || []), ...prof], (s) => prof.has(s));
   // Warlock: Eldritch Invocations (the Eldritch Blast ones need that cantrip).
   let invocations = [], pactWeapon = null;
@@ -313,8 +317,77 @@ export function validateSpec(spec, { level = 1 } = {}) {
     cls, species, background, method, scores, ...(rolls ? { rolls } : {}), plus, ancestry, name,
     lineage, speciesAbility, speciesSkill, bgFeat, versatile,
     skills, expertise, style, warriorCantrips, kit, masteries, order, cantrips, book, prepared, scholar,
-    invocations, pactWeapon, metamagic, land, prey,
+    invocations, pactWeapon, metamagic, land, prey, feats,
   };
+}
+
+// Ability scores after the background's increases and every feat's.
+export function finalScores(spec) {
+  const out = {};
+  for (const a of ABILITIES) out[a] = spec.scores[a] + (spec.plus?.[a] || 0);
+  for (const f of spec.feats || []) for (const [a, v] of Object.entries(f.plus || {})) out[a] += v;
+  return out;
+}
+
+// The default Ability Score Improvement: +2 to the class's main ability, or
+// +1 to it and +1 to Constitution when +2 would pass 20, and so on.
+function defaultIncrease(cls, now) {
+  const order = [CLASSES[cls].primary, 'con', ...Object.keys(CLASSES[cls].suggested)];
+  const room = order.filter((a, i) => order.indexOf(a) === i && now[a] < 20);
+  if (!room.length) return {};
+  if (now[room[0]] <= 18) return { [room[0]]: 2 };
+  return room[1] ? { [room[0]]: 1, [room[1]]: 1 } : { [room[0]]: 1 };
+}
+
+// Clean a hero's feats from Ability Score Improvement levels. Each feat is
+// { level, feat, plus?, skills?, style?, list/cantrips/spell/ability (Magic Initiate) }.
+// Anything the rules don't allow falls back to Ability Score Improvement.
+function cleanFeats(raw, { cls, level, final, B, versatile, style, prof, taken }) {
+  const want = Array.isArray(raw) ? raw : [];
+  const now = { ...final };
+  const out = [];
+  const has = new Set([B.feat, versatile?.feat].filter(Boolean));
+  const miLists = new Set([B.feat === 'magic-initiate' ? B.featList : null, versatile?.feat === 'magic-initiate' ? versatile.list : null].filter(Boolean));
+  const styles = new Set([style].filter(Boolean));
+  const plusOk = (plus, from, total) => {
+    const ks = Object.keys(plus);
+    const vs = Object.values(plus);
+    if (!ks.every((a) => from.includes(a)) || vs.some((v) => !Number.isInteger(v) || v < 1)) return false;
+    if (vs.reduce((x, y) => x + y, 0) !== total) return false;
+    return ks.every((a) => now[a] + plus[a] <= 20);
+  };
+  for (const lv of asiLevels(cls, level)) {
+    const w = want.find((x) => x && x.level === lv) || {};
+    let f = ASI_FEATS.includes(w.feat) ? w.feat : 'ability-score-improvement';
+    const F = FEATS[f];
+    if (has.has(f) && !F.repeatable && f !== 'magic-initiate') f = 'ability-score-improvement';
+    if (f === 'grappler' && !(now.str >= 13 || now.dex >= 13)) f = 'ability-score-improvement';
+    if (f === 'fighting-style' && !(STYLE_LEVEL[cls] != null && STYLE_FEATS.some((x) => !styles.has(x)))) f = 'ability-score-improvement';
+    if (f === 'magic-initiate' && FEATS[f].lists.every((l) => miLists.has(l))) f = 'ability-score-improvement';
+    const e = { level: lv, feat: f };
+    const plus = w.plus && typeof w.plus === 'object' ? Object.fromEntries(Object.entries(w.plus).map(([a, v]) => [a, +v]).filter(([, v]) => v)) : {};
+    if (f === 'ability-score-improvement') {
+      e.plus = plusOk(plus, ABILITIES, 2) && Object.values(plus).every((v) => v <= 2) ? plus : defaultIncrease(cls, now);
+    } else if (f === 'grappler') {
+      const okA = ['str', 'dex'].filter((a) => now[a] < 20);
+      e.plus = plusOk(plus, okA, 1) ? plus : okA.length ? { [now.str >= now.dex ? (okA.includes('str') ? 'str' : 'dex') : (okA.includes('dex') ? 'dex' : 'str')]: 1 } : {};
+    } else if (f === 'fighting-style') {
+      e.style = STYLE_FEATS.includes(w.style) && !styles.has(w.style) ? w.style : STYLE_FEATS.find((x) => !styles.has(x));
+      styles.add(e.style);
+    } else if (f === 'skilled') {
+      e.skills = pickN(3, w.skills, [...HUMAN_SKILL_DEFAULTS, ...Object.keys(SKILLS)], (x) => !!SKILLS[x] && !prof.has(x));
+      for (const x of e.skills) prof.add(x);
+    } else if (f === 'magic-initiate') {
+      const list = FEATS[f].lists.includes(w.list) && !miLists.has(w.list) ? w.list : FEATS[f].lists.find((l) => !miLists.has(l));
+      Object.assign(e, cleanMI(w, list, taken));
+      miLists.add(list);
+      for (const x of [...e.cantrips, e.spell]) taken.add(x);
+    }
+    for (const [a, v] of Object.entries(e.plus || {})) now[a] += v;
+    has.add(f);
+    out.push(e);
+  }
+  return out;
 }
 
 // --------------------------------------------------------------- heroes ----
@@ -352,7 +425,7 @@ export function armorParts(h) {
   }
   const parts = opts.reduce((best, o) => (sumParts(o) > sumParts(best) ? o : best));
   if (h.hasShield) parts.push({ label: 'Shield', value: 2, rule: 'armor-class' });
-  if (h.style === 'defense' && ARMOR[h.armorId].type) parts.push({ label: 'Defense fighting style', value: 1, rule: 'defense' });
+  if ((h.styles || [h.style]).includes('defense') && ARMOR[h.armorId].type) parts.push({ label: 'Defense fighting style', value: 1, rule: 'defense' });
   return parts;
 }
 
@@ -363,13 +436,14 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   const lin = S.lineages ? S.lineages[spec.lineage] : null;
   const kit = KITS[spec.cls][spec.kit];
   const pb = PB_BY_LEVEL[level];
-  const scores = {};
-  for (const a of ABILITIES) scores[a] = spec.scores[a] + (spec.plus[a] || 0);
+  const scores = finalScores(spec);
   const m = Object.fromEntries(ABILITIES.map((a) => [a, abilityMod(scores[a])]));
   const L = (n) => level >= n;
   const sub = L(3) ? SUBCLASSES[spec.cls] : null;
-  const feats = [B.feat, spec.versatile?.feat].filter(Boolean);
+  const feats = [B.feat, spec.versatile?.feat, ...spec.feats.map((f) => f.feat)].filter(Boolean);
   const has = (f) => feats.includes(f);
+  // Fighting Styles: the class's own, and any taken as feats.
+  const styles = [spec.style, ...spec.feats.filter((f) => f.style).map((f) => f.style)].filter(Boolean);
   const cls = spec.cls;
   const inv = (x) => (spec.invocations || []).includes(x);
 
@@ -380,7 +454,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     : cls === 'monk' ? { name: 'Unarmored Defense (10)', ab: 'wis', noShield: true, rule: 'unarmored-defense' }
     : cls === 'sorcerer' && L(3) ? { name: 'Draconic Resilience (10)', ab: 'cha', rule: 'draconic-resilience' } : null;
   const shadows = inv('armor-of-shadows');
-  const acParts = armorParts({ mods: m, armorId, hasShield: kit.shield, style: spec.style, unarmored, shadows });
+  const acParts = armorParts({ mods: m, armorId, hasShield: kit.shield, style: spec.style, styles, unarmored, shadows });
 
   // Speed: the species', and heavy armor without the Strength for it costs 10 ft.
   const speedParts = [{ label: `${S.name}${lin?.speed ? ` (${lin.name})` : ''}`, value: lin?.speed || S.speed, rule: 'speed' }];
@@ -400,7 +474,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   if (has('alert')) initParts.push({ label: 'Alert feat (PB)', value: pb, rule: 'alert' });
 
   // Skills
-  const prof = new Set([...B.skills, ...spec.skills, ...(spec.speciesSkill ? [spec.speciesSkill] : []), ...(spec.versatile?.skills || [])]);
+  const prof = new Set([...B.skills, ...spec.skills, ...(spec.speciesSkill ? [spec.speciesSkill] : []), ...(spec.versatile?.skills || []), ...spec.feats.flatMap((f) => f.skills || [])]);
   const expertise = [...spec.expertise];
   const scholar = spec.cls === 'wizard' && L(2) ? spec.scholar : null;
   if (scholar) expertise.push(scholar);
@@ -438,7 +512,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
         { label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'ability-modifier' },
         { label: 'Proficiency Bonus', value: pb, rule: 'proficiency' },
       ];
-      if (spec.style === 'archery' && w.kind === 'ranged') hit.push({ label: 'Archery fighting style', value: 2, rule: 'archery' });
+      if (styles.includes('archery') && w.kind === 'ranged') hit.push({ label: 'Archery fighting style', value: 2, rule: 'archery' });
       const dmgFlat = [{ label: `${ability.toUpperCase()} modifier`, value: m[ability], rule: 'damage' }];
       let dice = variant === 'melee' && two ? w.versatile : w.dice;
       if (monkW && dieSize(martialDie) > dieSize(dice)) dice = martialDie;
@@ -448,7 +522,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
         kind: ranged ? 'ranged' : 'melee', thrown: variant === 'thrown', dice, type: w.type,
         finesse: !!w.finesse, light: !!w.light, range: variant === 'thrown' ? w.thrown : w.range || null, props: w.props, hit, dmgFlat, mastery,
         ability, abilityMod: m[ability], monk: !!monkW, pact,
-        gwf: spec.style === 'great-weapon' && variant === 'melee' && (w.twoHanded || two),
+        gwf: styles.includes('great-weapon') && variant === 'melee' && (w.twoHanded || two),
         masteryText: mastery ? MASTERIES[mastery].text : null,
       };
     };
@@ -510,6 +584,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   };
   if (spec.bgFeat) miLearn(spec.bgFeat, `Magic Initiate (${LIST_NAMES[spec.bgFeat.list]})`);
   if (spec.versatile?.feat === 'magic-initiate') miLearn(spec.versatile, `Magic Initiate (${LIST_NAMES[spec.versatile.list]})`);
+  for (const f of spec.feats) if (f.feat === 'magic-initiate') miLearn(f, `Magic Initiate (${LIST_NAMES[f.list]})`);
   const sa = spec.speciesAbility;
   if (lin?.cantrip) learn(lin.cantrip, sa, lin.name);
   if (lin?.cantrip2) learn(lin.cantrip2, sa, lin.name);
@@ -523,13 +598,26 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
   for (const t of S.traits) features.push({ ...t, source: S.name });
   if (lin) features.push({ name: lin.name, rule: spec.species === 'goliath' ? 'giant-ancestry' : 'species', text: lin.text, source: S.name });
   if (spec.speciesSkill) features.push({ name: `${spec.species === 'human' ? 'Skillful' : 'Keen Senses'}: ${SKILL_NAMES[spec.speciesSkill]}`, rule: 'skills', text: `Proficiency in ${SKILL_NAMES[spec.speciesSkill]}.`, source: S.name });
-  for (const f of feats) {
+  for (const f of [B.feat, spec.versatile?.feat].filter(Boolean)) {
     if (f === 'magic-initiate') continue;
     const F0 = FEATS[f];
     const extra = f === 'skilled' ? `: ${spec.versatile.skills.map((x) => SKILL_NAMES[x]).join(', ')}` : '';
     features.push({ name: F0.name + extra, rule: F0.rule, text: F0.text, source: f === B.feat ? `${B.name} background` : 'Versatile (Human)' });
   }
-  for (const f of featFeature) features.push({ ...f, source: f === featFeature[0] && spec.bgFeat ? `${B.name} background` : 'Versatile (Human)' });
+  const miSources = [spec.bgFeat ? `${B.name} background` : null, spec.versatile?.feat === 'magic-initiate' ? 'Versatile (Human)' : null,
+    ...spec.feats.filter((f) => f.feat === 'magic-initiate').map((f) => `${C.name} ${f.level}`)].filter(Boolean);
+  for (const [i, f] of featFeature.entries()) features.push({ ...f, source: miSources[i] });
+  for (const f of spec.feats) {
+    if (f.feat === 'magic-initiate') continue;
+    const F0 = FEATS[f.feat];
+    const plus = Object.entries(f.plus || {}).map(([a, v]) => `${ABILITY_NAMES[a]} +${v}`).join(', ');
+    const name = f.feat === 'ability-score-improvement' ? `Ability Score Improvement: ${plus}`
+      : f.feat === 'fighting-style' ? `Fighting Style feat: ${FIGHTING_STYLES[f.style].name}`
+      : f.feat === 'skilled' ? `Skilled: ${f.skills.map((x) => SKILL_NAMES[x]).join(', ')}`
+      : `${F0.name}${plus ? ` (${plus})` : ''}`;
+    const text = f.feat === 'fighting-style' ? FIGHTING_STYLES[f.style].text : F0.text;
+    features.push({ name, rule: f.feat === 'fighting-style' ? FIGHTING_STYLES[f.style].rule : F0.rule, text, source: `${C.name} ${f.level}` });
+  }
   const F = (lv, name, rule, text) => { if (L(lv)) features.push({ name, rule, text, source: `${C.name} ${lv}` }); };
   const mastText = () => spec.masteries.map((w) => `${WEAPONS[w].name}: ${MASTERIES[WEAPONS[w].mastery].name}`).join(', ');
   if (spec.cls === 'fighter') {
@@ -650,7 +738,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     species: lin && spec.species !== 'goliath' ? `${lin.name}${spec.species === 'tiefling' ? ' Tiefling' : ''}` : S.name, speciesId: spec.species, lineage: spec.lineage,
     background: B.name, size: spec.species === 'halfling' || spec.species === 'gnome' ? 'small' : 'medium',
     scores, mods: m, saves, saveProfs: [...C.saves],
-    armorId, hasShield: kit.shield, style: spec.style, mageArmor: false, unarmored, shadows,
+    armorId, hasShield: kit.shield, style: spec.style, styles, mageArmor: false, unarmored, shadows,
     ac: sumParts(acParts), acParts, hp: hpMax, hpMax, hpParts, tempHp: 0,
     hitDice: { die: C.hitDie, max: level, left: level },
     speed: sumParts(speedParts), speedParts, initParts, attacks, skills, profSkills: [...prof], expertise, features, casting,
@@ -662,7 +750,8 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     poisonSaveAdv: spec.species === 'dwarf',
     braveSaveAdv: spec.species === 'halfling',
     savage: has('savage-attacker'),
-    twf: spec.style === 'two-weapon',
+    twf: styles.includes('two-weapon'),
+    grappler: has('grappler'),
     sneak: spec.cls === 'rogue' ? (L(3) ? '2d6' : '1d6') : null,
     secondWind: spec.cls === 'fighter' ? { uses: 2, max: 2 } : null,
     actionSurge: spec.cls === 'fighter' && L(2) ? { uses: 1, max: 1 } : null,

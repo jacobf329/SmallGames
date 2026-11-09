@@ -438,6 +438,11 @@ export function createRoom({ store = null, now = () => Date.now(), seed = null, 
           if (open.has('invocations')) open.add('pactWeapon');
           const take = {};
           for (const k of PICK_FIELDS) take[k] = open.has(k) && k in pick ? pick[k] : was[k];
+          // A feat: only the one this level brings; earlier levels' feats stay.
+          if (open.has('feat') && Array.isArray(pick.feats)) {
+            const mine = pick.feats.find((f) => f && f.level === S.level);
+            take.feats = [...(was.feats || []).filter((f) => f.level !== S.level), ...(mine ? [mine] : [])];
+          }
           next = validateSpec({ ...s.spec, ...take }, { level: S.level });
         } catch (e) { return err(e.message); }
         const base = (when === 'level' && S.story.levelUp?.find((x) => x.id === s.pid)?.was) || was;

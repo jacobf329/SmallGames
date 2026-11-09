@@ -1043,6 +1043,9 @@ function targetCard(b, me, T) {
       rows += row('Shove: Prone', { a: 'shove', target: T.id, mode: 'prone' }, shoveOk,
         `${R0('unarmed-strike', 'Replaces an attack')}: DC ${dc} STR or DEX save, or it falls ${R0('prone', 'Prone')}`, false,
         `<button class="btn small" ${intentAttr({ a: 'shove', target: T.id, mode: 'push' })} ${shoveOk ? '' : 'disabled'}>Push 5 ft</button>`);
+      const held = T.conds?.some((x) => x.id === 'grappled' && x.by === me.id);
+      if (!held) rows += row('Grapple', { a: 'grapple', target: T.id }, shoveOk,
+        `${R0('unarmed-strike', 'Replaces an attack')}: DC ${dc} STR or DEX save, or it is ${R0('grappled', 'Grappled')}${me.grappler ? ` (then you have ${R0('grappler', 'Advantage')} on attacks against it)` : ''}`, false);
       rows += row('Help', { a: 'help', target: T.id }, t.action, `<a class="rl" data-rule="help">Help action</a>: your ally's next attack on ${esc(T.name)} gets Advantage.`, false);
     }
     if (!canAttack(t)) rows += '<div class="why dim">You have already used your action this turn.</div>';
