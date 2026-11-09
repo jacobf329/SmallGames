@@ -199,7 +199,7 @@ export const SPELLS = {
   'prestidigitation': { name: 'Prestidigitation', level: 0, time: 'action', range: 10, kind: 'utility', text: 'Small magic tricks: a spark, a smell, cleaning or soiling an object, warming food. (Useful outside of fights.)' },
   'druidcraft': { name: 'Druidcraft', level: 0, time: 'action', range: 30, kind: 'utility', text: 'Small nature magic: predict the weather, make a flower bloom, a puff of wind. (Useful outside of fights.)' },
   'eldritch-blast': { name: 'Eldritch Blast', level: 0, time: 'action', range: 120, kind: 'attack', dice: '1d10', type: 'Force',
-    text: 'A beam of crackling energy: make a ranged spell attack. On a hit, 1d10 Force damage. (More beams come at higher levels than this game reaches.)' },
+    text: 'A beam of crackling energy: make a ranged spell attack. On a hit, 1d10 Force damage. More beams at higher levels: two at level 5, three at 11, four at 17, each with its own attack roll, at one target or several.' },
   'vicious-mockery': { name: 'Vicious Mockery', level: 0, time: 'action', range: 60, kind: 'save', save: 'wis', dice: '1d6', type: 'Psychic', rider: 'mocked',
     text: 'Insults laced with magic: a creature you can see within 60 feet makes a Wisdom save. On a failure, 1d6 Psychic damage and Disadvantage on its next attack roll before the end of its next turn.' },
   'produce-flame': { name: 'Produce Flame', level: 0, time: 'action', range: 60, kind: 'attack', dice: '1d8', type: 'Fire',
@@ -594,6 +594,7 @@ export const INVOCATIONS = {
   'devils-sight': { name: "Devil's Sight", min: 2, text: 'See normally in darkness, magical or not, within 120 feet. (Every fight here is lit.)' },
   'mask-of-many-faces': { name: 'Mask of Many Faces', min: 2, text: 'Cast Disguise Self at will without a spell slot. (Useful outside of fights.)' },
   'misty-visions': { name: 'Misty Visions', min: 2, text: 'Cast Silent Image at will without a spell slot. (Useful outside of fights.)' },
+  'thirsting-blade': { name: 'Thirsting Blade', min: 5, needs: 'pact-of-the-blade', text: 'Extra Attack with your pact weapon: you attack twice with it, instead of once, whenever you take the Attack action on your turn.' },
 };
 export const INVOCATIONS_KNOWN = byLevel([1, 3, 3, 3, 5, 5, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10]);
 // A Sorcerer's Metamagic (two at level 2). cost: Sorcery Points.
@@ -615,6 +616,30 @@ export const SLOT_COST = { 1: 2, 2: 3, 3: 5, 4: 6, 5: 7 };
 export const SLOT_MIN_LEVEL = { 1: 2, 2: 3, 3: 5, 4: 7, 5: 9 };
 // The highest level the campaign reaches so far (the tables above run to 20).
 export const MAX_LEVEL = 5;
+// Class tables (SRD 5.2.1): a value that changes at set levels.
+const stepAt = (lv, steps) => { let v = steps[0][1]; for (const [l, x] of steps) if (lv >= l) v = x; return v; };
+export const PROGRESSION = {
+  rages: (lv) => stepAt(lv, [[1, 2], [3, 3], [6, 4], [12, 5], [17, 6]]),
+  rageDamage: (lv) => stepAt(lv, [[1, 2], [9, 3], [16, 4]]),
+  martialDie: (lv) => stepAt(lv, [[1, 6], [5, 8], [11, 10], [17, 12]]),
+  unarmoredMovement: (lv) => stepAt(lv, [[1, 0], [2, 10], [6, 15], [10, 20], [14, 25], [18, 30]]),
+  sneakDice: (lv) => Math.ceil(lv / 2),
+  secondWind: (lv) => stepAt(lv, [[1, 2], [4, 3], [10, 4]]),
+  bardicDie: (lv) => stepAt(lv, [[1, 6], [5, 8], [10, 10], [15, 12]]),
+  channelCleric: (lv) => stepAt(lv, [[1, 0], [2, 2], [6, 3], [18, 4]]),
+  channelPaladin: (lv) => stepAt(lv, [[1, 0], [3, 2], [11, 3]]),
+  wildShape: (lv) => stepAt(lv, [[1, 0], [2, 2], [6, 3], [17, 4]]),
+  favoredEnemy: (lv) => stepAt(lv, [[1, 2], [5, 3], [9, 4], [13, 5], [17, 6]]),
+};
+// Kinds of weapons a class can use the mastery property of.
+export const masteryCount = (cls, lv) => cls === 'fighter' ? stepAt(lv, [[1, 3], [4, 4], [10, 5], [16, 6]])
+  : cls === 'barbarian' ? stepAt(lv, [[1, 2], [4, 3], [10, 4]]) : CLASSES[cls].masteryCount || 0;
+// Attacks per Attack action: Extra Attack at 5 (Fighters: 3 at 11, 4 at 20).
+export const attacksPerAction = (cls, lv) => cls === 'fighter' ? stepAt(lv, [[1, 1], [5, 2], [11, 3], [20, 4]])
+  : ['barbarian', 'monk', 'paladin', 'ranger'].includes(cls) && lv >= 5 ? 2 : 1;
+// Cantrip Upgrade: damage cantrips roll one more die at character levels 5, 11 and 17
+// (Eldritch Blast gets one more beam instead).
+export const cantripTier = (lv) => 1 + (lv >= 5) + (lv >= 11) + (lv >= 17);
 // Hit Points gained per level after the first: the Hit Die's fixed value.
 export const HP_PER_LEVEL = { 6: 4, 8: 5, 10: 6, 12: 7 };
 

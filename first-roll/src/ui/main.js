@@ -7,7 +7,7 @@
 import { createRoom } from '../game/room.js';
 import { Host, LocalNet, RtcNet, onlineSupported, normCode } from '../net/online.js';
 import { buildHero, spellList, PICK_FIELDS } from '../rules/character.js';
-import { CLASSES, SPELLS, MASTERIES, METAMAGIC, signed } from '../rules/data.js';
+import { CLASSES, SPELLS, MASTERIES, METAMAGIC, signed, SLOT_COST, SLOT_MIN_LEVEL } from '../rules/data.js';
 import {
   previewMove, reachableSquares, attackOptions, canAttack, canCast, attackFactors,
   hitChance, hitBonus, saveChance, spellAttack, spellDC, scaled, speedOf, acAgainst,
@@ -363,6 +363,8 @@ const board = createBoard($('board'), onTap);
 $('b-turn').onclick = () => { if (app.S?.battle?.over) { $('over').dataset.dismissed = ''; render(); } };
 
 const myHeroId = () => (app.S?.battle?.creatures[app.me] ? app.me : null);
+// The hero's level, for cantrips that grow with it.
+const myLevel = () => app.S?.battle?.creatures[app.me]?.level || 1;
 function myTurn() {
   const S = app.S;
   return !!S?.battle && !S.battle.over && !S.battle.pending && S.control === app.me;
@@ -597,7 +599,10 @@ function classButtons(b, me, extra, btn) {
   }
   if (me.wildShape) {
     if (me.shape) extra.push(btn('Leave Wolf form', { a: 'unshape' }, t.bonus, 'wild-shape'));
-    else extra.push(btn(`Wild Shape: Wolf (${me.wildShape.uses})`, { a: 'shape' }, t.bonus && me.wildShape.uses > 0, 'wild-shape'));
+    else {
+      const resurge = !!me.wildResurgence && Object.values(me.casting?.slots || {}).some((s) => s.left > 0 && !s.pact);
+      extra.push(btn(`Wild Shape: Wolf (${me.wildShape.uses}${!me.wildShape.uses && resurge ? ', a slot buys one' : ''})`, { a: 'shape' }, t.bonus && (me.wildShape.uses > 0 || resurge), 'wild-shape'));
+    }
   }
   if (me.landsAid) aimBtn("Land's Aid", { kind: 'landsaid' }, t.action && !t.magicUsed && me.wildShape?.uses > 0 && !me.shape, "Land's Aid");
   if (me.focus) {
@@ -614,8 +619,9 @@ function classButtons(b, me, extra, btn) {
     for (const [lv, sl] of Object.entries(me.casting?.slots || {})) {
       if (sl.left > 0) extra.push(btn(`Level ${lv} slot → ${lv} Sorcery`, { a: 'font', mode: 'burn', level: +lv }, sp.uses < sp.max, 'font-of-magic'));
     }
-    extra.push(btn('2 Sorcery → level 1 slot', { a: 'font', level: 1 }, t.bonus && sp.uses >= 2, 'font-of-magic'));
-    if (me.level >= 3) extra.push(btn('3 Sorcery → level 2 slot', { a: 'font', level: 2 }, t.bonus && sp.uses >= 3, 'font-of-magic'));
+    for (const [lv, cost] of Object.entries(SLOT_COST)) {
+      if (me.level >= SLOT_MIN_LEVEL[lv]) extra.push(btn(`${cost} Sorcery → level ${lv} slot`, { a: 'font', level: +lv }, t.bonus && sp.uses >= cost, 'font-of-magic'));
+    }
   }
   if (b.effects.some((e) => e.type === 'dbreath' && e.target === me.id)) aimBtn("Dragon's Breath: exhale", { kind: 'exhale' }, t.action && !t.magicUsed, "Dragon's Breath");
 }
@@ -628,7 +634,7 @@ function aimOf(a) {
   if (a.kind === 'jaunt') return { mode: 'point', range: 30 };
   if (a.kind === 'landsaid') return { mode: 'area', shape: 'sphere', size: 10, from: 'point', range: 60 };
   if (a.kind === 'exhale') return { mode: 'area', shape: 'cone', size: 15, from: 'self', range: 0 };
-  return spellAim(a.spell, a.slot, a.meta || null);
+  return spellAim(a.spell, a.slot, a.meta || null, myLevel());
 }
 const OTHER_AIMS = { landsaid: { name: "Land's Aid", rule: 'lands-aid', go: 'Use' }, exhale: { name: "Dragon's Breath", rule: 'dragons-breath', go: 'Exhale' } };
 const aimName = (me, a) => (a.kind === 'breath' ? `Breath Weapon (${a.shape === 'line' ? '30-ft Line' : '15-ft Cone'})` : a.kind === 'jaunt' ? "Cloud's Jaunt" : OTHER_AIMS[a.kind]?.name || SPELLS[a.spell].name);
@@ -715,7 +721,7 @@ function castAim() {
 // What a spell will do to one creature, in a line (hit or save chances).
 function spellOdds(b, me, sid, T, slot) {
   const sp = SPELLS[sid];
-  const sc = scaled(sid, slot);
+  const sc = scaled(sid, slot, me.level);
   if (sp.kind === 'attack' || sp.kind === 'rays' || sp.kind === 'spiritual') {
     const atk = spellAttack(me, sid, { melee: sp.kind === 'spiritual' || !!sp.melee });
     const f = attackFactors(b, me, T, atk);
@@ -734,8 +740,8 @@ const hostile = (p, q) => p.side !== q.side;
 // One short line on how a spell aims and what it does.
 function aimSummary(sid, slot) {
   const sp = SPELLS[sid];
-  const aim = spellAim(sid, slot);
-  const sc = scaled(sid, slot);
+  const aim = spellAim(sid, slot, null, myLevel());
+  const sc = scaled(sid, slot, myLevel());
   const rng = aim.range <= 5 ? 'touch' : `${aim.range} ft`;
   switch (aim.mode) {
     case 'self': return 'Self';
@@ -829,7 +835,7 @@ function aimCard(b, me, a) {
     const ab = a.kind === 'breath' || db ? 'dex' : a.kind === 'landsaid' ? 'con' : sp.save;
     const dmg = a.kind === 'breath' ? `${me.breath.dice} ${me.breath.type}, half on a save` : a.kind === 'landsaid' ? '2d6 Necrotic to enemies, half on a save; one friend inside heals 2d6'
       : db ? `${db.dice} ${db.dmgType}, half on a save`
-      : sp.cond === 'sleep' ? 'enemies only: Incapacitated, then Unconscious after a second failed save' : sp.cond ? `${R0('restrained', 'Restrained')} on a failure` : sp.effect ? 'outlined in light: attacks against it have Advantage' : `${scaled(a.spell, a.slot).dice} ${sp.type || 'damage'}${sp.half ? ', half on a save' : ''}${sp.push ? `, pushed ${sp.push} ft on a failure` : ''}`;
+      : sp.cond === 'sleep' ? 'enemies only: Incapacitated, then Unconscious after a second failed save' : sp.cond ? `${R0('restrained', 'Restrained')} on a failure` : sp.effect ? 'outlined in light: attacks against it have Advantage' : `${scaled(a.spell, a.slot, me.level).dice} ${sp.type || 'damage'}${sp.half ? ', half on a save' : ''}${sp.push ? `, pushed ${sp.push} ft on a failure` : ''}`;
     body += `<div class="why">${hit.length ? `Catches ${hit.map((c) => esc(c.name)).join(', ')}` : 'Catches nobody there yet'}${pals.length ? ` <b class="bad">(including ${pals.map((c) => (c === me ? 'you' : esc(c.name))).join(' and ')}!)</b>` : ''} · DC ${dc} ${ab.toUpperCase()} save, ${dmg}</div>`;
   }
   const ready = !!aimIntent(a);
@@ -1011,12 +1017,13 @@ function targetCard(b, me, T) {
       else if (sp.kind === 'attack' || sp.kind === 'rays' || sp.kind === 'spiritual') {
         const atk = spellAttack(me, sp.id, sp.kind === 'spiritual' ? { melee: true } : undefined);
         const f = attackFactors(b, me, T, atk);
-        const n = sp.kind === 'rays' ? scaled(sp.id, c.slot).rays : 1;
-        why = [`${Math.round(hitChance(hitBonus(atk), acAgainst(b, me, T, atk).value, f.mode, me.luck) * 100)}% to hit${n > 1 ? `, ${n} rays` : ''}`, `${sp.dice}${n > 1 ? ' each' : ''} ${sp.type}`, ...reasons({ ...f, adv: f.adv, dis: f.dis }), tag].join(' · ');
+        const sc1 = scaled(sp.id, c.slot, me.level);
+        const n = sp.kind === 'rays' ? sc1.rays : sc1.beams || 1;
+        why = [`${Math.round(hitChance(hitBonus(atk), acAgainst(b, me, T, atk).value, f.mode, me.luck) * 100)}% to hit${n > 1 ? `, ${n} ${sp.kind === 'rays' ? 'rays' : 'beams'}` : ''}`, `${sc1.dice}${n > 1 ? ' each' : ''} ${sp.type}`, ...reasons({ ...f, adv: f.adv, dis: f.dis }), tag].join(' · ');
       } else if (sp.kind === 'save' || sp.kind === 'command' || sp.kind === 'hold') {
         if (sp.only && T.creature !== sp.only) { rows += row(sp.name, intent, false, `Only works on a ${esc(sp.only)}.`); continue; }
         const dc = spellDC(me, sp.id);
-        const eff = sp.kind === 'save' ? `${sp.dice} ${sp.type}` : sp.kind === 'command' ? `"Grovel!": it falls ${R0('prone', 'Prone')} and loses its turn` : `${R0('paralyzed', 'Paralyzed')}, saves at the end of each of its turns`;
+        const eff = sp.kind === 'save' ? `${scaled(sp.id, c.slot, me.level).dice} ${sp.type}` : sp.kind === 'command' ? `"Grovel!": it falls ${R0('prone', 'Prone')} and loses its turn` : `${R0('paralyzed', 'Paralyzed')}, saves at the end of each of its turns`;
         why = `${Math.round((1 - saveChance(b, T, sp.save || 'wis', dc)) * 100)}% it fails a DC ${dc} ${(sp.save || 'wis').toUpperCase()} save · ${eff} · ${tag}`;
       } else why = `Never misses · ${scaled(sp.id, c.slot).darts} × (1d4 + 1) Force · ${tag}`;
       rows += row(sp.name, intent, ok && c.ok, why, true, upButtons(b, me, sp, intent, ok && c.ok));

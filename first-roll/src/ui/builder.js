@@ -552,8 +552,8 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
       const eb = (d.cantrips || []).includes('eldritch-blast');
       const needsEb = ['agonizing-blast', 'repelling-blast', 'eldritch-spear'];
       h += pickList('invocations', Object.entries(INVOCATIONS).map(([k, x]) => chip('invocations', k, x.name, {
-        off: x.min > level || (needsEb.includes(k) && !eb),
-        note: x.min > level ? `(level ${x.min})` : needsEb.includes(k) && !eb ? '(needs Eldritch Blast)' : '',
+        off: x.min > level || (needsEb.includes(k) && !eb) || (x.needs && !(d.invocations || []).includes(x.needs)),
+        note: x.min > level ? `(level ${x.min})` : needsEb.includes(k) && !eb ? '(needs Eldritch Blast)' : x.needs && !(d.invocations || []).includes(x.needs) ? `(needs ${INVOCATIONS[x.needs].name})` : '',
       })), `${R('eldritch-invocations', 'Eldritch Invocations')}: pick ${LISTS.invocations.cap()}`);
       h += `<div class="ilist">${(d.invocations || []).map((k) => `<p class="note"><b>${esc(INVOCATIONS[k].name)}</b>: ${esc(INVOCATIONS[k].text)}</p>`).join('')}</div>`;
       if (only) h += '<p class="note">When you gain a level, you can swap one invocation for another.</p>';

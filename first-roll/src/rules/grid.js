@@ -16,7 +16,7 @@ export const condOf = (c, id) => c.conds?.find((x) => x.id === id) || null;
 // At 0 Hit Points (Unconscious, dying or dead).
 export const down = (c) => c.hp <= 0;
 // Can't take actions or reactions: at 0 HP, or Paralyzed, Incapacitated, Unconscious.
-export const incap = (c) => c.hp <= 0 || !!c.conds?.some((x) => x.id === 'paralyzed' || x.id === 'incapacitated' || x.id === 'unconscious');
+export const incap = (c) => c.hp <= 0 || !!c.conds?.some((x) => x.id === 'paralyzed' || x.id === 'incapacitated' || x.id === 'unconscious' || x.id === 'stunned');
 // Automatically fails Strength and Dexterity saves; hits from within 5 ft are Critical Hits.
 export const helpless = (c) => c.hp <= 0 || hasCond(c, 'paralyzed') || hasCond(c, 'unconscious');
 export const hostile = (a, b) => a.side !== b.side;

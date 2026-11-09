@@ -104,7 +104,7 @@ export function specialOptions(b, me, { light = false } = {}) {
     const range = s.touch ? 5 : s.range || 0;
     if (s.conc && me.conc) continue;      // keep the spell already going
     const cost = slotCost(can);
-    const sc = scaled(sid, can.slot);
+    const sc = scaled(sid, can.slot, me.level);
     const dc = spellDC(me, sid);
     switch (s.kind) {
       case 'attack': case 'rays': {
@@ -165,7 +165,7 @@ export function specialOptions(b, me, { light = false } = {}) {
         break;
       }
       case 'area': {
-        const aim = spellAim(sid, can.slot);
+        const aim = spellAim(sid, can.slot, null, me.level);
         const near = threatened(b, me);
         for (const { x, y } of spotsNear(b, me, aim, foes)) {
           const hit = areaTargets(b, me, aim, x, y);
@@ -463,7 +463,8 @@ function squaresWithin(b, me) {
     if (!path) continue;
     let from = { x: me.x, y: me.y };
     const oas = new Set();
-    for (const to of path) { for (const h of provokers(b, me, from, to)) oas.add(h.id); from = to; }
+    let used = 0;
+    for (const to of path) { for (const h of provokers(b, me, from, to, used)) oas.add(h.id); from = to; used += 5; }
     out.push({ x, y, feet, oas: oas.size });
   }
   return out;
