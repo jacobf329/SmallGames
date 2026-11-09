@@ -316,6 +316,49 @@ export const SPELLS = {
     text: 'Concentration, up to 1 hour. Change your appearance, breathe underwater, or grow natural weapons. (Useful outside of fights here.)' },
   'suggestion': { name: 'Suggestion', level: 2, time: 'action', range: 30, kind: 'utility', conc: true,
     text: 'Concentration, up to 8 hours. Suggest a reasonable course of action to a creature that can hear you; it makes a Wisdom save or follows it. (Useful outside of fights.)' },
+  'magic-weapon': { name: 'Magic Weapon', level: 2, time: 'bonus', range: 5, touch: true, kind: 'buff', buff: 'magicweapon', targets: 1,
+    text: "A Bonus Action. Touch a nonmagical weapon: for 1 hour it is a magic weapon with +1 to attack rolls and damage rolls. No Concentration. (Here: the weapons of the creature you touch.) Cast with a level 4 slot: +2; level 6 or higher: +3." },
+  'prayer-of-healing': { name: 'Prayer of Healing', level: 2, time: 'action', range: 30, kind: 'utility',
+    text: "Takes 10 minutes. Up to five creatures who stay within 30 feet the whole time each regain 2d8 + your spellcasting modifier Hit Points. Higher slot: +1d8 per level. (Used outside of fights here: too slow for a fight.)" },
+  'zone-of-truth': { name: 'Zone of Truth', level: 2, time: 'action', range: 60, kind: 'utility',
+    text: "For 10 minutes, creatures in a 15-foot-radius Sphere make a Charisma save or can't speak a deliberate lie. (Useful outside of fights.)" },
+  'find-steed': { name: 'Find Steed', level: 2, time: 'action', range: 30, kind: 'utility',
+    text: 'An otherworldly steed appears to serve you: a mount that fights beside you. (Not used in fights here yet.)' },
+  'pass-without-trace': { name: 'Pass without Trace', level: 2, time: 'action', kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 hour. You and your companions within 30 feet get +10 to Dexterity (Stealth) checks and leave no tracks. (Useful outside of fights.)' },
+  // ---- level 3
+  'fireball': { name: 'Fireball', level: 3, time: 'action', range: 150, kind: 'area', area: { shape: 'sphere', size: 20, from: 'point' }, save: 'dex', dice: '8d6', type: 'Fire', half: true, up: { dice: '1d6' },
+    text: 'A bright streak flashes to a point within 150 feet and explodes. Each creature in a 20-foot-radius Sphere makes a Dexterity save: 8d6 Fire damage on a failure, half as much on a success. Careful: on this board a 20-foot radius covers most of the fight, allies included. Higher slot: +1d6 per level.' },
+  'lightning-bolt': { name: 'Lightning Bolt', level: 3, time: 'action', kind: 'area', area: { shape: 'line', size: 100, from: 'self' }, save: 'dex', dice: '8d6', type: 'Lightning', half: true, up: { dice: '1d6' },
+    text: 'A bolt of lightning 100 feet long and 5 feet wide blasts out from you in the direction you pick. Each creature in the Line makes a Dexterity save: 8d6 Lightning damage on a failure, half as much on a success. Higher slot: +1d6 per level.' },
+  'mass-healing-word': { name: 'Mass Healing Word', level: 3, time: 'bonus', range: 60, kind: 'massheal', dice: '2d4', targets: 6, up: { dice: '1d4' },
+    text: 'A Bonus Action. Up to six creatures you can see within 60 feet each regain 2d4 + your spellcasting modifier Hit Points. Higher slot: +1d4 per level.' },
+  'spirit-guardians': { name: 'Spirit Guardians', level: 3, time: 'action', kind: 'zone', zone: 'guardians', save: 'wis', dice: '3d8', type: 'Radiant', half: true, conc: true, area: { shape: 'emanation', size: 15, from: 'self' }, up: { dice: '1d8' },
+    text: "Concentration, up to 10 minutes. Protective spirits fill a 15-foot Emanation around you; your allies are spared. An enemy's Speed is halved in it (here: each square of it costs double, like Difficult Terrain). Whenever the Emanation enters an enemy's space, and whenever an enemy enters it or ends its turn there, that enemy makes a Wisdom save: 3d8 Radiant damage on a failure, half as much on a success, no more than once a turn. Higher slot: +1d8 per level." },
+  'revivify': { name: 'Revivify', level: 3, time: 'action', range: 5, touch: true, kind: 'revive',
+    text: "Touch a creature that has died within the last minute: it returns to life with 1 Hit Point. It uses up a diamond worth 300 GP. (First Roll doesn't track money, so the diamond is assumed.)" },
+  'haste': { name: 'Haste', level: 3, time: 'action', range: 30, kind: 'buff', buff: 'haste', targets: 1, conc: true,
+    text: "Concentration, up to 1 minute. A willing creature within 30 feet has its Speed doubled, +2 to its Armor Class, Advantage on Dexterity saves, and one extra action on each of its turns. That action can only be one weapon attack, Dash, Disengage or Hide. When the spell ends, the creature can't move or take actions until after its next turn." },
+  'slow': { name: 'Slow', level: 3, time: 'action', range: 120, kind: 'area', area: { shape: 'cube', size: 40, from: 'point' }, save: 'wis', cond: 'slow', choose: 6, conc: true,
+    text: "Concentration, up to 1 minute. Up to six creatures of your choice in a 40-foot Cube within 120 feet (here: the enemies in it) make a Wisdom save. On a failure: half Speed, −2 to AC and Dexterity saves, no Reactions, an action or a Bonus Action on its turn but not both, and only one attack with the Attack action. It saves again at the end of each of its turns. (The full rules also give its spells a chance to fail; that part is left out here.)" },
+  'hypnotic-pattern': { name: 'Hypnotic Pattern', level: 3, time: 'action', range: 120, kind: 'area', area: { shape: 'cube', size: 30, from: 'point' }, save: 'wis', cond: 'pattern', conc: true,
+    text: 'Concentration, up to 1 minute. A twisting pattern of colors in a 30-foot Cube within 120 feet. Each creature in it that can see it makes a Wisdom save or is Charmed: Incapacitated with a Speed of 0. It ends for a creature that takes damage, or that an ally shakes awake with an action. Careful: allies in the Cube can be caught too.' },
+  'fear': { name: 'Fear', level: 3, time: 'action', kind: 'area', area: { shape: 'cone', size: 30, from: 'self' }, save: 'wis', cond: 'fear', conc: true,
+    text: "Concentration, up to 1 minute. A 30-foot Cone of terror from you. Each creature in it makes a Wisdom save or drops what it's holding and is Frightened of you. On each of its turns it must Dash away from you by the safest route. It saves again only at the end of a turn on which it can't see you. Careful: allies in the Cone can be caught too." },
+  'vampiric-touch': { name: 'Vampiric Touch', level: 3, time: 'action', range: 5, touch: true, melee: true, kind: 'attack', dice: '3d6', type: 'Necrotic', rider: 'drain', conc: true, again: true, up: { dice: '1d6' },
+    text: 'Concentration, up to 1 minute. Make a melee spell attack against a creature next to you: 3d6 Necrotic damage on a hit, and you regain Hit Points equal to half the damage dealt. On each of your later turns, a Magic action makes the attack again, with no new slot. Higher slot: +1d6 per level.' },
+  'call-lightning': { name: 'Call Lightning', level: 3, time: 'action', range: 120, kind: 'area', area: { shape: 'sphere', size: 5, from: 'point' }, save: 'dex', dice: '3d10', type: 'Lightning', half: true, conc: true, again: true, up: { dice: '1d10' },
+    text: 'Concentration, up to 10 minutes. A storm cloud gathers overhead and a bolt strikes a point you choose within 120 feet: each creature within 5 feet of it makes a Dexterity save, 3d10 Lightning damage on a failure, half as much on a success. On each of your later turns, a Magic action calls another bolt, with no new slot. Higher slot: +1d10 per level.' },
+  'stinking-cloud': { name: 'Stinking Cloud', level: 3, time: 'action', range: 90, kind: 'zone', zone: 'stink', save: 'con', conc: true, area: { shape: 'sphere', size: 20, from: 'point' },
+    text: "Concentration, up to 1 minute. A 20-foot-radius Sphere of yellow, nauseating gas at a point within 90 feet. Each creature that starts its turn in it makes a Constitution save or is Poisoned until the end of that turn, and can't take an action or a Bonus Action. (The gas also blocks sight; that part is left out here.) Careful: on this board it covers most of the fight." },
+  'sleet-storm': { name: 'Sleet Storm', level: 3, time: 'action', range: 150, kind: 'zone', zone: 'sleet', save: 'dex', conc: true, area: { shape: 'sphere', size: 20, from: 'point' },
+    text: "Concentration, up to 1 minute. Freezing rain and sleet fill a 20-foot-radius Cylinder at a point within 150 feet. Its ground is Difficult Terrain. A creature that enters it for the first time on a turn or starts its turn there makes a Dexterity save or falls Prone. (The storm also blocks sight and can break Concentration; those parts are left out here.)" },
+  'counterspell': { name: 'Counterspell', level: 3, time: 'reaction', range: 60, kind: 'counter', save: 'con',
+    text: "A Reaction when you see a creature within 60 feet cast a spell: it makes a Constitution save against your spell save DC. On a failure, the spell fails and its action is wasted, but a slot it used isn't spent. (You are asked when an enemy casts.)" },
+  'dispel-magic': { name: 'Dispel Magic', level: 3, time: 'action', range: 120, kind: 'dispel',
+    text: "Pick a creature within 120 feet: every spell of level 3 or lower on it ends. For a higher-level spell, make an ability check with your spellcasting ability (DC 10 + the spell's level). Higher slot: it automatically ends spells up to the slot's level." },
+  'fly': { name: 'Fly', level: 3, time: 'action', range: 5, touch: true, kind: 'utility', conc: true,
+    text: 'Concentration, up to 10 minutes. A willing creature you touch gains a Fly Speed of 60 feet. Higher slot: one more creature per level. (The board here is flat, so it is used outside of fights.)' },
 };
 
 // Each class's spell list (the spells of the SRD this game has).
@@ -324,37 +367,45 @@ export const SPELL_LISTS = {
     0: ['sacred-flame', 'spare-the-dying', 'guidance', 'resistance-cantrip', 'thaumaturgy', 'light', 'mending'],
     1: ['bless', 'command', 'cure-wounds', 'detect-magic', 'guiding-bolt', 'healing-word', 'inflict-wounds', 'shield-of-faith', 'bane', 'protection-from-evil-and-good'],
     2: ['aid', 'hold-person', 'lesser-restoration', 'spiritual-weapon'],
+    3: ['spirit-guardians', 'mass-healing-word', 'revivify', 'dispel-magic'],
   },
   wizard: {
     0: ['fire-bolt', 'ray-of-frost', 'chill-touch', 'shocking-grasp', 'poison-spray', 'acid-splash', 'mage-hand', 'light', 'mending', 'dancing-lights', 'minor-illusion', 'prestidigitation'],
     1: ['magic-missile', 'burning-hands', 'shield', 'thunderwave', 'mage-armor', 'false-life', 'ray-of-sickness', 'chromatic-orb', 'sleep', 'fog-cloud', 'charm-person', 'detect-magic', 'comprehend-languages', 'feather-fall', 'identify', 'alarm', 'unseen-servant', 'find-familiar'],
-    2: ['scorching-ray', 'misty-step', 'hold-person', 'shatter', 'web', 'blur', 'dragons-breath', 'alter-self', 'suggestion'],
+    2: ['scorching-ray', 'misty-step', 'hold-person', 'shatter', 'web', 'blur', 'dragons-breath', 'alter-self', 'suggestion', 'magic-weapon'],
+    3: ['fireball', 'lightning-bolt', 'haste', 'slow', 'hypnotic-pattern', 'fear', 'vampiric-touch', 'stinking-cloud', 'sleet-storm', 'counterspell', 'dispel-magic', 'fly'],
   },
   bard: {
     0: ['vicious-mockery', 'starry-wisp', 'dancing-lights', 'light', 'mage-hand', 'mending', 'minor-illusion', 'prestidigitation'],
     1: ['healing-word', 'dissonant-whispers', 'heroism', 'sleep', 'faerie-fire', 'bane', 'command', 'cure-wounds', 'thunderwave', 'charm-person', 'comprehend-languages', 'detect-magic', 'feather-fall', 'identify', 'longstrider', 'speak-with-animals', 'unseen-servant'],
-    2: ['shatter', 'hold-person', 'aid', 'lesser-restoration', 'suggestion'],
+    2: ['shatter', 'hold-person', 'aid', 'lesser-restoration', 'suggestion', 'zone-of-truth'],
+    3: ['mass-healing-word', 'hypnotic-pattern', 'fear', 'slow', 'stinking-cloud', 'dispel-magic'],
   },
   druid: {
     0: ['produce-flame', 'thorn-whip', 'starry-wisp', 'poison-spray', 'guidance', 'spare-the-dying', 'resistance-cantrip', 'druidcraft', 'mending'],
     1: ['entangle', 'healing-word', 'cure-wounds', 'faerie-fire', 'thunderwave', 'longstrider', 'fog-cloud', 'detect-magic', 'speak-with-animals'],
-    2: ['barkskin', 'hold-person', 'lesser-restoration'],
+    2: ['barkskin', 'hold-person', 'lesser-restoration', 'pass-without-trace'],
+    3: ['call-lightning', 'sleet-storm', 'revivify', 'dispel-magic'],
   },
   paladin: {
     1: ['divine-favor', 'bless', 'cure-wounds', 'heroism', 'shield-of-faith', 'command', 'protection-from-evil-and-good', 'divine-smite', 'detect-magic'],
+    2: ['aid', 'lesser-restoration', 'magic-weapon', 'prayer-of-healing', 'zone-of-truth', 'find-steed'],
   },
   ranger: {
     1: ['hunters-mark', 'cure-wounds', 'entangle', 'longstrider', 'fog-cloud', 'alarm', 'detect-magic', 'speak-with-animals'],
+    2: ['aid', 'barkskin', 'lesser-restoration', 'magic-weapon', 'pass-without-trace'],
   },
   sorcerer: {
     0: ['fire-bolt', 'sorcerous-burst', 'ray-of-frost', 'shocking-grasp', 'chill-touch', 'acid-splash', 'poison-spray', 'dancing-lights', 'light', 'mage-hand', 'mending', 'minor-illusion', 'prestidigitation'],
     1: ['magic-missile', 'chromatic-orb', 'shield', 'burning-hands', 'sleep', 'thunderwave', 'false-life', 'ray-of-sickness', 'charm-person', 'comprehend-languages', 'detect-magic', 'feather-fall', 'fog-cloud'],
     2: ['scorching-ray', 'shatter', 'web', 'misty-step', 'hold-person', 'blur', 'dragons-breath', 'alter-self', 'suggestion'],
+    3: ['fireball', 'lightning-bolt', 'haste', 'slow', 'hypnotic-pattern', 'fear', 'vampiric-touch', 'stinking-cloud', 'sleet-storm', 'counterspell', 'dispel-magic', 'fly'],
   },
   warlock: {
     0: ['eldritch-blast', 'chill-touch', 'poison-spray', 'mage-hand', 'minor-illusion', 'prestidigitation'],
     1: ['hex', 'hellish-rebuke', 'protection-from-evil-and-good', 'charm-person', 'comprehend-languages', 'unseen-servant'],
     2: ['misty-step', 'hold-person', 'shatter', 'suggestion'],
+    3: ['hypnotic-pattern', 'fear', 'vampiric-touch', 'counterspell', 'dispel-magic', 'fly'],
   },
 };
 // Cantrips known, and spells you can prepare, by class level (2024 tables).
@@ -379,7 +430,7 @@ export const PREPARED_BY_LEVEL = {
 // A wizard's spellbook starts with 6 level 1 spells and gains 2 a level.
 export const SPELLBOOK_SIZE = byLevel(Array.from({ length: 20 }, (_, i) => 6 + 2 * i));
 // Life Domain spells: always prepared from Cleric level 3, not counted.
-export const DOMAIN_SPELLS = { 3: ['aid', 'bless', 'cure-wounds', 'lesser-restoration'] };
+export const DOMAIN_SPELLS = { 3: ['aid', 'bless', 'cure-wounds', 'lesser-restoration'], 5: ['mass-healing-word', 'revivify'] };
 
 // ------------------------------------------------------------- classes ----
 export const CLASSES = {
@@ -560,17 +611,22 @@ export const SUBCLASSES = {
 };
 // Spells a subclass or class feature always has prepared (they don't count).
 export const ALWAYS_PREPARED = {
-  paladin: { 2: ['divine-smite'], 3: ['protection-from-evil-and-good', 'shield-of-faith'] },
+  paladin: { 2: ['divine-smite'], 3: ['protection-from-evil-and-good', 'shield-of-faith'], 5: ['aid', 'zone-of-truth', 'find-steed'] },
   ranger: { 1: ['hunters-mark'] },
-  sorcerer: { 3: ['alter-self', 'chromatic-orb', 'command', 'dragons-breath'] },
-  warlock: { 3: ['burning-hands', 'command', 'scorching-ray', 'suggestion'] },
+  sorcerer: { 3: ['alter-self', 'chromatic-orb', 'command', 'dragons-breath'], 5: ['fear', 'fly'] },
+  warlock: { 3: ['burning-hands', 'command', 'scorching-ray', 'suggestion'], 5: ['fireball', 'stinking-cloud'] },
 };
 // Circle of the Land: pick a land at level 3; its spells are always prepared.
 export const LAND_SPELLS = {
-  arid: { name: 'Arid Land', spells: ['blur', 'burning-hands', 'fire-bolt'] },
-  polar: { name: 'Polar Land', spells: ['fog-cloud', 'hold-person', 'ray-of-frost'] },
-  temperate: { name: 'Temperate Land', spells: ['misty-step', 'shocking-grasp', 'sleep'] },
-  tropical: { name: 'Tropical Land', spells: ['acid-splash', 'ray-of-sickness', 'web'] },
+  arid: { name: 'Arid Land', spells: ['blur', 'burning-hands', 'fire-bolt'], more: { 5: ['fireball'] } },
+  polar: { name: 'Polar Land', spells: ['fog-cloud', 'hold-person', 'ray-of-frost'], more: { 5: ['sleet-storm'] } },
+  temperate: { name: 'Temperate Land', spells: ['misty-step', 'shocking-grasp', 'sleep'], more: { 5: ['lightning-bolt'] } },
+  tropical: { name: 'Tropical Land', spells: ['acid-splash', 'ray-of-sickness', 'web'], more: { 5: ['stinking-cloud'] } },
+};
+// A land's spells at a Druid level: the level 3 ones, then more at 5, 7 and 9.
+export const landSpells = (land, level) => {
+  const L = LAND_SPELLS[land] || LAND_SPELLS.arid;
+  return [...L.spells, ...Object.entries(L.more || {}).filter(([lv]) => level >= +lv).flatMap(([, xs]) => xs)];
 };
 // A Druid's Primal Order and a Hunter's Prey.
 export const DRUID_ORDERS = {

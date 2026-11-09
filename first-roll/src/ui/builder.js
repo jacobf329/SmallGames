@@ -12,7 +12,7 @@
 import {
   CLASSES, BACKGROUNDS, SPECIES, FEATS, ORIGIN_FEATS, SKILLS, SKILL_NAMES, ABILITIES, ABILITY_NAMES, STANDARD_ARRAY,
   DRAGON_ANCESTRY, KITS, FIGHTING_STYLES, WEAPONS, MASTERIES, SPELLS, SPELL_LISTS, POINT_COST, POINT_BUDGET,
-  DRUID_ORDERS, LAND_SPELLS, HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, PACT_WEAPONS, METAMAGIC, stylesFor,
+  DRUID_ORDERS, LAND_SPELLS, landSpells, HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, PACT_WEAPONS, METAMAGIC, stylesFor,
   abilityMod, signed, MAX_LEVEL, ASI_FEATS, STYLE_FEATS, asiLevels,
 } from '../rules/data.js';
 import {
@@ -542,7 +542,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
     }
     if (has('land') && d.cls === 'druid' && level >= 3) {
       h += `<div class="ph sep"><b>${R('lands-aid', 'Circle of the Land')}: your land</b></div>${Object.entries(LAND_SPELLS).map(([k, l]) => card({
-        on: d.land === k, title: l.name, body: `<span>Always prepared: ${esc(andList(l.spells.map((sid) => SPELLS[sid].name)))}.</span>`, attr: `data-set="land=${k}"`,
+        on: d.land === k, title: l.name, body: `<span>Always prepared: ${esc(andList(landSpells(k, level).map((sid) => SPELLS[sid].name)))}.</span>`, attr: `data-set="land=${k}"`,
       })).join('')}`;
     }
     if (has('prey') && d.cls === 'ranger' && level >= 3) {

@@ -24,7 +24,7 @@ import {
   CLASSES, SKILLS, SKILL_NAMES, SPELLS, STANDARD_ARRAY, DRAGON_ANCESTRY, GOBLIN_WARRIOR,
   SLOTS_BY_LEVEL, SUBCLASSES, MAX_LEVEL, HP_PER_LEVEL, signed, POINT_COST, POINT_BUDGET,
   KITS, FIGHTING_STYLES, SPELL_LISTS, CANTRIPS_KNOWN, PREPARED_BY_LEVEL, SPELLBOOK_SIZE, DOMAIN_SPELLS,
-  DEFAULT_LINEAGE, ORIGIN_FEATS, MI_DEFAULT_ABILITY, SLOT_TABLES, ALWAYS_PREPARED, LAND_SPELLS, DRUID_ORDERS,
+  DEFAULT_LINEAGE, ORIGIN_FEATS, MI_DEFAULT_ABILITY, SLOT_TABLES, ALWAYS_PREPARED, LAND_SPELLS, landSpells, DRUID_ORDERS,
   HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, METAMAGIC, STYLE_LEVEL, stylesFor, LIST_NAMES, isMonkWeapon, PACT_WEAPONS,
   ASI_FEATS, STYLE_FEATS, asiLevels, PROGRESSION as P, masteryCount, attacksPerAction, SLOT_COST, SLOT_MIN_LEVEL,
 } from './data.js';
@@ -146,8 +146,8 @@ export function classSpellCounts(cls, level, order) {
 // Smite, Favored Enemy). Cantrips among them are known, not prepared.
 export function alwaysPrepared(cls, level, land) {
   const out = [];
-  if (cls === 'cleric' && level >= 3) out.push(...DOMAIN_SPELLS[3]);
-  if (cls === 'druid' && level >= 3) out.push(...LAND_SPELLS[land || 'arid'].spells);
+  if (cls === 'cleric') for (const [lv, xs] of Object.entries(DOMAIN_SPELLS)) if (level >= +lv) out.push(...xs);
+  if (cls === 'druid' && level >= 3) out.push(...landSpells(land || 'arid', level));
   for (const [lv, xs] of Object.entries(ALWAYS_PREPARED[cls] || {})) if (level >= +lv) out.push(...xs);
   return out;
 }
@@ -697,7 +697,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(1, `Primal Order: ${DRUID_ORDERS[spec.order].name}`, 'primal-order', DRUID_ORDERS[spec.order].text);
     F(2, 'Wild Shape', 'wild-shape', `Bonus Action: turn into a Beast you know (here: a Wolf, AC 12, Speed 40, Bite +4 for 1d6 + 2 that knocks a Medium or smaller creature Prone). You keep your own Hit Points and gain ${level} Temporary Hit Points (your Druid level). No spellcasting in beast form. It ends as a Bonus Action, or if you're Incapacitated or drop to 0 HP. ${P.wildShape(level)} uses; one back on a Short Rest, all on a Long Rest.`);
     F(2, 'Wild Companion', null, 'Spend a spell slot or a use of Wild Shape to cast Find Familiar. (Useful outside of fights here.)');
-    if (spec.land) F(3, `Circle of the Land: ${LAND_SPELLS[spec.land].name}`, 'spellcasting', `Always prepared, not counted: ${names(LAND_SPELLS[spec.land].spells)}. You can pick another land after a Long Rest.`);
+    if (spec.land) F(3, `Circle of the Land: ${LAND_SPELLS[spec.land].name}`, 'spellcasting', `Always prepared, not counted: ${names(landSpells(spec.land, level))}. You can pick another land after a Long Rest.`);
     F(3, "Circle of the Land: Land's Aid", 'lands-aid', 'Magic action, one use of Wild Shape: pick a point within 60 feet. Each enemy in a 10-foot Sphere there makes a Constitution save against your spell save DC: 2d6 Necrotic damage, half on a success. One ally in it regains 2d6 Hit Points.');
     F(5, 'Wild Resurgence', 'wild-resurgence', 'Once per turn, with no uses of Wild Shape left, you can spend a spell slot to regain one. Once per Long Rest, you can spend a use of Wild Shape to regain a level 1 spell slot. (The first is offered when your Wild Shape uses run out; the second is useful outside of fights here.)');
   } else if (cls === 'monk') {

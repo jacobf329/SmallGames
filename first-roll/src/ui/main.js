@@ -477,6 +477,7 @@ function renderPanel(S, b, mine, mt, tip) {
     if (b.pending && S.reactor === app.me) text = 'Your Reaction: decide below.';
     else if (b.pending?.kind === 'shield') text = `${esc(b.creatures[b.pending.reactor].name)} is deciding whether to cast <a class="rl" data-rule="shield">Shield</a>…`;
     else if (b.pending?.kind === 'smite') text = `${esc(b.creatures[b.pending.reactor].name)} is deciding whether to use <a class="rl" data-rule="divine-smite">Divine Smite</a>…`;
+    else if (b.pending?.kind === 'counter') text = `${esc(b.creatures[b.pending.reactor].name)} is deciding whether to cast <a class="rl" data-rule="counterspell">Counterspell</a>…`;
     else if (b.pending?.kind === 'rebuke') text = `${esc(b.creatures[b.pending.reactor].name)} is deciding whether to cast <a class="rl" data-rule="hellish-rebuke">Hellish Rebuke</a>…`;
     else if (b.pending) text = `${esc(b.creatures[b.pending.reactor].name)} is deciding on an <a class="rl" data-rule="opportunity-attack">Opportunity Attack</a>…`;
     else if (!mine) text = "You're watching. Tap a token to see its sheet.";
@@ -536,6 +537,7 @@ function renderPanel(S, b, mine, mt, tip) {
   if (me.giant?.kind === 'cloud') {
     extra.push(`<button class="btn" data-aim='${esc(JSON.stringify({ kind: 'jaunt' }))}' ${me.giant.uses > 0 && t.bonus ? '' : 'disabled'} title="Cloud's Jaunt">Cloud's Jaunt (${me.giant.uses})</button>`);
   }
+  if (t.hasteAct) extra.push(btn('Haste: extra action', { a: 'haste' }, !t.action && !t.attacksLeft && !t.hasteOnly, 'haste'));
   classButtons(b, me, extra, btn);
   html += `${me.casting ? `<div class="btns one"><button class="btn spellsbtn ${app.spells ? 'on' : ''}" id="btn-spells">✨ Spells</button></div>` : ''}<div class="btns">
     <button class="btn" data-act="dash" ${t.action ? '' : 'disabled'}>Dash</button>
@@ -566,7 +568,7 @@ function renderPanel(S, b, mine, mt, tip) {
 }
 
 const CONDS = { prone: 'Prone', restrained: 'Restrained', grappled: 'Grappled', frightened: 'Frightened', poisoned: 'Poisoned',
-  paralyzed: 'Paralyzed', incapacitated: 'Incapacitated', hidden: 'Hidden', commanded: 'Commanded', unconscious: 'Unconscious' };
+  paralyzed: 'Paralyzed', incapacitated: 'Incapacitated', hidden: 'Hidden', commanded: 'Commanded', unconscious: 'Unconscious', slow: 'Slowed', charmed: 'Charmed', stunned: 'Stunned' };
 
 // Uses left of each class resource, as chips beside the Action and slots.
 function resourceChips(b, me) {
@@ -835,7 +837,13 @@ function aimCard(b, me, a) {
     const ab = a.kind === 'breath' || db ? 'dex' : a.kind === 'landsaid' ? 'con' : sp.save;
     const dmg = a.kind === 'breath' ? `${me.breath.dice} ${me.breath.type}, half on a save` : a.kind === 'landsaid' ? '2d6 Necrotic to enemies, half on a save; one friend inside heals 2d6'
       : db ? `${db.dice} ${db.dmgType}, half on a save`
-      : sp.cond === 'sleep' ? 'enemies only: Incapacitated, then Unconscious after a second failed save' : sp.cond ? `${R0('restrained', 'Restrained')} on a failure` : sp.effect ? 'outlined in light: attacks against it have Advantage' : `${scaled(a.spell, a.slot, me.level).dice} ${sp.type || 'damage'}${sp.half ? ', half on a save' : ''}${sp.push ? `, pushed ${sp.push} ft on a failure` : ''}`;
+      : sp.cond === 'sleep' ? 'enemies only: Incapacitated, then Unconscious after a second failed save'
+      : sp.cond === 'slow' ? `up to ${sp.choose} enemies only: ${R0('slow', 'Slowed')} on a failure`
+      : sp.cond === 'pattern' ? `${R0('charmed', 'Charmed')} and ${R0('incapacitated', 'Incapacitated')} on a failure, allies too, until hurt or shaken awake`
+      : sp.cond === 'fear' ? `${R0('frightened', 'Frightened')} on a failure: it flees`
+      : sp.zone === 'stink' ? `a cloud that stays: anyone starting a turn inside saves or is ${R0('poisoned', 'Poisoned')} and loses that turn's action`
+      : sp.zone === 'sleet' ? 'a storm that stays: Difficult Terrain, and anyone entering or starting a turn inside saves or falls Prone'
+      : sp.cond ? `${R0('restrained', 'Restrained')} on a failure` : sp.effect ? 'outlined in light: attacks against it have Advantage' : `${scaled(a.spell, a.slot, me.level).dice} ${sp.type || 'damage'}${sp.half ? ', half on a save' : ''}${sp.push ? `, pushed ${sp.push} ft on a failure` : ''}`;
     body += `<div class="why">${hit.length ? `Catches ${hit.map((c) => esc(c.name)).join(', ')}` : 'Catches nobody there yet'}${pals.length ? ` <b class="bad">(including ${pals.map((c) => (c === me ? 'you' : esc(c.name))).join(' and ')}!)</b>` : ''} · DC ${dc} ${ab.toUpperCase()} save, ${dmg}</div>`;
   }
   const ready = !!aimIntent(a);
@@ -862,6 +870,7 @@ function spellCost(b, me, sid) {
   const bonus = s.time === 'bonus' ? ', <b>Bonus Action</b>' : '';
   const conc = s.conc ? `, <a class="rl" data-rule="concentration">Concentration</a>${me.conc ? ` <b class="bad">(ends ${esc(SPELLS[me.conc.spell]?.name || '')})</b>` : ''}` : '';
   if (s.level === 0) return { c, tag: `<a class="rl" data-rule="cantrips">cantrip</a>${bonus}` };
+  if (c.pay === 'again') return { c, tag: `<a class="rl" data-rule="concentration">still going: no slot</a>` };
   if (c.pay === 'free') return { c, tag: `<a class="rl" data-rule="magic-initiate">free cast</a>${bonus}${conc}` };
   return { c, tag: `<a class="rl" data-rule="spell-slots">level ${c.slot || s.level} slot</a>${bonus}${conc}` };
 }
@@ -1084,6 +1093,8 @@ function friendFeatures(b, me, T, { self, near, inRange }) {
     }
     if ((T.conds || []).some((x) => x.id === 'poisoned')) rows += row('Lay on Hands: end Poisoned', { a: 'lay', target: T.id, cure: true }, reach && t.bonus && pool >= 5, `${R0('lay-on-hands', 'Bonus Action')}: costs 5 from your pool`, false);
   }
+  const dazed = (T.conds || []).some((x) => x.pattern || x.rule === 'sleep');
+  if (dazed && !self) rows += row('Shake them awake', { a: 'wake', target: T.id }, near && t.action, near ? `Your action: ends ${esc(T.name)}'s ${R0('hypnotic-pattern', 'Hypnotic Pattern')} or ${R0('sleep', 'Sleep')}` : 'Move next to them first.', false);
   if (me.bardic && !self && T.hp > 0) {
     const ok = t.bonus && me.bardic.uses > 0 && inRange(60) && !T.bardicDie;
     rows += row(`Bardic Inspiration (${me.bardic.uses})`, { a: 'inspire', target: T.id }, ok,
@@ -1168,6 +1179,13 @@ function renderReact(S, b) {
       <div class="row">${opts.map((o, i) => `<button class="btn ${i ? '' : 'primary'}" data-smite="${o.slot}">${esc(o.label)}: ${o.dice}d8</button>`).join('')}<button class="btn" id="btn-react-no">No smite</button></div>
       <div class="timer" id="react-timer"></div>`;
     for (const x of el.querySelectorAll('[data-smite]')) x.onclick = () => { send({ t: 'react', yes: true, slot: +x.dataset.smite }); el.classList.add('hidden'); };
+  } else if (b.pending.kind === 'counter') {
+    const A = b.creatures[b.pending.caster];
+    const sp = SPELLS[b.pending.spell];
+    el.innerHTML = `<h3>⚡ Reaction!</h3>
+      <p>${esc(A.name)} is casting <b>${esc(sp?.name || 'a spell')}</b>. Cast <a class="rl" data-rule="counterspell">Counterspell</a>? ${esc(A.name)} makes a DC ${spellDC(R, 'counterspell')} Constitution save; on a failure the spell does nothing and ${esc(A.name)}'s action is wasted (their slot isn't). It uses your Reaction and a level 3+ slot.</p>
+      <div class="row"><button class="btn primary" id="btn-react-yes">Cast Counterspell</button><button class="btn" id="btn-react-no">Let it go</button></div>
+      <div class="timer" id="react-timer"></div>`;
   } else if (b.pending.kind === 'rebuke') {
     const A = b.creatures[b.pending.attacker];
     el.innerHTML = `<h3>⚡ Reaction!</h3>

@@ -93,15 +93,20 @@ function drive(opts, maxTaps) {
   for (let i = 0; i < 400 && !out; i++) {
     next.onclick();
     if (out) break;
-    if (/Pick \d+ more/.test(body()._html)) {
+    const want = body()._html.match(/Pick \d+ more ([a-zA-Z ]+?)s?\./);
+    if (want) {
       const togs = body().kids.filter((k) => k.attrs['data-tog'] !== undefined && !/\bon\b/.test(k.attrs.class || ''));
-      if (togs.length) pick(togs).onclick();
+      // Tap the list the message names, where it can be told apart.
+      const path = { 'prepared spell': 'prepared', 'spellbook spell': 'book' }[want[1]];
+      const mine = path ? togs.filter((k) => k.attrs['data-tog'].startsWith(path + ':')) : [];
+      if (mine.length || togs.length) pick(mine.length ? mine : togs).onclick();
     }
   }
   return { out };
 }
 
 for (let run = 0; run < RUNS; run++) {
+  if (process.env.ONLY && +process.env.ONLY !== run) continue;
   seed = run * 7919 + 13;
   const level = 1 + (run % MAX_LEVEL);
   const cls = Object.keys(CLASSES)[run % Object.keys(CLASSES).length];

@@ -102,7 +102,7 @@ export function specialOptions(b, me, { light = false } = {}) {
     if (!can.ok) continue;
     if (light && !['attack', 'save', 'missile', 'rays', 'command', 'hold', 'spiritual'].includes(s.kind)) continue;
     const range = s.touch ? 5 : s.range || 0;
-    if (s.conc && me.conc) continue;      // keep the spell already going
+    if (s.conc && me.conc && can.pay !== 'again') continue;      // keep the spell already going
     const cost = slotCost(can);
     const sc = scaled(sid, can.slot, me.level);
     const dc = spellDC(me, sid);
@@ -174,11 +174,13 @@ export function specialOptions(b, me, { light = false } = {}) {
           if (!fs.length) continue;
           // Sleep, Entangle, Web: a condition instead of damage. Sleep skips allies.
           if (s.cond) {
-            const sleep = s.cond === 'sleep';
+            const sleep = s.cond === 'sleep' || !!s.choose;   // Sleep and Slow pick their targets
             if (!sleep && pals.length) continue;
-            const fresh = fs.filter((c) => !incap(c) && !hasCond(c, 'restrained') && !(sleep && sleepProof(c)));
+            const fresh = fs.filter((c) => !incap(c) && !hasCond(c, 'restrained') && !hasCond(c, s.cond === 'fear' ? 'frightened' : s.cond) && !(s.cond === 'sleep' && sleepProof(c)));
             if (!fresh.length) continue;
-            const exp = fresh.reduce((acc, c) => acc + (1 - saveChance(b, c, s.save, dc)) * (sleep ? 8 : 6) * Math.min(1, c.hp / 8), 0);
+            const worth = { sleep: 8, pattern: 8, slow: 6, fear: 5 }[s.cond] || 6;
+            const exp = fresh.reduce((acc, c) => acc + (1 - saveChance(b, c, s.save, dc)) * worth * Math.min(1, c.hp / 8), 0);
+            if (s.level >= 3 && fresh.length < 2 && exp < 6) continue;
             add({ a: 'cast', spell: sid, x, y }, exp - cost, { foes: fresh, pals: sleep ? [] : pals });
             continue;
           }
@@ -267,6 +269,41 @@ export function specialOptions(b, me, { light = false } = {}) {
         }
         break;
       }
+      case 'massheal': {
+        const hurt = friends.filter((F) => !F.dead && F.hp < F.hpMax / 2 && (F === me || sees(b, me, F, range))).slice(0, sc.targets);
+        const ups = hurt.filter((F) => F.hp <= 0).length;
+        if (hurt.length >= 2 || ups) add({ a: 'cast', spell: sid, targets: hurt.map((c) => c.id) }, hurt.length * 4 + ups * 12 - cost, { ids: hurt.map((c) => c.id) }, 'bonus');
+        break;
+      }
+      case 'revive': {
+        for (const F of alliesOf(b, me)) {
+          if (F.dead && F.diedRound != null && b.round - F.diedRound <= 10 && cheb(me, F) <= 1) add({ a: 'cast', spell: sid, target: F.id }, 30, { T: F });
+        }
+        break;
+      }
+      case 'zone': {
+        if (s.area.from === 'self') {
+          const n = foes.filter((T) => !down(T) && cheb(me, T) <= Math.round(s.area.size / 5)).length;
+          if (n) add({ a: 'cast', spell: sid }, n * avgDice(sc.dice) * 0.6 + 4 - cost, { foes: n });
+          break;
+        }
+        const aim = spellAim(sid, can.slot, null, me.level);
+        for (const { x, y } of spotsNear(b, me, aim, foes)) {
+          const hit = areaTargets(b, me, aim, x, y);
+          if (hit.some((c) => c.side === me.side)) continue;
+          const fs = hit.filter((c) => !down(c) && !c.dead);
+          if (fs.length < 2) continue;
+          add({ a: 'cast', spell: sid, x, y }, fs.reduce((acc, c) => acc + (1 - saveChance(b, c, s.save, dc)) * (s.zone === 'stink' ? 5 : 3), 0) - cost, { foes: fs });
+        }
+        break;
+      }
+      case 'dispel': {
+        for (const F of friends) {
+          const bad = (F.conds || []).find((x) => SPELLS[x.rule] && !x.lethargy && x.by && b.creatures[x.by]?.side !== me.side);
+          if (bad && sees(b, me, F, range)) add({ a: 'cast', spell: sid, target: F.id }, (bad.id === 'paralyzed' ? 16 : 6) - cost, { T: F });
+        }
+        break;
+      }
       case 'bane': {
         const pick = foes.filter((T) => !down(T) && sees(b, me, T, s.range) && !b.effects.some((e) => e.type === 'bane' && e.target === T.id))
           .sort((p, q) => q.hp - p.hp).slice(0, sc.targets);
@@ -278,7 +315,7 @@ export function specialOptions(b, me, { light = false } = {}) {
       default: break;
     }
     // Buffs added with the new classes (Heroism, Protection from Evil and Good, Barkskin, Dragon's Breath).
-    if (s.kind === 'buff' && ['heroism', 'pfe', 'bark', 'dbreath'].includes(s.buff)) {
+    if (s.kind === 'buff' && ['heroism', 'pfe', 'bark', 'dbreath', 'haste', 'magicweapon'].includes(s.buff)) {
       const pool = friends.filter((F) => !down(F) && (F === me || sees(b, me, F, range)) && !b.effects.some((e) => e.type === s.buff && e.target === F.id));
       let best = null;
       for (const F of pool) {
@@ -288,6 +325,8 @@ export function specialOptions(b, me, { light = false } = {}) {
         else if (s.buff === 'pfe') v = near.filter((e) => PFE_TYPES.includes(e.creature)).length * 3;
         else if (s.buff === 'bark') v = near.length ? Math.max(0, 17 - F.ac) * 1.2 : 0;
         else if (s.buff === 'dbreath') v = foes.filter((T) => !down(T) && cheb(T, F) <= 3).length >= 2 ? 6 : 0;
+        else if (s.buff === 'haste') v = totalFoeHp(b, me) > 20 && F.attacks?.some((a) => a.kind === 'melee' || a.kind === 'ranged') ? 4 + (F.multiattack || 1) * 2 : 0;
+        else if (s.buff === 'magicweapon') v = F !== me || !me.casting ? 0 : totalFoeHp(b, me) > 15 && F.multiattack > 1 ? 4 : 0;
         if (v && (!best || v > best.v)) best = { F, v };
       }
       if (best) add({ a: 'cast', spell: sid, targets: [best.F.id] }, best.v - cost, { T: best.F }, s.time);
@@ -579,6 +618,15 @@ export function aiNext(b, id) {
     return { a: 'end' };
   }
   if (incap(me)) return { a: 'end' };
+  // Fear: Dash and run from the caster by the safest route.
+  const scared = (me.conds || []).find((x) => x.flee);
+  if (scared) {
+    const src = b.creatures[scared.by];
+    if (src && t.action) return { a: 'dash' };
+    const s = src && t.moveLeft >= 5 && t.moves < 3 && fleeFrom(b, me, src);
+    if (s) return { a: 'move', x: s.x, y: s.y };
+    return { a: 'end' };
+  }
   const style = me.shape ? 'melee' : me.ai || 'melee';
   const foes = targetsOf(b, me);
   if (!foes.length) return { a: 'end' };
@@ -670,6 +718,9 @@ export function aiNext(b, id) {
     if (top && top.score > 1.5) return top.intent;
   }
 
+  // Hasted: the extra action, for one more weapon attack.
+  if (!t.action && !t.attacksLeft && t.hasteAct && !t.hasteOnly && weaponOptions(b, me).length) return { a: 'haste' };
+
   // Action used: Action Surge for another go.
   if (!t.action && !t.attacksLeft && me.actionSurge?.uses > 0 && !t.surged) {
     const w = weaponOptions(b, me);
@@ -711,6 +762,7 @@ export function aiReact(b) {
   const p = b.pending;
   if (!p) return null;
   if (p.kind === 'shield') return true;     // only asked when +5 AC would turn the hit into a miss
+  if (p.kind === 'counter') return (SPELLS[p.spell]?.level || 0) >= 2;   // a 3rd-level slot isn't worth a 1st-level spell
   if (p.kind === 'smite') {
     // Smite on a Critical Hit, or when the target has enough Hit Points left to be worth a slot.
     const R = b.creatures[p.reactor], T = b.creatures[p.target];

@@ -62,7 +62,7 @@ export function reachMap(b, mover, budget) {
       // Hostile creatures block, unless Incapacitated; a halfling (Halfling
       // Nimbleness) can move through a creature a size larger.
       if (occ && occ !== mover && hostile(occ, mover) && !incap(occ) && !(mover.nimbleness && SIZES[occ.size || 'medium'] > SIZES[mover.size || 'medium'])) continue;
-      const nd = d + (occ && occ !== mover ? 2 * FT : FT);
+      const nd = d + ((occ && occ !== mover) || spellTerrain(b, mover, nx, ny) ? 2 * FT : FT);
       if (nd > budget) continue;
       const k = key(nx, ny);
       if (!dist.has(k) || nd < dist.get(k)) {
@@ -73,6 +73,19 @@ export function reachMap(b, mover, budget) {
     }
   }
   return { dist, prev };
+}
+
+// Difficult Terrain from a spell zone (Spirit Guardians for the caster's
+// enemies, Sleet Storm for everyone): each square of it costs double.
+export function spellTerrain(b, mover, x, y) {
+  for (const e of b.effects || []) {
+    if (e.type !== 'zone' || !e.difficult) continue;
+    const c = e.follow ? b.creatures[e.follow] : e;
+    if (!c || c === mover || (e.follow && (c.dead || (c.x === x && c.y === y)))) continue;
+    if (e.foesOnly && !hostile(b.creatures[e.by], mover)) continue;
+    if (cheb(c, { x, y }) <= e.r) return true;
+  }
+  return false;
 }
 
 export function canEndAt(b, mover, x, y) {
