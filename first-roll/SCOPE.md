@@ -3,7 +3,7 @@
 *Working title. A light, co-op, turn-based RPG that teaches the 2024
 fifth-edition rules by playing them with friends.*
 
-Status: **Phase 2 built** (see [README.md](README.md)): chapters 0 to 8, levels 1 to 3, co-op for 1–4 players. What Phase 2 left for Phase 3 is listed under section 8.
+Status: **Phase 2 built, levels 4 and 5 added** (see [README.md](README.md)): chapters 0 to 11, levels 1 to 5, co-op for 1–4 players. Next: levels 6 to 20, in chunks, with chapters to match. What Phase 2 left for Phase 3 is listed under section 8.
 Builds here in `SmallGames/first-roll/` and ships to
 `jteef/public/play/first-roll/` the same way Skyline Hustle and Turbo Surfers do.
 
@@ -256,7 +256,7 @@ Co-op is built in from the first prototype rather than added on later.
 | **1. Vertical slice (early access)** | Lobby with hero builder (4 classes, 9 species, 4 backgrounds), chapters 0–3, reactions, Help, votes, pings, AI companions for empty or dropped seats, saves and rejoin. Firestore rule updated. Deployed to `/play/first-roll/` | 4–5 sessions |
 | **2. Full curriculum** | Chapters 4–8, spells, conditions, rests, death saves, level 2–3 and subclasses, shared glossary, per-player coaching levels, "use my own dice", turn timer | 4–6 sessions |
 | **3. Polish** | Sound, animation, accessibility pass (colour-blind-safe player colours, screen-reader log), credits and attribution, replayable **Skirmish** mode (random co-op encounters for an evening), LAN mode | 2–3 sessions |
-| **Later** | Levels 4–5; TURN relay for strict networks; host migration; AI narrator for scene text | separate scope |
+| **Later** | Levels 6–20 with spells up to level 9 and Epic Boons (levels 4–5 are done); TURN relay for strict networks; host migration; AI narrator for scene text | separate scope |
 
 ### What Phase 2 built, and what moved to Phase 3
 
@@ -284,6 +284,14 @@ Also on Nov 8, the other 8 classes went in ahead of Phase 3: Barbarian
 Ranger (Hunter), Sorcerer (Draconic) and Warlock (Fiend), levels 1 to 3, with
 their fight buttons, AI play, builder and level-up choices, and Rules book
 entries. Cleave works for the Greataxe.
+
+On Nov 9, levels 4 and 5 and chapters 9 to 11 (The Lacey Vault, The North
+Road, Thursby Hall): general feats at level 4 (Ability Score Improvement,
+Grappler, Fighting Style, Origin feats), every class's level 4 and 5
+features, level 3 spells (Fireball, Spirit Guardians, Revivify, Haste, Slow,
+Hypnotic Pattern, Counterspell, Dispel Magic and more), and six SRD monsters
+(Ghoul, Ghast, Dire Wolf, Ogre, Animated Armor, Wight) with Paralysis,
+Stench and Life Drain.
 
 Moved to Phase 3:
 

@@ -3,8 +3,11 @@
 //   level 1: Low 50, Moderate 75, High 100
 //   level 2: Low 100, Moderate 150, High 200
 //   level 3: Low 150, Moderate 225, High 400
+//   level 4: Low 250, Moderate 375, High 500
+//   level 5: Low 500, Moderate 750, High 1100
 // XP: Goblin Warrior 50, Goblin Boss 200, Wolf 50, Skeleton 50, Zombie 50,
-// Cultist 25, Giant Spider 200, Bugbear Warrior 200, Cultist Fanatic 450.
+// Cultist 25, Giant Spider 200, Bugbear Warrior 200, Cultist Fanatic 450,
+// Ghoul 200, Dire Wolf 200, Animated Armor 200, Ghast 450, Ogre 450, Wight 700.
 //
 // The board is 8 squares wide and 10 deep, heroes start at the bottom.
 // `walls` are solid (Total Cover, no line of sight); `cover` squares are low
@@ -14,6 +17,7 @@
 import { buildMonster } from '../rules/character.js';
 import {
   GOBLIN_WARRIOR, GOBLIN_BOSS, WOLF, SKELETON, ZOMBIE, GIANT_SPIDER, CULTIST, CULTIST_FANATIC, BUGBEAR_WARRIOR,
+  GHOUL, GHAST, DIRE_WOLF, OGRE, ANIMATED_ARMOR, WIGHT,
 } from '../rules/data.js';
 
 const W = GOBLIN_WARRIOR, BOSS = GOBLIN_BOSS;
@@ -127,6 +131,62 @@ export const ENCOUNTERS = {
       const keep = n <= 1 ? 0 : n === 2 ? 2 : n === 3 ? 2 : 4;
       cult = cult.slice(0, flags.swayed ? Math.floor(keep / 2) : keep);
       return label([...list, ...cult]);
+    },
+  },
+  // Chapter 9, "The Lacey Vault" (level 4): the churchyard vault in Dunmarket.
+  // Paralysis, and an elf's immunity to it; the Ghast's Stench.
+  vault: {
+    name: 'The vault', level: 4,
+    walls: ['0,3', '7,3', '0,6', '7,6'],
+    cover: ['2,2', '5,2', '3,5', '4,5'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const ghast = at(GHAST, 4, 0);
+      const gh = [at(GHOUL, 2, 1), at(GHOUL, 5, 1), at(GHOUL, 3, 0), at(GHOUL, 6, 0)];
+      const zom = [at(ZOMBIE, 1, 0), at(ZOMBIE, 6, 2)];
+      if (n <= 1) return label([ghast]);                                        // 450 XP: Moderate to High for one
+      if (n === 2) return label([ghast, gh[0]]);                                // 650 XP: Low to Moderate for two
+      if (n === 3) return label([ghast, gh[0], gh[1], zom[0]]);                 // 900 XP: Low to Moderate for three
+      return label([ghast, gh[0], gh[1], gh[2], zom[0], zom[1]]);               // 1150 XP: Low to Moderate for four
+    },
+  },
+  // Chapter 10, "The North Road" (level 5): an Ogre and its dire wolves at a
+  // broken bridge. Extra Attack and level 3 spells. If the party bought the
+  // Ogre off (flag `paid`), it walks away and only the wolves are left.
+  bridge: {
+    name: 'The bridge', level: 5,
+    walls: ['0,4', '1,4', '6,4', '7,4'],
+    cover: ['3,2', '2,6', '5,6'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const ogre = { ...at(OGRE, 4, 1), label: 'Ogre' };
+      const dw = [at(DIRE_WOLF, 2, 1), at(DIRE_WOLF, 5, 2), at(DIRE_WOLF, 3, 0), at(DIRE_WOLF, 6, 1), at(DIRE_WOLF, 1, 2)];
+      const wolves = n <= 1 ? 1 : n === 2 ? 3 : n === 3 ? 4 : 5;
+      const list = [...(flags.paid ? [] : [ogre]), ...dw.slice(0, wolves + (flags.paid ? 1 : 0))];
+      return label(list);                       // 650 / 1050 / 1250 / 1450 XP: Low to Moderate
+    },
+  },
+  // Chapter 11, "Garrow Hall" (level 5): the Wight in its hall, with the dead
+  // it keeps and the armor that guards the stairs. Life Drain.
+  hall: {
+    name: 'The hall', level: 5,
+    walls: ['0,2', '1,2', '6,2', '7,2', '0,7', '7,7'],
+    cover: ['2,4', '5,4', '3,1', '4,1'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const wight = { ...at(WIGHT, 4, 0), label: 'Sir Hugh Thursby' };
+      const armor = [at(ANIMATED_ARMOR, 2, 3), at(ANIMATED_ARMOR, 5, 3)];
+      const gh = [at(GHOUL, 1, 3), at(GHOUL, 6, 3)];
+      const ghast = at(GHAST, 3, 3);
+      const zom = [at(ZOMBIE, 2, 1), at(ZOMBIE, 5, 1)];
+      let list;
+      if (n <= 1) list = [wight];                                               // 700 XP: Moderate for one
+      else if (n === 2) list = [wight, armor[0], gh[0], zom[0]];                // 1150 XP: Low to Moderate for two
+      else if (n === 3) list = [wight, armor[0], armor[1], gh[0], gh[1], zom[0]]; // 1550 XP: Low for three
+      else list = [wight, ghast, armor[0], armor[1], gh[0], gh[1], zom[0]];      // 2050 XP: Low for four
+      // A quiet way in (flag `quiet`) leaves the Zombies in the cellar.
+      if (flags.quiet) list = list.filter((f) => f.def !== ZOMBIE);
+      return label(list);
     },
   },
 };

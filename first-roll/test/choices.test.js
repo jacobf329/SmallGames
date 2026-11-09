@@ -68,7 +68,7 @@ test("a wizard's book: six level 1 spells, then two a level; level 2 spells only
 });
 
 // ------------------------------------------------------- level-up picks ----
-function atLevelScene(cls = 'wizard', { rest = false } = {}) {
+function atLevelScene(cls = 'wizard', { rest = false, scene = 'c5-rest', level = 1 } = {}) {
   let saved = null;
   const store = { load: () => saved, save: (s) => { saved = s; }, remove: () => { saved = null; } };
   let room = createRoom({ store, seed: 3 });
@@ -80,7 +80,7 @@ function atLevelScene(cls = 'wizard', { rest = false } = {}) {
   h.message(JSON.stringify({ t: 'companions', n: 0 }));
   h.message(JSON.stringify({ t: 'start' }));
   const S = JSON.parse(saved);
-  Object.assign(S, { phase: 'story', level: 1, story: { scene: 'c5-rest', votes: {}, check: null, result: null } });
+  Object.assign(S, { phase: 'story', level, story: { scene, votes: {}, check: null, result: null } });
   saved = JSON.stringify(S);
   room = createRoom({ store, seed: 3 });
   got.length = 0;
@@ -219,4 +219,36 @@ test('Magic Missile darts split between creatures; Misty Step picks a square', (
   assert.match(checkAim(b2, w3, 'misty-step', { x: 3, y: 8 }).error, /empty square/);
   assert.ok(perform(b2, 'wiz', { a: 'cast', spell: 'misty-step', x: 5, y: 5 }).ok);
   assert.deepEqual([w3.x, w3.y], [5, 5]);
+});
+
+test('level 4 in the campaign: each hero picks a feat', () => {
+  const r = atLevelScene('fighter', { scene: 'c9-rest', level: 3 });
+  let st = r.last('state');
+  assert.equal(st.level, 4);
+  assert.equal(st.story.scene, 'c9-level');
+  // Left alone, a hero takes Ability Score Improvement in their main score.
+  const auto = buildHero(validateSpec(st.party[0].spec, { level: 4 }), { level: 4 });
+  assert.equal(auto.scores.str, 19);
+  // Ana picks Constitution instead.
+  r.say({ t: 'levelpick', pick: { feats: [{ level: 4, feat: 'ability-score-improvement', plus: { con: 2 } }] } });
+  st = r.last('state');
+  const spec4 = validateSpec(st.party[0].spec, { level: 4 });
+  assert.deepEqual(spec4.feats, [{ level: 4, feat: 'ability-score-improvement', plus: { con: 2 } }]);
+  const h4 = buildHero(spec4, { level: 4 });
+  assert.equal(h4.scores.str, 17);
+  assert.equal(h4.scores.con, 17);
+  assert.ok(h4.hpMax > auto.hpMax, 'more Constitution, more Hit Points');
+  // A feat from another level can't be slipped in.
+  r.say({ t: 'levelpick', pick: { feats: [{ level: 4, feat: 'grappler', plus: { str: 1 } }, { level: 2, feat: 'alert' }] } });
+  assert.deepEqual(validateSpec(r.last('state').party[0].spec, { level: 4 }).feats.map((f) => f.feat), ['grappler']);
+});
+
+test('level 5 in the campaign: everyone gets there with Extra Attack or level 3 spells', () => {
+  const f = atLevelScene('fighter', { scene: 'c10-rest', level: 4 });
+  assert.equal(f.last('state').level, 5);
+  assert.equal(f.last('state').story.scene, 'c10-level');
+  const up = f.last('state').story.levelUp.find((x) => x.name === 'Ana');
+  assert.ok(up.features.some((x) => x.name === 'Extra Attack'));
+  const w = atLevelScene('wizard', { scene: 'c10-rest', level: 4 });
+  assert.equal(w.last('state').story.levelUp.find((x) => x.name === 'Ana').slots[3], 2);
 });

@@ -1,4 +1,4 @@
-// The campaign: scenes for chapters 2 to 8 (chapter 0, the dice lesson, and
+// The campaign: scenes for chapters 2 to 11 (chapter 0, the dice lesson, and
 // chapter 1, making your hero, happen in the lobby). Scene kinds:
 //   story  text + choices the party votes on. A choice can need a flag
 //          (`requires`) and can set flags (`flags`).
@@ -21,6 +21,9 @@ export const CHAPTERS = {
   6: { title: 'Magic in the Cellar', teaches: ['spell-slots', 'concentration', 'saving-throw'] },
   7: { title: 'Bad Air and Worse Company', teaches: ['poisoned', 'restrained', 'grappled', 'short-rest'] },
   8: { title: 'The Barrow', teaches: ['subclass', 'level-up', 'concentration'] },
+  9: { title: 'The Lacey Vault', teaches: ['ability-score-improvement', 'paralyzed', 'immunity', 'surprise'] },
+  10: { title: 'The North Road', teaches: ['extra-attack', 'spell-slots', 'pack-tactics', 'prone'] },
+  11: { title: 'Thursby Hall', teaches: ['life-drain', 'resistance', 'immunity', 'group-check'] },
 };
 
 // AI companions fill empty seats. Each has a fixed build.
@@ -307,7 +310,7 @@ export const SCENES = {
   'c8-level': {
     chapter: 8, kind: 'level', level: 3, title: 'Level 3', next: 'c8-rest',
     text: [`You've come deeper under Crowsfoot Hill than anyone from Dunmarket in sixty years. Everyone in the party reaches level 3, and each class picks up its subclass.`],
-    lesson: 'At level 3 every class gains a subclass: here a Fighter becomes a Champion, a Rogue a Thief, a Cleric takes the Life Domain and a Wizard becomes an Evoker. Tap your hero to see the new features.',
+    lesson: 'At level 3 every class gains a subclass: Champion (Fighter), Thief (Rogue), Life Domain (Cleric), Evoker (Wizard), Path of the Berserker (Barbarian), College of Lore (Bard), Circle of the Land (Druid), Warrior of the Open Hand (Monk), Oath of Devotion (Paladin), Hunter (Ranger), Draconic Sorcery (Sorcerer) and Fiend Patron (Warlock). Tap your hero to see the new features.',
   },
   'c8-rest': {
     chapter: 8, kind: 'rest', rest: 'short', title: 'Before the Barrow', next: 'c8-barrow',
@@ -346,11 +349,187 @@ export const SCENES = {
     lesson: 'Corva Lund is a Cultist Fanatic: she attacks twice, and casts Command, Hold Person and Spiritual Weapon. Break her Concentration and anyone she has Held goes free. Turn Undead makes the dead flee.',
   },
   'c8-end': {
-    chapter: 8, kind: 'end', title: 'Back to Dunmarket',
+    chapter: 8, kind: 'story', title: 'Back to Dunmarket',
     text: [
       `When Corva Lund falls, her lantern goes out, and every soldier she raised drops where it stands. The ones still lying in their rows stay down.`,
       `You walk her followers out through the cellar in the grey morning. Martin Ebbs pays the fifty silver and writes everything down twice. Nell Kipps gets the wolves' brass collars and sells them in the market, and Agnes Pell gets her forty sacks of flour back. She counts every one.`,
+      `Corva's book goes to Ebbs. It is bound in black calfskin with a boar stamped on the cover, and it's written in a cramped brown hand that none of her followers could read past the first page. Ebbs locks it in the iron strongbox in his front room until Mother Ide, the priest, gets back from the cathedral and can tell him whether it's safe to burn. Until then he'd like you to stay in town, and he's paying for your rooms at the Bell.`,
     ],
-    lesson: "That's the end of the campaign so far: from your first d20 to level 3. Thanks for playtesting First Roll.",
+    choices: [{ id: 'stay', label: 'Take the rooms at the Bell.', next: 'c9-rest' }],
+    lesson: 'Chapter 8 done: subclasses, and Concentration in a big fight. Next: level 4, and your first general feat.',
+  },
+
+  // ---------------------------------------------- chapter 9: The Lacey Vault
+  'c9-rest': {
+    chapter: 9, kind: 'rest', rest: 'long', title: 'A Night at the Bell', next: 'c9-level',
+    text: [
+      `The Bell is the only inn in Dunmarket, and on market night it's full of drovers. Joan Tullock, who runs it, gives you the two rooms over the kitchen, where it's warm, and charges Martin Ebbs double for them. Half the drovers have heard about the barrow by supper, and they all want to buy you a drink and hear it again.`,
+      `You sleep late. It's Joan who wakes you, banging on the doors, because Abel Fenn the sexton has been found lying in the churchyard and he can't move.`,
+    ],
+    lesson: 'Another Long Rest: Hit Points, Hit Point Dice, spell slots and features all come back. A Long Rest takes at least 8 hours, and you get the benefit of only one every 24 hours.',
+  },
+  'c9-level': {
+    chapter: 9, kind: 'level', level: 4, title: 'Level 4', next: 'c9-fenn',
+    text: [`You stopped Corva Lund and walked her followers home. Everyone in the party reaches level 4.`],
+    lesson: "Level 4 brings your first general feat. Most heroes take Ability Score Improvement: +2 to one score, or +1 to two, up to a maximum of 20, and every roll that uses that ability gets better. You can take another feat instead, such as Grappler or an Origin feat you don't have yet. Tap your hero to choose.",
+  },
+  'c9-fenn': {
+    chapter: 9, kind: 'story', title: 'Abel Fenn',
+    text: [
+      `Abel Fenn has dug graves in Dunmarket for thirty years, and this is the first time anyone has carried him out of the churchyard on a door. The men who found him have set him down by the pump in the square. By the time you get there he can turn his head and swear, and he's doing both.`,
+      `"They came up out of the Lacey vault," he says. "Grey, thin as rakes, with teeth on them like a dog's. One caught me on the arm with its nails and I went stiff as a plank. I lay there all night watching them go past me, back and forth."`,
+      `Martin Ebbs pushes through the crowd in his nightshirt. His front window is smashed in, and the strongbox has gone from his front room. There are muddy prints all down the lane from his house to the churchyard gate.`,
+    ],
+    choices: [
+      { id: 'track', label: 'Follow the prints. (One hero makes a Survival check.)', next: 'c9-track' },
+      { id: 'vault', label: 'Go straight to the Lacey vault.', next: 'c9-vault' },
+    ],
+    lesson: "These are Ghouls. A Ghoul's claws can Paralyze you: make a DC 10 Constitution save or you can't move or act until the end of your next turn. Elves are immune to it, and so are Undead.",
+  },
+  'c9-track': {
+    chapter: 9, kind: 'check', title: 'Bare Feet',
+    text: [`The churchyard is soft from last week's rain. If you can pick out the right prints among a whole town's boots, you'll know where they went and whether they're still there.`],
+    check: { skill: 'survival', dc: 13, mode: 'single', prompt: 'Who follows the tracks?' },
+    success: {
+      text: `They're bare feet with long toes, and they go in and out of the Lacey vault over and over. The last ones go in dragging something heavy. The gate at the top of the vault steps has been pulled shut from the inside, and down below you can hear them grunting at each other over something. You get the gate open without a sound.`,
+      next: 'c9-vault', flags: { surprise: 'foes' },
+    },
+    fail: {
+      text: `You lose the prints in the long grass between the graves and end up trying every vault in the churchyard. The Lacey vault is the last one, and its gate shrieks on its hinges when you open it.`,
+      next: 'c9-vault', flags: {},
+    },
+    lesson: "Survival is a Wisdom check: tracking, finding your way, reading the weather. Get it right and you catch them by Surprise: they roll Initiative with Disadvantage.",
+  },
+  'c9-vault': {
+    chapter: 9, kind: 'story', title: 'The Lacey Vault',
+    text: [
+      `The Laceys were the richest family in Dunmarket two hundred years ago, and they built their vault to prove it: a stone stair going down under the churchyard to a room lined with shelves of coffins. Most of the coffins have been pulled down and broken open.`,
+      `Ebbs's strongbox sits on the floor with its lid wrenched off. The grey things Abel saw are crouched round it, pulling the book to and fro between them. The biggest wears what's left of a yellow coat, and the smell coming off it makes your eyes water from the bottom of the stairs.`,
+    ],
+    choices: [{ id: 'fight', label: 'Fight.', next: 'c9-fight' }],
+    lesson: "The one in the coat is a Ghast. Its Stench Poisons anyone who starts a turn within 5 feet of it and fails a DC 10 Constitution save. Pass the save once, and you're used to it for a day.",
+  },
+  'c9-fight': {
+    chapter: 9, kind: 'fight', title: 'Ghouls', encounter: 'vault', next: 'c9-after',
+    lesson: "Paralyzed: you can't move or act, you fail Strength and Dexterity saves, attacks against you have Advantage, and a hit from within 5 feet is a Critical Hit. Ghouls bite twice, or claw once to Paralyze. A Ghoul or Ghast can't be Poisoned and takes no Poison damage: that's Immunity.",
+  },
+  'c9-after': {
+    chapter: 9, kind: 'story', title: 'The Black Boar',
+    text: [
+      `There's a badge sewn on the shoulder of the ghast's yellow coat: a black boar, the same one stamped on the cover of Corva's book. Martin Ebbs goes white when he sees it.`,
+      `"Thursby," he says. "They had the big house on the north road, three days from here. Sir Hugh Thursby raised a company in this valley for the old war, and the war came to Crowsfoot Hill and finished them. Those are his men you put back in the ground. They carried Sir Hugh home to bury him in his own chapel." Corva, he remembers, told her followers she'd bought the book from a tinker.`,
+      `Abel Fenn has hobbled down the steps after you on a stick. "They came for that book," he says, "and they'll keep coming till they get it." Ebbs agrees with him. The Baron's clerk is due in Dunmarket on the twelfth, and if she finds the dead walking in the churchyard, there'll be soldiers in the town by spring and the town paying for their keep. He offers a hundred silver to whoever goes to Thursby Hall and puts an end to it, and pays half of it now. The book goes with you. Nobody in Dunmarket will have it in the house.`,
+    ],
+    choices: [{ id: 'north', label: 'Take the book and go north to Thursby Hall.', next: 'c10-rest' }],
+    lesson: 'Chapter 9 done: feats, Paralysis, Immunity and Surprise. Next: level 5, the biggest step up a hero takes.',
+  },
+
+  // ---------------------------------------------- chapter 10: The North Road
+  'c10-rest': {
+    chapter: 10, kind: 'rest', rest: 'long', title: 'The Drovers\' Shelter', next: 'c10-level',
+    text: [
+      `The north road follows the river Skell up out of the farmland and onto the moor, and the drovers who use it have built a stone shelter a day's walk apart all the way along. The first night you share one with a shepherd and his two dogs. He has heard of Thursby Hall and he doesn't like it. His father used to say there were lights going round the windows at night, years after the last Thursby was buried.`,
+      `The book rides at the bottom of a pack, wrapped in a sack. Twice in the night the dogs get up and growl at the door. In the morning there are long-toed footprints in the mud outside, heading back the way you came.`,
+    ],
+    lesson: "A Long Rest in a stone hut works the same as one in an inn: 8 hours, most of it asleep, and something to lie on helps. If a fight breaks out, the rest is interrupted.",
+  },
+  'c10-level': {
+    chapter: 10, kind: 'level', level: 5, title: 'Level 5', next: 'c10-bridge',
+    text: [`Everyone in the party reaches level 5.`],
+    lesson: 'Level 5 is the biggest step up. Your Proficiency Bonus rises to +3. Barbarians, Fighters, Monks, Paladins and Rangers gain Extra Attack: two attacks with each Attack action. Full casters learn level 3 spells such as Fireball, Spirit Guardians and Revivify, and cantrips like Fire Bolt and Eldritch Blast get stronger. A Rogue\'s Sneak Attack is 3d6. Tap your hero to see everything new.',
+  },
+  'c10-bridge': {
+    chapter: 10, kind: 'story', title: 'Skell Bridge',
+    text: [
+      `On the third morning the road comes down to a stone bridge over the Skell, and somebody has dragged a dead tree across the far end of it. An Ogre is sitting on the tree with a sack of somebody's turnips in its lap, eating them one at a time. Standing up, it would be half again as tall as the tallest of you.`,
+      `When it sees you it does stand up. It holds out one enormous hand and points at your purses. Dire wolves come out of the heather behind it and sit on the road, and they are much bigger than the wolves on Crowsfoot Hill, and thinner. From under the bridge, a man is shouting for help.`,
+    ],
+    choices: [
+      { id: 'pay', label: "Hold out Martin Ebbs's silver and make the Ogre understand: the purse for the road. (One hero makes a Persuasion check.)", next: 'c10-pay' },
+      { id: 'fight', label: 'Fight your way across.', next: 'c10-fight' },
+    ],
+    lesson: "Ogres speak Giant, and you probably don't, so this has to be done with your hands and a purse. Getting your meaning across without a shared language makes a check harder.",
+  },
+  'c10-pay': {
+    chapter: 10, kind: 'check', title: 'The Toll',
+    text: [`You shake the purse so it clinks, point at the Ogre, and then point up the road behind it. The Ogre scratches its neck and thinks about it.`],
+    check: { skill: 'persuasion', dc: 15, mode: 'single', prompt: 'Who does the bargaining?' },
+    success: {
+      text: `It snatches the purse and bites a coin. Then it picks up its club and the rest of the turnips and stamps off down the riverbank. The dire wolves stay where they are, and as soon as it has gone, they get up and come for you instead.`,
+      next: 'c10-fight', flags: { paid: true },
+    },
+    fail: {
+      text: `The Ogre takes the purse, tucks it into its belt and picks up its club.`,
+      next: 'c10-fight', flags: {},
+    },
+    lesson: "Persuasion again, DC 15 this time. Even when a check goes your way, it may only make the fight smaller.",
+  },
+  'c10-fight': {
+    chapter: 10, kind: 'fight', title: 'Skell Bridge', encounter: 'bridge', next: 'c10-after',
+    lesson: "With Extra Attack you can attack, step away, and attack again. Dire wolves have Pack Tactics (Advantage when one of their friends is next to you) and their bite can knock you Prone. The Ogre hits hard but has AC 11. One well-placed level 3 spell can turn this fight.",
+  },
+  'c10-after': {
+    chapter: 10, kind: 'story', title: 'Lem Odey',
+    text: [
+      `The man under the bridge is a tinker called Lem Odey. He has been sitting on a ledge above the water since yesterday afternoon, when the Ogre tipped his cart over, and he climbs up soaked and shivering and very pleased to see you.`,
+      `He stops being pleased when you tell him where you're going. Last spring, he says, he sheltered from a storm in the chapel at Thursby Hall. The tomb was open and empty, and a black book was lying on the altar. "So I took it," he says, "and sold it in Dunmarket to a woman in a grey cloak, for four silver. I've dreamed about that chapel every night since."`,
+      `He won't go back there with you, but he scratches a map of the hall in the mud with a stick: the gatehouse, the great hall, and the chapel at the back, with a side door into it from the kitchen garden.`,
+    ],
+    choices: [{ id: 'on', label: 'Thank Lem and walk on to Thursby Hall.', next: 'c11-camp' }],
+    lesson: 'Chapter 10 done: level 5, Extra Attack, level 3 spells, Pack Tactics and Prone.',
+  },
+
+  // ---------------------------------------------- chapter 11: Thursby Hall
+  'c11-camp': {
+    chapter: 11, kind: 'rest', rest: 'long', title: 'The Sheepfold', next: 'c11-hall',
+    text: [`You sight Thursby Hall in the evening of the fourth day: a grey house on a rise, with a gatehouse in front and most of its roof still on. Nobody wants to walk up to it in the dark. You camp in a sheepfold out of sight of the windows, take turns on watch, and go up in the morning.`],
+    lesson: 'Your last Long Rest before the hall. Go in with everything you have.',
+  },
+  'c11-hall': {
+    chapter: 11, kind: 'story', title: 'Thursby Hall',
+    text: [
+      `The gatehouse doors are off their hinges and the courtyard is waist deep in nettles. Inside, the great hall still has its long table laid with plates, thick with dust. A suit of armor stands at the foot of the stairs, and when you cross the floor, its helmet turns to follow you.`,
+      `Lem's map was right. A passage behind the kitchen leads out into the kitchen garden, and from there to the chapel's side door. From somewhere under the kitchen you can hear feet shuffling.`,
+    ],
+    choices: [
+      { id: 'sneak', label: 'Go round through the kitchen garden, quietly. (Everyone makes a Stealth check.)', next: 'c11-sneak' },
+      { id: 'hall', label: 'Walk straight through the hall to the chapel.', next: 'c11-chapel' },
+    ],
+    lesson: "Whatever is in the cellar will come if it hears you. If the group's Stealth check succeeds, fewer of them join the last fight.",
+  },
+  'c11-sneak': {
+    chapter: 11, kind: 'check', title: 'The Kitchen Garden',
+    text: [`The kitchen garden has gone to brambles, and the path to the chapel runs right past the top of the cellar steps.`],
+    check: { skill: 'stealth', dc: 13, mode: 'group', prompt: 'Everyone rolls Stealth.' },
+    success: {
+      text: `You get past the cellar steps one at a time, and the shuffling below carries on as before.`,
+      next: 'c11-chapel', flags: { quiet: true },
+    },
+    fail: {
+      text: `A bramble catches a cloak and drags a cracked pot off the wall. Down in the cellar the shuffling stops, then starts again, coming up the steps.`,
+      next: 'c11-chapel', flags: {},
+    },
+    lesson: 'A group check: if at least half of you succeed, the whole group does.',
+  },
+  'c11-chapel': {
+    chapter: 11, kind: 'story', title: 'Sir Hugh',
+    text: [
+      `The chapel is small and very cold. The candles on the altar are lit. In their light a man in old armor sits on the edge of the open tomb, with a sword across his knees and a longbow leaning beside him. His skin is grey and dried tight to the bone, and his eyes shine green when he lifts his head.`,
+      `"You've brought my book," says Sir Hugh Thursby. His voice is hoarse and very polite. "Thank you. My men are lying in a hill in the south, and I mean to have them back. Then I'll take back what the Baron's family took from mine." He holds out his hand. "Put it on the altar, and you can walk home."`,
+    ],
+    choices: [{ id: 'fight', label: 'Keep the book, and fight.', next: 'c11-fight' }],
+    lesson: 'Sir Hugh is a Wight. He attacks twice with sword or bow, and can swap an attack for Life Drain: a DC 13 Constitution save, or you take Necrotic damage and lose that much of your Hit Point maximum until a Long Rest. He has Resistance to Necrotic damage (he takes half) and Immunity to Poison.',
+  },
+  'c11-fight': {
+    chapter: 11, kind: 'fight', title: 'Sir Hugh Thursby', encounter: 'hall', next: 'c11-end',
+    lesson: "The last fight of this chapter. Animated Armor has AC 18 and can't be Frightened or Paralyzed, so spells that need a failed save do better against the dead. Radiant damage and Turn Undead work on Sir Hugh, the Ghouls and the Zombies.",
+  },
+  'c11-end': {
+    chapter: 11, kind: 'end', title: 'Home Again',
+    text: [
+      `When Sir Hugh falls, what's left inside his armor is dust and a few teeth. You burn the book on the altar candles a page at a time. It takes most of an hour, and it smells terrible.`,
+      `Back in Dunmarket, Martin Ebbs pays the rest of the hundred silver and Abel Fenn puts the Lacey coffins back on their shelves. On the twelfth the Baron's clerk rides in, looks over the raked churchyard and the reeve's new front window, writes "nothing to report" in her ledger, and asks which inn does the best supper.`,
+    ],
+    lesson: "That's the campaign so far: from your first d20 to level 5. More chapters, and the levels past 5, are on the way. Thanks for playtesting First Roll.",
   },
 };

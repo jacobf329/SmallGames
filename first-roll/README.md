@@ -4,7 +4,7 @@ A co-op, turn-based RPG that teaches the 2024 fifth-edition rules by playing
 them. Every roll shows its math, and every number links to the rule behind it.
 Scope and roadmap: [SCOPE.md](SCOPE.md).
 
-**Phase 2: the whole campaign, chapters 0 to 8, from your first d20 to level 3.** After the first playtest: a full 2024 character builder, your own spells, and spells aimed at any square.
+**The campaign so far: chapters 0 to 11, from your first d20 to level 5.** After the first playtest: a full 2024 character builder, your own spells, and spells aimed at any square. Then levels 4 and 5 (feats, Extra Attack, level 3 spells) and three more chapters. Levels 6 to 20 come next, a chunk at a time.
 
 | Chapter | What you do | What it teaches |
 | --- | --- | --- |
@@ -17,6 +17,9 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
 | 6 · Magic in the Cellar | Sneak in (or use the back door you found), cultists and skeletons | Spell slots, Concentration, saving throws, Vulnerability |
 | 7 · Bad Air and Worse Company | Yellow mold, a Short Rest, a Giant Spider's nest and a Bugbear | Poisoned, Restrained, Grappled, Short Rest and Hit Point Dice, Undead Fortitude |
 | 8 · The Barrow | Level 3 and a subclass, then Corva Lund and the dead she raised | Subclasses, upcasting, Turn Undead, Hold Person, talking a fight smaller |
+| 9 · The Lacey Vault | Level 4 and a feat, then ghouls in the Dunmarket churchyard | Ability Score Improvement and feats, Paralyzed, Immunity, Surprise, the Ghast's Stench |
+| 10 · The North Road | Level 5, then an Ogre and its dire wolves at Skell Bridge | Extra Attack, level 3 spells, Pack Tactics, a check with no shared language |
+| 11 · Thursby Hall | Sneak past the cellar, then Sir Hugh Thursby, a Wight | Life Drain, Resistance and Immunity, a group Stealth check that shrinks the fight |
 
 - **1–4 players**, each on their own phone, with **AI companions** filling the
   party (Auto keeps at least three heroes). Fights scale to the party's size
@@ -34,7 +37,7 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
   - the Wood Elf's 35 ft speed
   - Gnomish Cunning
   - every Elf, Gnome, Goliath and Tiefling lineage, with its spells
-- **Levels 1 to 3** with the 2024 features and one SRD subclass each:
+- **Levels 1 to 5** with the 2024 features and one SRD subclass each (level 4 and 5 features, like the general feat, Extra Attack, Sneak Attack 3d6, Uncanny Dodge, Stunning Strike, Sear Undead, Font of Inspiration and Sorcerous Restoration, are in the Rules book):
   - Barbarian: Rage, Unarmored Defense, Danger Sense, Reckless Attack, Berserker (Frenzy)
   - Bard: Bardic Inspiration, Jack of All Trades, Expertise, College of Lore (Cutting Words)
   - Cleric: Channel Divinity (Divine Spark, Turn Undead), Life Domain (Disciple of Life, Preserve Life)
@@ -141,7 +144,7 @@ src/rules/     the rules engine: pure, seeded, JSON state, no DOM or network
   ai.js          monsters, AI companions and the Coach (one brain)
   glossary.js    plain-language rules for every rule key and spell
 src/game/
-  campaign.js    chapters 2-8: scenes, choices and flags, checks, saves,
+  campaign.js    chapters 2-11: scenes, choices and flags, checks, saves,
                  rests, level-ups, fights
   encounters.js  maps and foes sized to the party
   room.js        the party: seats, heroes, votes, checks, fights, turn control,

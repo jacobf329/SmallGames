@@ -151,7 +151,8 @@ test('every rule a chapter teaches, and every feature links to, has a Rules book
   const { GLOSSARY } = await import('../src/rules/glossary.js');
   const { CHAPTERS } = await import('../src/game/campaign.js');
   for (const ch of Object.values(CHAPTERS)) for (const k of ch.teaches || []) assert.ok(GLOSSARY[k], `chapter rule ${k}`);
-  for (const cls of ['fighter', 'rogue', 'cleric', 'wizard']) {
-    for (const f of H(cls, 3).features) if (f.rule) assert.ok(GLOSSARY[f.rule], `${cls} feature ${f.name}: ${f.rule}`);
+  const { CLASSES, MAX_LEVEL } = await import('../src/rules/data.js');
+  for (const cls of Object.keys(CLASSES)) for (let lv = 1; lv <= MAX_LEVEL; lv++) {
+    for (const f of H(cls, lv).features) if (f.rule) assert.ok(GLOSSARY[f.rule], `${cls} ${lv} feature ${f.name}: ${f.rule}`);
   }
 });

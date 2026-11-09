@@ -97,3 +97,17 @@ test('the new monsters: Dire Wolf knocks a Large target Prone; the AI uses Claws
   const b3 = fight([p], [w], 'w');
   assert.ok(['drain', 'attack'].includes(aiNext(b3, 'w').a));
 });
+
+test('chapters 9 to 11: every fight sits between Low and High for its level and party size', async () => {
+  const { buildEncounter } = await import('../src/game/encounters.js');
+  const BUDGET = { 4: [250, 500], 5: [500, 1100] };
+  for (const id of ['vault', 'bridge', 'hall']) for (let n = 1; n <= 4; n++) for (const flags of [{}, { paid: true }, { quiet: true }]) {
+    const e = buildEncounter(id, n, flags);
+    const [low, high] = BUDGET[e.level];
+    assert.ok(e.xp >= low * n * 0.5 && e.xp <= high * n, `${id} for ${n} ${JSON.stringify(flags)}: ${e.xp} XP`);
+  }
+  // Buying off the Ogre leaves its dire wolves; a quiet way in leaves the Zombies behind.
+  assert.ok(!buildEncounter('bridge', 4, { paid: true }).foes.some((f) => f.name === 'Ogre'));
+  assert.ok(!buildEncounter('hall', 4, { quiet: true }).foes.some((f) => /Zombie/.test(f.name)));
+  assert.equal(buildEncounter('hall', 1).foes[0].name, 'Sir Hugh Thursby');
+});
