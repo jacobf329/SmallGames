@@ -853,7 +853,7 @@ export function heroState(h) {
     hd: { ...h.hitDice }, slots: {}, free: {}, uses: {},
     relentless: !!h.relentless?.used, arcane: !!h.arcaneRecovery?.used, sorcRestore: !!h.sorcRestore?.used,
     exhaustion: h.exhaustion || 0, poisoned: !!h.conds?.some((c) => c.id === 'poisoned' && c.lasting), inspiration: !!h.inspiration,
-    tempHp: h.tempHp || 0, mageArmor: !!h.mageArmor,
+    tempHp: h.tempHp || 0, mageArmor: !!h.mageArmor, drained: h.drained || 0,
   };
   for (const [lv, s] of Object.entries(h.casting?.slots || {})) st.slots[lv] = { ...s };
   for (const [sid, k] of Object.entries(h.casting?.known || {})) if (k.freeMax) st.free[sid] = k.free;
@@ -868,6 +868,9 @@ export function applyState(h, st) {
   if (!st) return h;
   h.aid = st.aid || 0;
   h.hpMax += h.aid;
+  // Life Drain: the maximum stays lower until a Long Rest.
+  h.drained = Math.min(st.drained || 0, h.hpMax - 1);
+  h.hpMax -= h.drained;
   h.hp = Math.max(0, Math.min(h.hpMax, carry(st.hp, st.hpMax + (st.aid || 0), h.hpMax)));
   if (st.hd) h.hitDice.left = carry(st.hd.left, st.hd.max, h.hitDice.max);
   for (const [lv, s] of Object.entries(h.casting?.slots || {})) {
@@ -946,6 +949,8 @@ export function finishShortRest(h) {
 export function longRest(h) {
   const got = [];
   h.aid = 0;
+  if (h.drained) got.push('a Hit Point maximum lowered by Life Drain');
+  h.drained = 0;
   h.hpMax = buildHero(h.spec, { id: h.id, name: h.name, level: h.level }).hpMax;
   if (h.hp < h.hpMax) got.push('all Hit Points');
   h.hp = h.hpMax;
@@ -977,6 +982,7 @@ const MONSTER_TRAITS = {
   undeadFortitude: { name: 'Undead Fortitude', rule: 'undead-fortitude', text: "If damage drops it to 0 Hit Points, it makes a Constitution save (DC 5 + the damage taken), unless the damage is Radiant or from a Critical Hit. On a success it drops to 1 Hit Point instead." },
   spiderClimb: { name: 'Spider Climb', rule: null, text: 'Climbs difficult surfaces, even ceilings, without an ability check.' },
   abduct: { name: 'Abduct', rule: 'grappled', text: "Doesn't spend extra movement to move a creature it is grappling." },
+  stench: { name: 'Stench', rule: 'stench', text: 'A creature that starts its turn within 5 feet of it makes a DC 10 Constitution save or is Poisoned until the start of its next turn. On a success it is immune to this Stench for 24 hours.' },
 };
 
 export function buildMonster(def, { id, label, x, y, ai = 'melee' }) {
@@ -985,7 +991,13 @@ export function buildMonster(def, { id, label, x, y, ai = 'melee' }) {
   const saveProfs = Object.keys(def.saves || {});
   const traits = def.traits || {};
   const features = [];
-  if (def.multiattack > 1) features.push({ name: 'Multiattack', rule: 'multiattack', text: `The ${def.name.toLowerCase()} makes ${def.multiattack} attacks with its Attack action.` });
+  if (def.multiattack > 1) features.push({ name: 'Multiattack', rule: 'multiattack', text: `The ${def.name.toLowerCase()} makes ${def.multiName || `${def.multiattack} attacks`} with its Attack action${def.drain ? ', and can replace one of them with Life Drain' : ''}.` });
+  for (const a of def.attacks) {
+    if (a.solo) features.push({ name: a.name, rule: 'multiattack', text: `${a.name} is an action of its own: it isn't one of the Multiattack's attacks.` });
+    if (a.rider?.paralyze) features.push({ name: `${a.name}: Paralysis`, rule: 'paralyzed', text: `On a hit, a target that isn't Undead${a.rider.paralyze.notElf ? ' or an Elf' : ''} makes a DC ${a.rider.paralyze.dc} Constitution save or is Paralyzed until the end of its next turn.` });
+  }
+  if (def.drain) features.push({ name: 'Life Drain', rule: 'life-drain', text: `Constitution save DC ${def.drain.dc}, one creature within 5 feet: on a failure ${def.drain.dice} + ${def.drain.flat} ${def.drain.type} damage, and its Hit Point maximum drops by the damage taken (until a Long Rest).` });
+  if (def.resist?.length) features.push({ name: 'Resistant', rule: 'resistance', text: `Takes half ${def.resist.join(', ')} damage.` });
   for (const t of Object.keys(traits)) if (traits[t] && MONSTER_TRAITS[t]) features.push(MONSTER_TRAITS[t]);
   if (def.redirect) features.push({ name: 'Redirect Attack', rule: 'redirect-attack', text: 'Reaction: when a creature makes an attack roll against the boss, a goblin ally within 5 feet swaps places with it and becomes the target.' });
   if (def.web) features.push({ name: `Web (Recharge ${def.web.recharge}-6)`, rule: 'restrained', text: `Dexterity save DC ${def.web.dc}, one creature within ${def.web.range} feet: on a failure it is Restrained until the web is destroyed (AC ${def.web.webAc}, ${def.web.webHp} HP, Fire does double).` });
@@ -1010,7 +1022,7 @@ export function buildMonster(def, { id, label, x, y, ai = 'melee' }) {
     initParts: [{ label: 'DEX modifier', value: m.dex, rule: 'ability-modifier' }],
     attacks: def.attacks.map((a) => ({
       id: a.id, name: a.name, kind: a.kind, dice: a.dice, type: a.type, range: a.range || null, reach: a.reach || 5,
-      finesse: false, mastery: null, advDice: a.advDice, extra: a.extra || [], rider: a.rider || null, advIfGrappled: !!a.advIfGrappled,
+      finesse: false, mastery: null, advDice: a.advDice, extra: a.extra || [], rider: a.rider || null, advIfGrappled: !!a.advIfGrappled, solo: !!a.solo,
       hit: [{ label: 'Stat block attack bonus', value: a.bonus, rule: 'stat-block' }],
       dmgFlat: [{ label: 'Stat block damage bonus', value: a.flat, rule: 'stat-block' }],
     })),
@@ -1019,6 +1031,7 @@ export function buildMonster(def, { id, label, x, y, ai = 'melee' }) {
     multiattack: def.multiattack || 1, nimble: !!traits.nimble, redirect: !!def.redirect,
     packTactics: !!traits.packTactics, undeadFortitude: !!traits.undeadFortitude,
     web: def.web ? { ...def.web, ready: true } : null,
+    stench: def.stench ? { ...def.stench } : null, drain: def.drain ? { ...def.drain } : null,
     conds: [], exhaustion: 0,
     reaction: true, dead: false, x, y, ai, xp: def.xp, cr: def.cr || null,
   };

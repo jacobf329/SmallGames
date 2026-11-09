@@ -60,7 +60,18 @@ function weaponOptions(b, me, { kind = null } = {}) {
   for (const T of targetsOf(b, me)) {
     for (const o of attackOptions(b, me, T)) {
       if (!o.ok || (kind && o.atk.kind !== kind)) continue;
-      out.push({ intent: { a: 'attack', target: T.id, attack: o.atk.id }, score: o.expected + finishing(T, o.avg), why: { T, o }, time: 'action', ranged: o.atk.kind === 'ranged' });
+      if (o.atk.solo && b.turn.attacksLeft > 0) continue;
+      // A Ghoul's or Ghast's Claw: worth it for the chance to Paralyze.
+      const par = o.atk.rider?.paralyze;
+      const bonus = par && T.creature !== 'undead' && !hasCond(T, 'paralyzed') && !(T.condImmune || []).includes('paralyzed') && !(par.notElf && T.speciesId === 'elf')
+        ? o.p * (1 - saveChance(b, T, 'con', par.dc)) * 8 : 0;
+      out.push({ intent: { a: 'attack', target: T.id, attack: o.atk.id }, score: o.expected + finishing(T, o.avg) + bonus, why: { T, o }, time: 'action', ranged: o.atk.kind === 'ranged' });
+    }
+    // Life Drain (Wight) in place of one attack: better against heavy armor.
+    if (me.drain && !kind && cheb(me, T) <= 1 && !down(T)) {
+      const pFail = 1 - saveChance(b, T, 'con', me.drain.dc);
+      const avg = (avgDice(me.drain.dice) + me.drain.flat) * damageMult(T, me.drain.type);
+      out.push({ intent: { a: 'drain', target: T.id }, score: pFail * avg * 1.5 + finishing(T, avg) * pFail, why: { T, o: { mode: 'normal' } }, time: 'action', ranged: false });
     }
   }
   return out;

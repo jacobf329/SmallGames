@@ -985,6 +985,12 @@ function finishAttack(b, ctx) {
     if (atk.rider?.prone && alive && SIZE[T.size || 'medium'] <= SIZE[atk.rider.prone] && !hasCond(T, 'prone')) {
       if (addCond(b, T, { id: 'prone', by: A.id })) rider = { text: `${T.name} is knocked Prone.`, rule: 'prone' };
     }
+    if (atk.rider?.paralyze && alive && T.creature !== 'undead' && !(atk.rider.paralyze.notElf && T.speciesId === 'elf') && !hasCond(T, 'paralyzed')) {
+      const dc = atk.rider.paralyze.dc;
+      const sv = savingThrow(b, T, 'con', dc, { cond: 'paralyzed' });
+      const held = !sv.success && addCond(b, T, { id: 'paralyzed', by: A.id, endsOn: { when: 'end', who: T.id, skip: b.turn?.who === T.id ? 1 : 0 }, rule: 'paralyzed' });
+      rider = { text: `${T.name} makes a DC ${dc} Constitution save: ${sv.auto ? 'automatic' : sv.total}, ${sv.success ? 'shakes it off' : held ? 'Paralyzed until the end of its next turn' : "but it can't be Paralyzed"}.`, rule: 'paralyzed' };
+    }
     if (atk.rider?.grapple && alive && SIZE[T.size || 'medium'] <= SIZE[atk.rider.size || 'medium'] && !T.conds.some((x) => x.id === 'grappled' && x.by === A.id)) {
       if (addCond(b, T, { id: 'grappled', by: A.id, dc: atk.rider.grapple, reach: atk.reach || 5 })) {
         rider = { text: `${T.name} is Grappled (escape DC ${atk.rider.grapple}): Speed 0, and Disadvantage on attacks against anyone but ${A.name}.`, rule: 'grappled' };
@@ -1362,7 +1368,7 @@ function saveRider(b, A, T, rider) {
   return '';
 }
 
-function areaSave(b, A, targets, { name, ability, dcParts, dice, flat = 0, type, half, rule, cantrip = false, ignoreCover = false, push: pushFt = 0, from = null,
+function areaSave(b, A, targets, { name, ability, dcParts, dice, flat = 0, flatLabel = 'DEX modifier', type, half, rule, cantrip = false, ignoreCover = false, push: pushFt = 0, from = null,
   rider = null, careful = [], heighten = null, empower = 0 }) {
   const dc = sumParts(dcParts);
   const { n, sides } = parseDice(dice);
@@ -1389,7 +1395,7 @@ function areaSave(b, A, targets, { name, ability, dcParts, dice, flat = 0, type,
   }
   const hits = results.map((r) => `${C(b, r.target).name} ${r.damage}`).join(', ');
   const parts = [{ label: `${name} ${dice}`, rolls, value: sum(rolls), rule, gwf: emp }];
-  if (flat) parts.push({ label: 'DEX modifier', value: flat, rule: 'ability-modifier' });
+  if (flat) parts.push({ label: flatLabel, value: flat, rule: flatLabel === 'DEX modifier' ? 'ability-modifier' : 'stat-block' });
   emit(b, {
     kind: 'save-spell', by: A.id, what: name, ability, dc, dcParts, damage: { parts, total: full, type },
 
@@ -1927,6 +1933,22 @@ function spiritualStrike(b, A, T) {
   attack(b, A, T, atk);
 }
 
+// Ghast's Stench: a creature that starts its turn within 5 feet saves or is
+// Poisoned until the start of its next turn. A success makes it immune to
+// that ghast's Stench for 24 hours (here: the rest of the fight).
+function stenchTick(b, X) {
+  if (X.dead || X.hp <= 0 || !onBoard(X)) return;
+  for (const G of Object.values(b.creatures)) {
+    if (!G.stench || G === X || G.dead || G.hp <= 0 || cheb(G, X) > 1 || (X.stenchSafe || []).includes(G.id)) continue;
+    const dc = G.stench.dc;
+    const sv = savingThrow(b, X, 'con', dc, { cond: 'poisoned' });
+    if (sv.success) X.stenchSafe = [...(X.stenchSafe || []), G.id];
+    else addCond(b, X, { id: 'poisoned', by: G.id, endsOn: { when: 'start', who: X.id }, rule: 'stench' });
+    emit(b, { kind: 'save', save: 'condition', by: X.id, ...sv, dc, outcome: sv.success ? 'success' : 'fail', rule: 'stench',
+      text: `${G.name}'s Stench: ${X.name} makes a DC ${dc} Constitution save, ${sv.auto ? 'automatically succeeding' : sv.total}: ${sv.success ? 'immune to it for the rest of the fight' : 'Poisoned until the start of its next turn'}.` });
+  }
+}
+
 // ---------------------------------------------------------- the turn ----
 
 function expire(b, when, who) {
@@ -1987,6 +2009,7 @@ function startTurn(b, c) {
   if (effectOn(b, 'haste', c.id)) b.turn.hasteAct = 1;
   emit(b, { kind: 'turn', who: c.id, text: `${c.name}'s turn.`, rule: 'your-turn' });
   zoneTick(b, c, 'start');
+  stenchTick(b, c);
   if (b.over || c.dead || (c.side === 'foe' && c.hp <= 0)) return false;
   const hero = effectOn(b, 'heroism', c.id);
   if (hero && c.hp > 0 && hero.amount > (c.tempHp || 0)) {
@@ -2385,7 +2408,7 @@ function useAttack(t, A, atk = null) {
   t.action--;
   // Thirsting Blade: the Extra Attack is for the pact weapon only. Slow and
   // Haste's extra action: one attack only.
-  t.attacksLeft = (A.extraAttackPact && atk?.base !== 'pact') || t.hasteOnly || hasCond(A, 'slow') ? 0 : (A.multiattack || 1) - 1;
+  t.attacksLeft = atk?.solo || (A.extraAttackPact && atk?.base !== 'pact') || t.hasteOnly || hasCond(A, 'slow') ? 0 : (A.multiattack || 1) - 1;
   return null;
 }
 export const canAttack = (t) => !!t && (t.action > 0 || t.attacksLeft > 0);
@@ -2490,6 +2513,7 @@ function performStep(b, id, intent) {
       if (!t.action && !t.attacksLeft) return fail('You have already used your action.');
       if (t.hasteOnly && !t.attacksLeft && (atk.unarmed || atk.spell)) return fail("Haste's extra action allows one weapon attack, not an Unarmed Strike.");
       if (t.attacksLeft > 0 && A.extraAttackPact && atk.base !== 'pact') return fail("Thirsting Blade's second attack has to be with your pact weapon.");
+      if (t.attacksLeft > 0 && atk.solo) return fail(`${atk.name} takes a whole action: it can't be one of the Multiattack's attacks.`);
       useAttack(t, A, atk);
       if (atk.light && !t.light) t.light = atk.base;
       attack(b, A, T, atk);
@@ -2608,6 +2632,24 @@ function performStep(b, id, intent) {
       useAttack(t, A);
       A.breath.uses--;
       areaSave(b, A, areaTargets(b, A, BREATH_AREAS[shape], intent.x, intent.y), { name: `Breath Weapon (${A.breath.type}, ${shape === 'line' ? '30-ft Line' : '15-ft Cone'})`, ability: 'dex', dcParts: A.breath.dc, dice: A.breath.dice, type: A.breath.type, half: true, rule: 'breath-weapon' });
+      break;
+    }
+    case 'drain': {
+      // Life Drain (Wight): replaces one of its Multiattack's attacks.
+      if (!A.drain) return fail('No Life Drain.');
+      if (!canAttack(t)) return fail('You have already used your action.');
+      if (!T || !hostile(A, T) || T.dead || T.hp <= 0 || cheb(A, T) > 1) return fail('Pick an enemy next to it.');
+      useAttack(t, A, null);
+      const d = A.drain;
+      const before = T.hpMax;
+      areaSave(b, A, [T], { name: 'Life Drain', ability: 'con', dcParts: [{ label: 'Stat block', value: d.dc, rule: 'stat-block' }], dice: d.dice, flat: d.flat, flatLabel: 'Stat block damage bonus', type: d.type, half: false, rule: 'life-drain', ignoreCover: true });
+      const r = [...b.log].reverse().find((x) => x.kind === 'save-spell' && x.rule === 'life-drain')?.results?.[0];
+      if (r && !r.success && r.damage > 0 && !T.dead) {
+        T.hpMax = Math.max(1, T.hpMax - r.damage);
+        T.drained = (T.drained || 0) + (before - T.hpMax);
+        T.hp = Math.min(T.hp, T.hpMax);
+        emit(b, { kind: 'note', by: A.id, target: T.id, rule: 'life-drain', text: `${T.name}'s Hit Point maximum drops by ${before - T.hpMax} to ${T.hpMax} until a Long Rest.` });
+      }
       break;
     }
     case 'web': {

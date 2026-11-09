@@ -919,6 +919,72 @@ export const BUGBEAR_WARRIOR = {
   traits: { abduct: true }, xp: 200, cr: '1',
 };
 
+// --- Chapters 9 to 11 (levels 4 and 5), SRD 5.2.1. Proficiency Bonus +2 (CR 0-4).
+// solo: an attack that is its own action (it can't be one of a Multiattack's
+// attacks). rider.paralyze: a Constitution save on a hit or Paralyzed until
+// the end of the target's next turn. drain: Life Drain, a save instead of an
+// attack roll that also lowers the target's Hit Point maximum.
+export const GHOUL = {
+  kind: 'ghoul', name: 'Ghoul', emoji: '🧟', type: 'Medium Undead', size: 'medium', creature: 'undead',
+  ac: 12, hp: 22, hpFormula: '5d8', speed: 30,
+  abilities: { str: 13, dex: 15, con: 10, int: 7, wis: 10, cha: 6 },
+  immune: ['Poison'], condImmune: ['charmed', 'exhaustion', 'poisoned'],
+  attacks: [
+    { id: 'bite', name: 'Bite', kind: 'melee', bonus: 4, dice: '1d6', flat: 2, type: 'Piercing', extra: [{ dice: '1d6', type: 'Necrotic' }] },
+    { id: 'claw', name: 'Claw', kind: 'melee', bonus: 4, dice: '1d4', flat: 2, type: 'Slashing', solo: true, rider: { paralyze: { dc: 10, notElf: true } } },
+  ],
+  multiattack: 2, multiName: 'two Bite attacks', xp: 200, cr: '1',
+};
+export const GHAST = {
+  kind: 'ghast', name: 'Ghast', emoji: '🧟', type: 'Medium Undead', size: 'medium', creature: 'undead',
+  ac: 13, hp: 36, hpFormula: '8d8', speed: 30,
+  abilities: { str: 16, dex: 17, con: 10, int: 11, wis: 10, cha: 8 }, saves: { wis: 2 },
+  resist: ['Necrotic'], immune: ['Poison'], condImmune: ['charmed', 'exhaustion', 'poisoned'],
+  attacks: [
+    { id: 'bite', name: 'Bite', kind: 'melee', bonus: 5, dice: '1d8', flat: 3, type: 'Piercing', extra: [{ dice: '2d8', type: 'Necrotic' }] },
+    { id: 'claw', name: 'Claw', kind: 'melee', bonus: 5, dice: '2d6', flat: 3, type: 'Slashing', rider: { paralyze: { dc: 10 } } },
+  ],
+  traits: { stench: true }, stench: { dc: 10 }, xp: 450, cr: '2',
+};
+export const DIRE_WOLF = {
+  kind: 'dire-wolf', name: 'Dire Wolf', emoji: '🐺', type: 'Large Beast', size: 'large', creature: 'beast',
+  ac: 14, hp: 22, hpFormula: '3d10+6', speed: 50,
+  abilities: { str: 17, dex: 15, con: 15, int: 3, wis: 12, cha: 7 }, skills: { perception: 5, stealth: 4 },
+  attacks: [{ id: 'bite', name: 'Bite', kind: 'melee', bonus: 5, dice: '1d10', flat: 3, type: 'Piercing', rider: { prone: 'large' } }],
+  traits: { packTactics: true }, xp: 200, cr: '1',
+};
+export const OGRE = {
+  kind: 'ogre', name: 'Ogre', emoji: '👹', type: 'Large Giant', size: 'large', creature: 'giant',
+  ac: 11, hp: 68, hpFormula: '8d10+24', speed: 40,
+  abilities: { str: 19, dex: 8, con: 16, int: 5, wis: 7, cha: 7 },
+  attacks: [
+    { id: 'greatclub', name: 'Greatclub', kind: 'melee', bonus: 6, dice: '2d8', flat: 4, type: 'Bludgeoning' },
+    { id: 'javelin', name: 'Javelin', kind: 'melee', bonus: 6, dice: '2d6', flat: 4, type: 'Piercing' },
+    { id: 'javelin-thrown', name: 'Javelin (thrown)', kind: 'ranged', bonus: 6, dice: '2d6', flat: 4, type: 'Piercing', range: [30, 120] },
+  ],
+  xp: 450, cr: '2',
+};
+export const ANIMATED_ARMOR = {
+  kind: 'armor', name: 'Animated Armor', emoji: '🛡️', type: 'Medium Construct', size: 'medium', creature: 'construct',
+  ac: 18, hp: 33, hpFormula: '6d8+6', speed: 25,
+  abilities: { str: 14, dex: 11, con: 13, int: 1, wis: 3, cha: 1 },
+  immune: ['Poison', 'Psychic'], condImmune: ['charmed', 'deafened', 'exhaustion', 'frightened', 'paralyzed', 'petrified', 'poisoned'],
+  attacks: [{ id: 'slam', name: 'Slam', kind: 'melee', bonus: 4, dice: '1d6', flat: 2, type: 'Bludgeoning' }],
+  multiattack: 2, xp: 200, cr: '1',
+};
+export const WIGHT = {
+  kind: 'wight', name: 'Wight', emoji: '💀', type: 'Medium Undead', size: 'medium', creature: 'undead',
+  ac: 14, hp: 82, hpFormula: '11d8+33', speed: 30,
+  abilities: { str: 15, dex: 14, con: 16, int: 10, wis: 13, cha: 15 }, skills: { perception: 3, stealth: 4 },
+  resist: ['Necrotic'], immune: ['Poison'], condImmune: ['exhaustion', 'poisoned'],
+  attacks: [
+    { id: 'sword', name: 'Necrotic Sword', kind: 'melee', bonus: 4, dice: '1d8', flat: 2, type: 'Slashing', extra: [{ dice: '1d8', type: 'Necrotic' }] },
+    { id: 'bow', name: 'Necrotic Bow', kind: 'ranged', bonus: 4, dice: '1d8', flat: 2, type: 'Piercing', extra: [{ dice: '1d8', type: 'Necrotic' }], range: [150, 600] },
+  ],
+  drain: { dc: 13, dice: '1d8', flat: 2, type: 'Necrotic' },
+  multiattack: 2, xp: 700, cr: '3',
+};
+
 // Phase 0's one-off skirmish, kept for the quick-fight mode and the tests.
 export const SKIRMISH = {
   walls: ['1,5', '2,5', '5,4', '6,4', '6,5', '3,1'],
