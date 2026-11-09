@@ -4,7 +4,7 @@ A co-op, turn-based RPG that teaches the 2024 fifth-edition rules by playing
 them. Every roll shows its math, and every number links to the rule behind it.
 Scope and roadmap: [SCOPE.md](SCOPE.md).
 
-**The campaign so far: chapters 0 to 11, from your first d20 to level 5.** After the first playtest: a full 2024 character builder, your own spells, and spells aimed at any square. Then levels 4 and 5 (feats, Extra Attack, level 3 spells) and three more chapters. Levels 6 to 20 come next, a chunk at a time.
+**The campaign so far: chapters 0 to 16, from your first d20 to level 10.** After the first playtest: a full 2024 character builder, your own spells, and spells aimed at any square. Then levels 4 and 5 (feats, Extra Attack, level 3 spells), then levels 6 to 10 (level 4 and 5 spells, each class's features up to level 10) and five more chapters. Levels 11 to 20 come next.
 
 | Chapter | What you do | What it teaches |
 | --- | --- | --- |
@@ -20,6 +20,11 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
 | 9 · The Lacey Vault | Level 4 and a feat, then ghouls in the Dunmarket churchyard | Ability Score Improvement and feats, Paralyzed, Immunity, Surprise, the Ghast's Stench |
 | 10 · The North Road | Level 5, then an Ogre and its dire wolves at Skell Bridge | Extra Attack, level 3 spells, Pack Tactics, a check with no shared language |
 | 11 · Thursby Hall | Sneak past the cellar, then Sir Hugh Thursby, a Wight | Life Drain, Resistance and Immunity, a group Stealth check that shrinks the fight |
+| 12 · The Toll Keep | Level 6, then talk or fight your way into Brede keep | Aura of Authority, Parry, Deception |
+| 13 · Coldharbour | Level 7, a knight with a forged warrant, then Hester Marr, a Mage | A spellcaster on the other side (Fireball, Shield, Misty Step), Persuasion with evidence |
+| 14 · Gallow Causeway | Level 8, trolls and an owlbear on the causeway | Regeneration and Fire or Acid, Surprise, Reach |
+| 15 · The Giant's Yard | Level 9, two hill giants and their ogres at the Rudd farm | Huge creatures, Prone and Poisoned riders, a group Stealth check |
+| 16 · The Black Water | Level 10, then Skellmaw, a Young Black Dragon, in the drowned church at Ebbing | Acid Breath and Recharge, Immunity, a group Athletics check |
 
 - **1–4 players**, each on their own phone, with **AI companions** filling the
   party (Auto keeps at least three heroes). Fights scale to the party's size
@@ -37,7 +42,7 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
   - the Wood Elf's 35 ft speed
   - Gnomish Cunning
   - every Elf, Gnome, Goliath and Tiefling lineage, with its spells
-- **Levels 1 to 5** with the 2024 features and one SRD subclass each (level 4 and 5 features, like the general feat, Extra Attack, Sneak Attack 3d6, Uncanny Dodge, Stunning Strike, Sear Undead, Font of Inspiration and Sorcerous Restoration, are in the Rules book):
+- **Levels 1 to 10** with the 2024 features and one SRD subclass each. Features from level 4 on (the general feats, Extra Attack, Evasion, Indomitable, Aura of Protection, Divine Intervention, Magical Secrets, Sorcery Incarnate and the rest) are in the Rules book. The levels 1 to 3 core:
   - Barbarian: Rage, Unarmored Defense, Danger Sense, Reckless Attack, Berserker (Frenzy)
   - Bard: Bardic Inspiration, Jack of All Trades, Expertise, College of Lore (Cutting Words)
   - Cleric: Channel Divinity (Divine Spark, Turn Undead), Life Domain (Disciple of Life, Preserve Life)
@@ -61,7 +66,7 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
   cantrip, one invocation or Metamagic option, and one spell for a Bard,
   Sorcerer or Warlock. After a Long Rest a Cleric, Druid or Wizard can change
   every prepared spell, and a Paladin or Ranger one.
-- **Spells:** about 75 from the SRD across all eight casters' lists (fight
+- **Spells:** about 120 from the SRD, up to level 5, across all eight casters' lists (fight
   spells and the ones for outside of fights), Concentration, casting with a
   higher slot, Magic Initiate's free casts, and the 2024 one-spell-slot-per-turn
   rule.
@@ -73,7 +78,10 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
 - **Conditions and terrain:** cover and line of sight, Prone, Restrained,
   Grappled, Frightened, Poisoned, Paralyzed, Incapacitated, Exhaustion, Hide,
   Shove. Monsters: wolves, skeletons, zombies, cultists, a Giant Spider, a
-  Bugbear and a Cultist Fanatic.
+  Bugbear, a Cultist Fanatic, ghouls, a Ghast, dire wolves, an Ogre, Animated
+  Armor, a Wight, a Hobgoblin Captain, Veterans and Bandit Captains (Parry),
+  a Knight, a Mage, Trolls (Regeneration), an Owlbear, Hill Giants and Black
+  Dragons (Acid Breath).
 - **Between fights** the party keeps its wounds, spent slots and uses. Short and
   Long Rests, Hit Point Dice, and a retry that puts everyone back as they were
   before the fight.
@@ -144,7 +152,7 @@ src/rules/     the rules engine: pure, seeded, JSON state, no DOM or network
   ai.js          monsters, AI companions and the Coach (one brain)
   glossary.js    plain-language rules for every rule key and spell
 src/game/
-  campaign.js    chapters 2-11: scenes, choices and flags, checks, saves,
+  campaign.js    chapters 2-16: scenes, choices and flags, checks, saves,
                  rests, level-ups, fights
   encounters.js  maps and foes sized to the party
   room.js        the party: seats, heroes, votes, checks, fights, turn control,

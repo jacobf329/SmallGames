@@ -1,4 +1,4 @@
-// The campaign: scenes for chapters 2 to 11 (chapter 0, the dice lesson, and
+// The campaign: scenes for chapters 2 to 16 (chapter 0, the dice lesson, and
 // chapter 1, making your hero, happen in the lobby). Scene kinds:
 //   story  text + choices the party votes on. A choice can need a flag
 //          (`requires`) and can set flags (`flags`).
@@ -24,6 +24,11 @@ export const CHAPTERS = {
   9: { title: 'The Lacey Vault', teaches: ['ability-score-improvement', 'paralyzed', 'immunity', 'surprise'] },
   10: { title: 'The North Road', teaches: ['extra-attack', 'spell-slots', 'pack-tactics', 'prone'] },
   11: { title: 'Thursby Hall', teaches: ['life-drain', 'resistance', 'immunity', 'group-check'] },
+  12: { title: 'The Toll Keep', teaches: ['aura-of-authority', 'parry', 'advantage', 'skills'] },
+  13: { title: 'Coldharbour', teaches: ['monster-spells', 'areas', 'cover', 'evasion'] },
+  14: { title: 'Gallow Causeway', teaches: ['regeneration', 'surprise', 'reach', 'ability-score-improvement'] },
+  15: { title: "The Giant's Yard", teaches: ['reach', 'prone', 'poisoned', 'group-check'] },
+  16: { title: 'The Black Water', teaches: ['recharge', 'immunity', 'divine-intervention', 'areas'] },
 };
 
 // AI companions fill empty seats. Each has a fixed build.
@@ -525,11 +530,287 @@ export const SCENES = {
     lesson: "The last fight of this chapter. Animated Armor has AC 18 and can't be Frightened or Paralyzed, so spells that need a failed save do better against the dead. Radiant damage and Turn Undead work on Sir Hugh, the Ghouls and the Zombies.",
   },
   'c11-end': {
-    chapter: 11, kind: 'end', title: 'Home Again',
+    chapter: 11, kind: 'story', title: 'Home Again',
     text: [
       `When Sir Hugh falls, what's left inside his armor is dust and a few teeth. You burn the book on the altar candles a page at a time. It takes most of an hour, and it smells terrible.`,
-      `Back in Dunmarket, Martin Ebbs pays the rest of the hundred silver and Abel Fenn puts the Lacey coffins back on their shelves. On the twelfth the Baron's clerk rides in, looks over the raked churchyard and the reeve's new front window, writes "nothing to report" in her ledger, and asks which inn does the best supper.`,
+      `Back in Dunmarket, Martin Ebbs pays the rest of the hundred silver and Abel Fenn puts the Lacey coffins back on their shelves. On the twelfth the Baron's clerk rides in. Her name is Ursula Dent, and she has ink up both cuffs. She looks over the raked churchyard and the reeve's new front window, writes "nothing to report" in her ledger, and asks which inn does the best supper.`,
+      `She's halfway through Joan Tullock's mutton at the Bell when Joan's son Davey comes in off the east road. His two wool carts are still loaded in the yard. Strangers have taken the toll keep at Brede ford. Davey had four silver ready for the toll, a silver a wheel, the same as every year, and the man on the gate laughed and told him it was two silver a wheel now. The wool fair at Haverton opens in four days.`,
+      `Ursula Dent puts her fork down. "That keep is the Baron's," she says, "and it hasn't sent him a penny since the spring. I wrote to the keeper twice." She wants the ford open and she wants to know where the money went. She'll pay a hundred and fifty silver for both, here in Dunmarket, once Davey's carts are across.`,
     ],
-    lesson: "That's the campaign so far: from your first d20 to level 5. More chapters, and the levels past 5, are on the way. Thanks for playtesting First Roll.",
+    choices: [{ id: 'east', label: "Take the clerk's job and go east with Davey's carts.", next: 'c12-rest' }],
+    lesson: `Chapter 11 done: Life Drain, Resistance and Immunity, and a hard last fight. Next: levels 6 to 10, and the east road.`,
+  },
+
+  // ---------------------------------------------- chapter 12: The Toll Keep
+  'c12-rest': {
+    chapter: 12, kind: 'rest', rest: 'long', title: 'The East Road', next: 'c12-level',
+    text: [
+      `The east road runs flat along the river Brede, through water meadows and pollard willows. Davey drives the first cart and you take turns with the second, whose mule stops to eat the verge every few hundred yards and can't be talked out of it. You sleep the first night in a hay barn, on a note from Ursula Dent that the farmer reads twice before he lets you in.`,
+      `Davey talks most of the evening. He's twenty, and it's the first year his mother has trusted him to take the wool to Haverton on his own. The Bell's winter money is in those two carts.`,
+    ],
+    lesson: `From here on, every chapter opens with a Long Rest and a new level. The fights are built for a party that starts them at full strength, with its best spells ready.`,
+  },
+  'c12-level': {
+    chapter: 12, kind: 'level', level: 6, title: 'Level 6', next: 'c12-keep',
+    text: [`You put Sir Hugh Thursby back in his tomb. Everyone in the party reaches level 6.`],
+    lesson: `Level 6 is a subclass level for most classes. A Life Cleric heals themselves whenever they heal someone else with a spell, an Evoker can shape their spells around their friends, and a Monk's strikes deal Force damage. A Paladin's Aura of Protection adds their Charisma modifier to the saving throws of allies within 10 feet. Fighters get another feat. Tap your hero to see what's new.`,
+  },
+  'c12-keep': {
+    chapter: 12, kind: 'story', title: 'Brede Ford',
+    text: [
+      `Brede keep is a square stone tower with a walled yard, built where the road comes down to the ford. A chain is strung across the road from the gatehouse to a post on the bank, and a dozen carts are drawn up in the meadow on this side, waiting. Their drivers have been there two days. One of them has started selling the others his cheeses.`,
+      `The men on the gate wear good mail under blue surcoats. The two on the wall carry pistols, which nobody from Dunmarket has seen outside a picture. Their captain is a hobgoblin in a red cloak, walking the wall with a ledger under one arm, and the drovers call her Captain Hesk. A notice is pinned to the gatehouse door with a dagger: the keep is held for the Baron by warrant, and the toll is two silver a wheel.`,
+    ],
+    choices: [
+      { id: 'bluff', label: 'Walk up to the gate as sellswords looking for work. (One hero makes a Deception check.)', next: 'c12-bluff' },
+      { id: 'storm', label: 'Cut the chain and fight your way in.', next: 'c12-fight' },
+    ],
+    lesson: `Captain Hesk is a Hobgoblin Captain. While she's on her feet, her Aura of Authority gives her and her allies within 10 feet Advantage on attack rolls and saving throws. The men in mail are Veterans: they attack twice, and they can Parry, adding 2 to their AC against one melee attack each round.`,
+  },
+  'c12-bluff': {
+    chapter: 12, kind: 'check', title: 'Looking for Work',
+    text: [`You leave Davey with the carts and walk up to the gate on your own. The story is that you heard in Dunmarket the keep was hiring.`],
+    check: { skill: 'deception', dc: 14, mode: 'single', prompt: 'Who does the lying?' },
+    success: {
+      text: `The man on the gate sends for the captain. She comes down with her ledger, writes your names in it, and takes you into the yard to show you where you'll sleep, while the two on the wall go back to watching the meadow. She's still explaining the pay when you draw your weapons.`,
+      next: 'c12-fight', flags: { inside: true },
+    },
+    fail: {
+      text: `The man on the gate asks which inn you heard it at. You say the Bell. He says he drank at the Bell all through June and doesn't remember any of your faces, and he shouts up to the wall.`,
+      next: 'c12-fight', flags: {},
+    },
+    lesson: `Deception is a Charisma check: telling a lie well enough to be believed. DC 14. Get it right and the fight starts in the yard, where the two on the wall can't join in.`,
+  },
+  'c12-fight': {
+    chapter: 12, kind: 'fight', title: 'Brede Keep', encounter: 'keep', next: 'c12-after',
+    lesson: `Anyone within 10 feet of Captain Hesk has Advantage on attacks and saves. Bring her down early, or fight her men somewhere she isn't. A Veteran can only Parry once a round, so when two of you go after the same one, the second attack has the better chance.`,
+  },
+  'c12-after': {
+    chapter: 12, kind: 'story', title: 'Walter Gisby',
+    text: [
+      `Captain Hesk throws down her sword when she's the last one standing, and hands over the ledger with it. Everything is written in it in a small neat hand: every cart, every wheel, and every week's takings, with a line ruled under each week and the same name written beside it. H. Marr, Coldharbour.`,
+      `The keep's real keeper is in the cellar under the tower, where he has been since April. Walter Gisby is a small bald man in a shirt he has worn for months, and the first thing he asks for is a razor. The mercenaries turned up with a warrant under the Baron's seal, naming a Sir Osric Penn as warden of the east road, and locked him up the same day.`,
+      `"Coldharbour's the old signal tower," Walter says, "a day upriver, where the Brede comes out of the fen. A wizard's been living there these three years, Hester Marr. She buys her candles from my wife." He wants to know what a wizard needs with forty silver a week. Davey's carts go over the ford that afternoon, with a letter for Ursula Dent in his coat.`,
+    ],
+    choices: [{ id: 'upriver', label: 'Go upriver to Coldharbour.', next: 'c13-rest' }],
+    lesson: `Chapter 12 done: level 6, Aura of Authority, Parry and Deception. Next: level 7, and a wizard on the other side of the fight.`,
+  },
+
+  // ---------------------------------------------- chapter 13: Coldharbour
+  'c13-rest': {
+    chapter: 13, kind: 'rest', rest: 'long', title: "The Keeper's Roll", next: 'c13-level',
+    text: [
+      `Walter Gisby gives you the mercenaries' beds in the tower, airs the blankets, and shaves twice. In the morning he brings up a tin box from the cellar. Inside is the keep's copy of the roll of wardens, the Baron's own list of who holds what on his roads, and Sir Osric Penn isn't on it.`,
+      `The roll is sealed at the bottom in green wax, with a heron looking back over its left shoulder. Walter lays the mercenaries' warrant beside it and puts his finger on that seal, where the heron looks over its right shoulder instead. The Baron's seal-cutter, he says, would never have made that mistake. He gives you both, and lends you his lantern for the alder woods.`,
+    ],
+    lesson: `Another Long Rest. Level 7 comes next.`,
+  },
+  'c13-level': {
+    chapter: 13, kind: 'level', level: 7, title: 'Level 7', next: 'c13-tower',
+    text: [`You opened Brede ford and let its keeper out. Everyone in the party reaches level 7.`],
+    lesson: `Level 7: full casters learn level 4 spells, among them Ice Storm, Wall of Fire, Polymorph and Greater Invisibility. Rogues and Monks get Evasion, so a Dexterity save for half damage does no damage at all when they pass it. A Paladin gets a second aura, and a Cleric gets Blessed Strikes. Tap your hero to see what's new.`,
+  },
+  'c13-tower': {
+    chapter: 13, kind: 'story', title: 'Coldharbour',
+    text: [
+      `Coldharbour is a round tower of black flint on a knoll where the river path gives out into reed beds. Behind it the fen goes on as far as you can see: brown water, reeds, and a causeway of old stones running out across it toward a grey smudge on the far side. Smoke is coming from the top window.`,
+      `A knight is sitting on the mounting block by the tower door, scraping mud off his boots with a stick. He stands up when he sees you and puts his helmet on. "Sir Osric Penn," he says, "warden of the east road, by the Baron's warrant. If you've come from the keep, I'll want to know what you did to Captain Hesk."`,
+    ],
+    choices: [
+      { id: 'show', label: "Show Sir Osric the keeper's roll and the two seals. (One hero makes a Persuasion check.)", next: 'c13-osric' },
+      { id: 'past', label: 'Go past him to the door.', next: 'c13-fight' },
+    ],
+    lesson: `Sir Osric is a Knight: heavy armor, two greatsword attacks that add Radiant damage, Parry, and he can't be Frightened. Talk him round and he stays out of the fight.`,
+  },
+  'c13-osric': {
+    chapter: 13, kind: 'check', title: 'Two Herons',
+    text: [`Sir Osric takes his gauntlets off to hold the roll. He reads it through slowly, moving his lips, and then holds the two seals side by side in the light.`],
+    check: { skill: 'persuasion', dc: 15, mode: 'single', prompt: 'Who does the talking?' },
+    success: {
+      text: `"I bought that warrant from her," he says. "Forty silver. I thought it cheap for a wardenship." He gives you back the roll, sits down on the mounting block again, and says he'll wait there for whatever the Baron decides to do with him. He doesn't stop you at the door.`,
+      next: 'c13-fight', flags: { told: true },
+    },
+    fail: {
+      text: `"Anyone can cut a seal," he says, "and anyone can tell a story about one. Take it to the Baron, not to me." He draws his sword and stands in the doorway.`,
+      next: 'c13-fight', flags: {},
+    },
+    lesson: `Persuasion, DC 15: you're asking a proud man to believe he has been made a fool of. Evidence helps you argue, but the check still decides it.`,
+  },
+  'c13-fight': {
+    chapter: 13, kind: 'fight', title: 'Hester Marr', encounter: 'tower', next: 'c13-after',
+    lesson: `Hester Marr is a Mage. She casts Fireball and Cone of Cold, gets out of reach with Misty Step, and casts Shield as a Reaction when a hit would land, which adds 5 to her AC until her next turn. Spread out so one Fireball can't catch all of you. She has to see you to target you, so walls and Cover help.`,
+  },
+  'c13-after': {
+    chapter: 13, kind: 'story', title: 'The New Moon',
+    text: [
+      `Hester Marr yields when she can't stand any more, and asks for water. Once she can talk, she tells it straight, sitting on her own floor with her back against a bookcase.`,
+      `Three years ago a black dragon came up out of Gallow Fen and ate half the Rudds' cows in their field. She wrote to the Baron, and wrote four more times, and when nobody came she went across the causeway herself and bargained with it. It wanted a chest of silver at every new moon, left on the roof of the drowned church at Ebbing. The tolls at Brede were how she paid for it. "The warrant was mine," she says, "and so was the captain. I'd do it again."`,
+      `The next chest is due tomorrow night. It's under her table, half full. If it isn't on the church roof, she says, the dragon will come looking, and it will start with the farms along the edge of the fen. You can carry the chest across for her, or you can go across and kill the dragon, which is what she asked the Baron to do in the first place.`,
+    ],
+    choices: [{ id: 'fen', label: 'Leave the chest where it is and go after the dragon.', next: 'c14-rest' }],
+    lesson: `Chapter 13 done: level 7, and a spellcaster on the other side for once, with Fireball and Shield of her own. Next: level 8, and Gallow Fen.`,
+  },
+
+  // ---------------------------------------------- chapter 14: Gallow Causeway
+  'c14-rest': {
+    chapter: 14, kind: 'rest', rest: 'long', title: "Hester's Map", next: 'c14-level',
+    text: [
+      `You spend the night in Hester Marr's tower and take turns watching her. She doesn't try anything. She draws you a map of the fen on the back of the forged warrant instead: the causeway, the Rudd farm on the only dry ground halfway across, and the church tower at Ebbing standing up out of open water beyond it.`,
+      `Trolls sleep under the far end of the causeway, she says. She has always crossed at noon, while they're asleep, and fast.`,
+    ],
+    lesson: `Keeping watch over a prisoner is light activity, so it doesn't spoil a Long Rest. Fighting, or walking for an hour or more, would.`,
+  },
+  'c14-level': {
+    chapter: 14, kind: 'level', level: 8, title: 'Level 8', next: 'c14-causeway',
+    text: [`You beat Hester Marr in her own tower. Everyone in the party reaches level 8.`],
+    lesson: `Level 8 brings another feat for every class, most often an Ability Score Improvement. If you've been raising one score, this is often where it reaches 18 or 20. Tap your hero to choose.`,
+  },
+  'c14-causeway': {
+    chapter: 14, kind: 'story', title: 'Gallow Causeway',
+    text: [
+      `The causeway is a road of flat stones on a bank of earth, wide enough for one cart, with black water and reeds on both sides. It's noon when you start across. A mile out, the stones are littered with gnawed bones, and something large has trampled the reeds flat on either side.`,
+      `From under the next span comes snoring. A clump of alders grows on a hump of mud off to the left, and from inside it comes a sound like a cow being sick, which is the noise an owlbear makes when it's eating.`,
+    ],
+    choices: [
+      { id: 'wade', label: 'Climb down and wade round through the reeds to come at them from behind. (One hero makes a Survival check.)', next: 'c14-reeds' },
+      { id: 'cross', label: 'Keep to the causeway and go straight on.', next: 'c14-fight' },
+    ],
+    lesson: `Trolls have Regeneration: they regain 15 Hit Points at the start of every turn. Knock one down and it gets back up, unless it took Fire or Acid damage since its last turn. Fire Bolt, Produce Flame, Burning Hands, Fireball and a fire-breathing Dragonborn all count.`,
+  },
+  'c14-reeds': {
+    chapter: 14, kind: 'check', title: 'Fence Posts',
+    text: [`Off the causeway the water is waist deep in places and knee deep in others, and the soft mud at the bottom pulls boots off.`],
+    check: { skill: 'survival', dc: 14, mode: 'single', prompt: 'Who finds the way?' },
+    success: {
+      text: `You find a line of old fence posts sunk in the mud and follow them round on firm ground, and come up out of the reeds on the far side of the span. The snoring is coming from a heap of bones under it, and it carries on until you're close enough to smell what's making it.`,
+      next: 'c14-fight', flags: { surprise: 'foes' },
+    },
+    fail: {
+      text: `Halfway round, somebody steps off a sunken post and goes in up to the chest. By the time you've hauled them out, the snoring has stopped, and long grey hands are reaching up over the edge of the causeway.`,
+      next: 'c14-fight', flags: {},
+    },
+    lesson: `Survival, DC 14, to find a way through the fen. Succeed and the foes are Surprised: they roll Initiative with Disadvantage.`,
+  },
+  'c14-fight': {
+    chapter: 14, kind: 'fight', title: 'Gallow Causeway', encounter: 'causeway', next: 'c14-after',
+    lesson: `A troll attacks three times and reaches 10 feet. At 0 Hit Points it falls Prone and starts to regenerate; hit it with Fire or Acid while it's down and it dies. An owlbear attacks twice and hits very hard. The water on both sides is too deep to fight in, so everyone stays on the causeway.`,
+  },
+  'c14-after': {
+    chapter: 14, kind: 'story', title: 'Nat Rudd',
+    text: [
+      `When the fighting stops, the last troll is still twitching, and its wounds are closing while you watch. You pour the oil from Walter Gisby's lantern over it and set it alight, and you push what's left off the causeway into the water. The smell stays in your clothes for days.`,
+      `A boy is sitting on the causeway a little further on, with his knees pulled up, wet through. He's about ten, and he watched the whole fight from the reeds. His name is Nat Rudd. Two giants came to his family's farm four days ago, he says. They ate the pigs, and they shut his mother and father and his sisters in the cow barn, and every evening they bang on the barn door and shout for supper. He got out through the muck hole.`,
+      `The Rudd farm is the only dry ground between here and Ebbing, and the causeway goes straight through its yard.`,
+    ],
+    choices: [{ id: 'farm', label: 'Go with Nat to the farm.', next: 'c15-rest' }],
+    lesson: `Chapter 14 done: level 8, Regeneration, Surprise and fighting on narrow ground. Next: level 9, and giants.`,
+  },
+
+  // ---------------------------------------------- chapter 15: The Giant's Yard
+  'c15-rest': {
+    chapter: 15, kind: 'rest', rest: 'long', title: 'The Turf Hut', next: 'c15-level',
+    text: [
+      `Nat takes you to a turf hut at the edge of the peat cuttings, a mile short of the farm, where his father keeps his spades. The giants stay up all night, he says, roaring and throwing things, and sleep all morning in the yard. So you sleep first, through the dark, with their noise coming over the water, and Nat sleeps across the doorway so nobody can go without him.`,
+    ],
+    lesson: `A Long Rest needs 8 hours, but not at night. Resting while your enemies are awake, and going in while they sleep, is good planning.`,
+  },
+  'c15-level': {
+    chapter: 15, kind: 'level', level: 9, title: 'Level 9', next: 'c15-yard',
+    text: [`You got across Gallow Causeway. Everyone in the party reaches level 9.`],
+    lesson: `Level 9: your Proficiency Bonus rises to +4, so attack rolls, save DCs and trained skills all get better. Full casters learn level 5 spells such as Cone of Cold, Flame Strike, Hold Monster and Mass Cure Wounds. Fighters get Indomitable, a reroll for a failed save. Tap your hero to see what's new.`,
+  },
+  'c15-yard': {
+    chapter: 15, kind: 'story', title: "The Giant's Yard",
+    text: [
+      `The Rudd farm is a long low house, a cow barn and a peat stack on a hump of dry ground, with the causeway running through the middle of the yard. Two hill giants are asleep on their backs by the ashes of a fire. Lying down, they come up to your chest. Nat has names for them: the bigger one, with a cart wheel hung round her neck on a chain, is Big Ada, and the other is Mudge, because of the state of him.`,
+      `An ogre sits against the barn door, awake, eating out of a bucket. Another is asleep in the cart shed. Round the back of the barn, behind the peat stack, Nat shows you the muck hole. It's small, and it smells exactly the way you'd expect.`,
+    ],
+    choices: [
+      { id: 'barn', label: 'Creep round to the muck hole and get the Rudds out first. (Everyone makes a Stealth check.)', next: 'c15-barn' },
+      { id: 'yard', label: 'Walk into the yard and fight.', next: 'c15-fight' },
+    ],
+    lesson: `Hill Giants are Huge. Their tree-trunk clubs reach 10 feet and can knock you Prone, and the rubbish they throw can leave you Poisoned. Their AC is only 13, but they have over 100 Hit Points each.`,
+  },
+  'c15-barn': {
+    chapter: 15, kind: 'check', title: 'The Muck Hole',
+    text: [`It's a long way round the yard in the open, and the ogre at the barn door looks up every time a crow lands.`],
+    check: { skill: 'stealth', dc: 14, mode: 'group', prompt: 'Everyone rolls Stealth.' },
+    success: {
+      text: `You reach the peat stack unseen and pull the boards off the muck hole. Hob Rudd comes through first, then his wife Martha and their three daughters, all of them filthy and very quiet. The eldest has a pitchfork she kept hidden in the straw for four days. When they run for the reeds, the ogre at the door hears them and lumbers after them into the peat cuttings, where it sinks to the waist in the first wet cutting and stays there, bellowing.`,
+      next: 'c15-fight', flags: { freed: true },
+    },
+    fail: {
+      text: `The ogre puts its bucket down, gets up, and walks right round the peat stack. It finds you, and roars, and over in the yard the giants sit up.`,
+      next: 'c15-fight', flags: {},
+    },
+    lesson: `A group Stealth check, DC 14: if at least half of you succeed, the whole group does. Get the Rudds out first and one ogre leaves the fight.`,
+  },
+  'c15-fight': {
+    chapter: 15, kind: 'fight', title: "The Giant's Yard", encounter: 'yard', next: 'c15-after',
+    lesson: `Stay out of a giant's reach, or get right in close; its club hits as hard at 10 feet as at 5. If you're knocked Prone, standing up costs half your movement. Poisoned means Disadvantage on attack rolls and ability checks.`,
+  },
+  'c15-after': {
+    chapter: 15, kind: 'story', title: 'Hob Rudd',
+    text: [
+      `Hob Rudd comes back up out of the reeds when the yard goes quiet, with his family behind him. He walks twice round the giants, kicks Mudge in the ear, and then sits on the step of his house with his hands over his face until Martha brings him some water.`,
+      `When you tell him where you're going, he takes you down to the end of the yard, where the causeway runs out into open water, and drags a flat-bottomed peat boat out of the reeds. Ebbing was his grandmother's village. The fen came up over it in a wet year before he was born, and all that's left above the water now is the church roof and its bell tower.`,
+      `"It'll be going in and out through the hole in the roof," he says. "But there's a window at the top of the bell tower, and stairs down inside to the gallery, if they haven't rotted. My grandmother rang that bell when she was a girl." He gives you the boat and the oars, and asks you to bring them back.`,
+    ],
+    choices: [{ id: 'row', label: 'Take the boat to Ebbing.', next: 'c16-rest' }],
+    lesson: `Chapter 15 done: level 9, Huge creatures, Reach and Prone. Next: level 10, and the dragon.`,
+  },
+
+  // ---------------------------------------------- chapter 16: The Black Water
+  'c16-rest': {
+    chapter: 16, kind: 'rest', rest: 'long', title: "The Rudds' Kitchen", next: 'c16-level',
+    text: [
+      `The Rudds feed you everything the giants didn't eat, which is mostly oatcakes and eggs, and give you their beds. In the morning Martha Rudd sews up a cloak where a troll got hold of it. Nat wants to come in the boat, and isn't allowed, and argues about it all through breakfast.`,
+    ],
+    lesson: `The last Long Rest before the last fight in this part of the story. Go in with every slot and every use you have.`,
+  },
+  'c16-level': {
+    chapter: 16, kind: 'level', level: 10, title: 'Level 10', next: 'c16-water',
+    text: [`You saved the Rudds' farm. Everyone in the party reaches level 10.`],
+    lesson: `Level 10: a Cleric can call on Divine Intervention and cast any Cleric spell of level 5 or lower without a slot, once per Long Rest. A Bard learns spells from other classes with Magical Secrets. A Paladin's Aura of Courage means allies within 10 feet can't be Frightened. Tap your hero to see what's new.`,
+  },
+  'c16-water': {
+    chapter: 16, kind: 'story', title: 'Ebbing',
+    text: [
+      `It takes most of the morning to row to Ebbing. The fen gets deeper and the reeds thin out, until there's nothing but flat black water with dead trees standing in it, and the roofs of houses just under the surface, where you can see them if you look straight down.`,
+      `The church is the only building in the village still above water: a long slate roof, broken open in the middle, and a square bell tower at the west end with a window at the top. There are bones caught in the slates round the hole. A troll sits beside it, picking at its feet, and on a ledge by the hole are Hester Marr's chests, three years of them, with the lids off.`,
+      `From inside comes the slop of water against the walls as something big turns over. Hester called the dragon Skellmaw. It sleeps through the afternoons, she said, and hates being woken.`,
+    ],
+    choices: [
+      { id: 'tower', label: 'Row round to the bell tower and climb in at the top. (Everyone makes an Athletics check.)', next: 'c16-tower' },
+      { id: 'roof', label: 'Row straight for the hole in the roof.', next: 'c16-fight' },
+    ],
+    lesson: `Skellmaw is a Young Black Dragon: AC 18, 127 Hit Points, three claw attacks a turn that add Acid damage, and Acid Breath, a 30-foot Line that does 14d6 Acid damage on a failed DC 14 Dexterity save and half on a success. The breath has Recharge 5-6.`,
+  },
+  'c16-tower': {
+    chapter: 16, kind: 'check', title: 'The Bell Tower',
+    text: [`The tower's stones are slimy with weed up to the old high-water line, and dry above it. It's a long climb from the boat to the window.`],
+    check: { skill: 'athletics', dc: 13, mode: 'group', prompt: 'Everyone rolls Athletics.' },
+    success: {
+      text: `You go up one at a time, with a rope from the top for the last of you, and climb in beside the bell. The stairs down are wet but whole, and they bring you out onto the gallery at the back of the church, above the water. The troll is still out on the roof by the hole, with its back to you, and the dragon is between you and it.`,
+      next: 'c16-fight', flags: { tower: true },
+    },
+    fail: {
+      text: `Halfway up, a stone comes away under somebody's foot and drops into the water with a splash like a dropped anvil. The troll on the roof gets up and climbs down inside through the hole, shouting, and the water inside the church starts to heave.`,
+      next: 'c16-fight', flags: {},
+    },
+    lesson: `A group Athletics check, DC 13, for climbing. Succeed and the troll on the roof stays out of the fight.`,
+  },
+  'c16-fight': {
+    chapter: 16, kind: 'fight', title: 'Skellmaw', encounter: 'fen', next: 'c16-end',
+    lesson: `The last fight. Skellmaw and its wyrmlings are immune to Acid. Spread out so the breath can only catch one or two of you, and after it breathes, press in: it rolls a d6 at the start of each turn and only gets the breath back on a 5 or 6.`,
+  },
+  'c16-end': {
+    chapter: 16, kind: 'end', title: "Hester's Silver",
+    text: [
+      `Skellmaw dies half in and half out of the water, and the wave it makes going under slaps the boat against the gallery. When the water settles you can see down to the floor of the church: the pews, the font, and a carpet of coins and bones.`,
+      `It takes two days and the Rudds' second boat to bring the silver back to Coldharbour. Hester Marr counts it with you. Most of it is the Baron's, from the tolls, and some of it came from the Rudds and the other fen farms, who paid her a share every month. She asks you to see that they get theirs back first, and you do.`,
+      `Ursula Dent is waiting at Brede keep when you bring the chests down the river, with Walter Gisby, six of the Baron's soldiers and a fresh ledger. Davey Tullock got the best price in years at Haverton, and he has left you a cheese. The clerk pays you your hundred and fifty silver and writes for the rest of the afternoon, and when she's finished she asks whether you'll be free in the spring.`,
+    ],
+    lesson: `That's the campaign so far: from your first d20 to level 10. Levels 11 to 20 are on the way. Thanks for playtesting First Roll.`,
   },
 };

@@ -359,6 +359,60 @@ export const SPELLS = {
     text: "Pick a creature within 120 feet: every spell of level 3 or lower on it ends. For a higher-level spell, make an ability check with your spellcasting ability (DC 10 + the spell's level). Higher slot: it automatically ends spells up to the slot's level." },
   'fly': { name: 'Fly', level: 3, time: 'action', range: 5, touch: true, kind: 'utility', conc: true,
     text: 'Concentration, up to 10 minutes. A willing creature you touch gains a Fly Speed of 60 feet. Higher slot: one more creature per level. (The board here is flat, so it is used outside of fights.)' },
+  'beacon-of-hope': { name: 'Beacon of Hope', level: 3, time: 'action', range: 30, kind: 'buff', buff: 'beacon', targets: 6, conc: true,
+    text: 'Concentration, up to 1 minute. Any number of creatures within 30 feet (here: up to six) have Advantage on Wisdom saves and Death Saving Throws, and regain the most Hit Points possible from any healing.' },
+  // ---- level 4
+  'ice-storm': { name: 'Ice Storm', level: 4, time: 'action', range: 300, kind: 'area', area: { shape: 'sphere', size: 20, from: 'point' }, save: 'dex', dice: '2d10', type: 'Bludgeoning', also: { dice: '4d6', type: 'Cold' }, half: true, up: { dice: '1d10' },
+    text: 'Hail pounds a 20-foot-radius Cylinder at a point within 300 feet. Each creature in it makes a Dexterity save: 2d10 Bludgeoning and 4d6 Cold damage on a failure, half as much on a success. (The hail also makes the ground Difficult Terrain for a turn; that part is left out here.) Careful: allies in it are hit too. Higher slot: +1d10 Bludgeoning per level.' },
+  'blight': { name: 'Blight', level: 4, time: 'action', range: 30, kind: 'save', save: 'con', dice: '8d8', type: 'Necrotic', half: true, notOn: ['undead', 'construct'], up: { dice: '1d8' },
+    text: "A creature you can see within 30 feet makes a Constitution save: 8d8 Necrotic damage on a failure, half as much on a success. It has no effect on Constructs or Undead. Higher slot: +1d8 per level." },
+  'greater-invisibility': { name: 'Greater Invisibility', level: 4, time: 'action', range: 5, touch: true, kind: 'buff', buff: 'invis', targets: 1, conc: true,
+    text: "Concentration, up to 1 minute. A creature you touch is Invisible, even while it attacks or casts spells: its attack rolls have Advantage, and attack rolls against it have Disadvantage." },
+  'stoneskin': { name: 'Stoneskin', level: 4, time: 'action', range: 5, touch: true, kind: 'buff', buff: 'stoneskin', targets: 1, conc: true,
+    text: 'Concentration, up to 1 hour. A willing creature you touch has Resistance to Bludgeoning, Piercing and Slashing damage. It uses up diamond dust worth 100 GP (assumed here).' },
+  'death-ward': { name: 'Death Ward', level: 4, time: 'action', range: 5, touch: true, kind: 'buff', buff: 'deathward', targets: 1,
+    text: 'For 8 hours, no Concentration. The first time the creature you touch would drop to 0 Hit Points, it drops to 1 Hit Point instead, and the spell ends.' },
+  'fire-shield': { name: 'Fire Shield', level: 4, time: 'action', kind: 'selfbuff', buff: 'fireshield',
+    text: "For 10 minutes, no Concentration. Wispy flames wreathe you (here: the warm shield). You have Resistance to Cold damage, and whenever a creature within 5 feet hits you with a melee attack, the flames lash it for 2d8 Fire damage." },
+  'aura-of-life': { name: 'Aura of Life', level: 4, time: 'action', kind: 'selfbuff', buff: 'auralife', conc: true, area: { shape: 'emanation', size: 30, from: 'self' },
+    text: "Concentration, up to 10 minutes. A 30-foot Emanation around you. You and your allies in it have Resistance to Necrotic damage, and their Hit Point maximum can't be reduced. An ally at 0 Hit Points who starts its turn in it regains 1 Hit Point." },
+  'dimension-door': { name: 'Dimension Door', level: 4, time: 'action', range: 500, kind: 'teleport',
+    text: "You teleport to a spot you can see or describe within 500 feet. (A willing creature next to you can come too; that part is left out here.) Teleporting never provokes Opportunity Attacks." },
+  'polymorph': { name: 'Polymorph', level: 4, time: 'action', range: 60, kind: 'utility', conc: true,
+    text: "Concentration, up to 1 hour. A creature you can see turns into a Beast (a Wisdom save if it is unwilling). Its new form's Hit Points are Temporary Hit Points, and it changes back when they run out. (Not used in fights here yet.)" },
+  'freedom-of-movement': { name: 'Freedom of Movement', level: 4, time: 'action', range: 5, touch: true, kind: 'utility',
+    text: "For 1 hour, a willing creature you touch isn't slowed by Difficult Terrain, and spells can't reduce its Speed or make it Paralyzed or Restrained. (Useful outside of fights here.)" },
+  'arcane-eye': { name: 'Arcane Eye', level: 4, time: 'action', range: 30, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 hour. An invisible, floating eye you can see through and move up to 30 feet a turn. (Useful outside of fights.)' },
+  'charm-monster': { name: 'Charm Monster', level: 4, time: 'action', range: 30, kind: 'utility',
+    text: 'A creature you can see makes a Wisdom save (with Advantage if you are fighting it) or is Charmed by you for 1 hour. (Useful outside of fights.)' },
+  'wall-of-fire': { name: 'Wall of Fire', level: 4, time: 'action', range: 120, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. A wall of fire up to 60 feet long. Creatures in it when it appears make a Dexterity save: 5d8 Fire damage, half on a success; one side of it burns creatures that end a turn nearby. (Not used in fights here yet: the board has no way to draw a wall.)' },
+  // ---- level 5
+  'cone-of-cold': { name: 'Cone of Cold', level: 5, time: 'action', kind: 'area', area: { shape: 'cone', size: 60, from: 'self' }, save: 'con', dice: '8d8', type: 'Cold', half: true, up: { dice: '1d8' },
+    text: 'A blast of cold air in a 60-foot Cone from you. Each creature in it makes a Constitution save: 8d8 Cold damage on a failure, half as much on a success. Higher slot: +1d8 per level.' },
+  'flame-strike': { name: 'Flame Strike', level: 5, time: 'action', range: 60, kind: 'area', area: { shape: 'sphere', size: 10, from: 'point' }, save: 'dex', dice: '5d6', type: 'Fire', also: { dice: '5d6', type: 'Radiant' }, half: true, up: { dice: '1d6', also: '1d6' },
+    text: 'A column of divine fire, a 10-foot-radius Cylinder at a point within 60 feet. Each creature in it makes a Dexterity save: 5d6 Fire and 5d6 Radiant damage on a failure, half as much on a success. Higher slot: +1d6 Fire and +1d6 Radiant per level.' },
+  'mass-cure-wounds': { name: 'Mass Cure Wounds', level: 5, time: 'action', range: 60, kind: 'massheal', dice: '5d8', targets: 6, up: { dice: '1d8' },
+    text: 'A wave of healing. Up to six creatures in a 30-foot-radius Sphere within 60 feet (here: any six you can see) each regain 5d8 + your spellcasting modifier Hit Points. Higher slot: +1d8 per level.' },
+  'hold-monster': { name: 'Hold Monster', level: 5, time: 'action', range: 90, kind: 'hold', save: 'wis', conc: true, notOn: ['undead'], up: { targets: 1 },
+    text: 'Concentration, up to 1 minute. A creature you can see within 90 feet makes a Wisdom save or is Paralyzed. It repeats the save at the end of each of its turns; a success ends the spell on it. It has no effect on Undead. Higher slot: one more creature per level.' },
+  'insect-plague': { name: 'Insect Plague', level: 5, time: 'action', range: 300, kind: 'zone', zone: 'plague', save: 'con', dice: '4d10', type: 'Piercing', half: true, conc: true, area: { shape: 'sphere', size: 20, from: 'point' }, up: { dice: '1d10' },
+    text: "Concentration, up to 10 minutes. Biting locusts fill a 20-foot-radius Sphere at a point within 300 feet; its ground is Difficult Terrain. Each creature in it when it appears, that enters it for the first time on a turn or ends its turn there makes a Constitution save: 4d10 Piercing damage on a failure, half as much on a success. Careful: on this board it covers most of the fight. Higher slot: +1d10 per level." },
+  'cloudkill': { name: 'Cloudkill', level: 5, time: 'action', range: 120, kind: 'zone', zone: 'kill', save: 'con', dice: '5d8', type: 'Poison', half: true, conc: true, area: { shape: 'sphere', size: 20, from: 'point' }, up: { dice: '1d8' },
+    text: "Concentration, up to 10 minutes. A 20-foot-radius Sphere of poisonous yellow-green fog at a point within 120 feet. Each creature in it when it appears, that enters it for the first time on a turn or ends its turn there makes a Constitution save: 5d8 Poison damage on a failure, half as much on a success. (The fog also blocks sight and drifts 10 feet a turn; those parts are left out here.) Careful: it covers most of the board. Higher slot: +1d8 per level." },
+  'greater-restoration': { name: 'Greater Restoration', level: 5, time: 'action', range: 5, touch: true, kind: 'cure', cures: ['charmed', 'pattern', 'petrified'], greater: true,
+    text: "Touch a creature and undo one thing: one level of Exhaustion, the Charmed or Petrified condition, a curse, or a reduction to its Hit Point maximum (like a Wight's Life Drain). It uses up diamond dust worth 100 GP (assumed here)." },
+  'legend-lore': { name: 'Legend Lore', level: 5, time: 'action', kind: 'utility',
+    text: 'Name or describe a famous person, place or object: you learn the lore about it. (Useful outside of fights.)' },
+  'geas': { name: 'Geas', level: 5, time: 'action', range: 60, kind: 'utility',
+    text: 'A creature makes a Wisdom save or is Charmed and bound to carry out a command for 30 days, taking 5d10 Psychic damage when it acts against it. (Useful outside of fights.)' },
+  'summon-dragon': { name: 'Summon Dragon', level: 5, time: 'action', range: 60, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 hour. A Draconic Spirit appears and fights for you. (Not used in fights here yet.)' },
+  'tree-stride': { name: 'Tree Stride', level: 5, time: 'action', kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. Step into one living tree and out of another within 500 feet. (Useful outside of fights.)' },
+  'wall-of-stone': { name: 'Wall of Stone', level: 5, time: 'action', range: 120, kind: 'utility', conc: true,
+    text: 'Concentration, up to 10 minutes. A wall of stone springs up: ten 10-by-10-foot panels, or a bridge, ramp or shelter. (Not used in fights here yet.)' },
 };
 
 // Each class's spell list (the spells of the SRD this game has).
@@ -367,45 +421,59 @@ export const SPELL_LISTS = {
     0: ['sacred-flame', 'spare-the-dying', 'guidance', 'resistance-cantrip', 'thaumaturgy', 'light', 'mending'],
     1: ['bless', 'command', 'cure-wounds', 'detect-magic', 'guiding-bolt', 'healing-word', 'inflict-wounds', 'shield-of-faith', 'bane', 'protection-from-evil-and-good'],
     2: ['aid', 'hold-person', 'lesser-restoration', 'spiritual-weapon'],
-    3: ['spirit-guardians', 'mass-healing-word', 'revivify', 'dispel-magic'],
+    3: ['spirit-guardians', 'mass-healing-word', 'revivify', 'dispel-magic', 'beacon-of-hope'],
+    4: ['death-ward', 'aura-of-life', 'freedom-of-movement'],
+    5: ['flame-strike', 'mass-cure-wounds', 'greater-restoration', 'insect-plague', 'legend-lore', 'geas'],
   },
   wizard: {
     0: ['fire-bolt', 'ray-of-frost', 'chill-touch', 'shocking-grasp', 'poison-spray', 'acid-splash', 'mage-hand', 'light', 'mending', 'dancing-lights', 'minor-illusion', 'prestidigitation'],
     1: ['magic-missile', 'burning-hands', 'shield', 'thunderwave', 'mage-armor', 'false-life', 'ray-of-sickness', 'chromatic-orb', 'sleep', 'fog-cloud', 'charm-person', 'detect-magic', 'comprehend-languages', 'feather-fall', 'identify', 'alarm', 'unseen-servant', 'find-familiar'],
     2: ['scorching-ray', 'misty-step', 'hold-person', 'shatter', 'web', 'blur', 'dragons-breath', 'alter-self', 'suggestion', 'magic-weapon'],
     3: ['fireball', 'lightning-bolt', 'haste', 'slow', 'hypnotic-pattern', 'fear', 'vampiric-touch', 'stinking-cloud', 'sleet-storm', 'counterspell', 'dispel-magic', 'fly'],
+    4: ['ice-storm', 'blight', 'greater-invisibility', 'stoneskin', 'fire-shield', 'dimension-door', 'polymorph', 'arcane-eye'],
+    5: ['cone-of-cold', 'hold-monster', 'cloudkill', 'legend-lore', 'wall-of-stone', 'geas'],
   },
   bard: {
     0: ['vicious-mockery', 'starry-wisp', 'dancing-lights', 'light', 'mage-hand', 'mending', 'minor-illusion', 'prestidigitation'],
     1: ['healing-word', 'dissonant-whispers', 'heroism', 'sleep', 'faerie-fire', 'bane', 'command', 'cure-wounds', 'thunderwave', 'charm-person', 'comprehend-languages', 'detect-magic', 'feather-fall', 'identify', 'longstrider', 'speak-with-animals', 'unseen-servant'],
     2: ['shatter', 'hold-person', 'aid', 'lesser-restoration', 'suggestion', 'zone-of-truth'],
     3: ['mass-healing-word', 'hypnotic-pattern', 'fear', 'slow', 'stinking-cloud', 'dispel-magic'],
+    4: ['greater-invisibility', 'polymorph', 'dimension-door', 'freedom-of-movement', 'charm-monster'],
+    5: ['mass-cure-wounds', 'hold-monster', 'greater-restoration', 'legend-lore', 'geas'],
   },
   druid: {
     0: ['produce-flame', 'thorn-whip', 'starry-wisp', 'poison-spray', 'guidance', 'spare-the-dying', 'resistance-cantrip', 'druidcraft', 'mending'],
     1: ['entangle', 'healing-word', 'cure-wounds', 'faerie-fire', 'thunderwave', 'longstrider', 'fog-cloud', 'detect-magic', 'speak-with-animals'],
     2: ['barkskin', 'hold-person', 'lesser-restoration', 'pass-without-trace'],
     3: ['call-lightning', 'sleet-storm', 'revivify', 'dispel-magic'],
+    4: ['ice-storm', 'blight', 'stoneskin', 'fire-shield', 'polymorph', 'freedom-of-movement', 'charm-monster'],
+    5: ['cone-of-cold', 'mass-cure-wounds', 'greater-restoration', 'insect-plague', 'tree-stride', 'wall-of-stone', 'geas'],
   },
   paladin: {
     1: ['divine-favor', 'bless', 'cure-wounds', 'heroism', 'shield-of-faith', 'command', 'protection-from-evil-and-good', 'divine-smite', 'detect-magic'],
     2: ['aid', 'lesser-restoration', 'magic-weapon', 'prayer-of-healing', 'zone-of-truth', 'find-steed'],
+    3: ['revivify', 'dispel-magic'],
   },
   ranger: {
     1: ['hunters-mark', 'cure-wounds', 'entangle', 'longstrider', 'fog-cloud', 'alarm', 'detect-magic', 'speak-with-animals'],
     2: ['aid', 'barkskin', 'lesser-restoration', 'magic-weapon', 'pass-without-trace'],
+    3: ['revivify', 'dispel-magic'],
   },
   sorcerer: {
     0: ['fire-bolt', 'sorcerous-burst', 'ray-of-frost', 'shocking-grasp', 'chill-touch', 'acid-splash', 'poison-spray', 'dancing-lights', 'light', 'mage-hand', 'mending', 'minor-illusion', 'prestidigitation'],
     1: ['magic-missile', 'chromatic-orb', 'shield', 'burning-hands', 'sleep', 'thunderwave', 'false-life', 'ray-of-sickness', 'charm-person', 'comprehend-languages', 'detect-magic', 'feather-fall', 'fog-cloud'],
     2: ['scorching-ray', 'shatter', 'web', 'misty-step', 'hold-person', 'blur', 'dragons-breath', 'alter-self', 'suggestion'],
     3: ['fireball', 'lightning-bolt', 'haste', 'slow', 'hypnotic-pattern', 'fear', 'vampiric-touch', 'stinking-cloud', 'sleet-storm', 'counterspell', 'dispel-magic', 'fly'],
+    4: ['ice-storm', 'blight', 'greater-invisibility', 'stoneskin', 'fire-shield', 'dimension-door', 'polymorph', 'charm-monster'],
+    5: ['cone-of-cold', 'hold-monster', 'cloudkill', 'insect-plague', 'wall-of-stone'],
   },
   warlock: {
     0: ['eldritch-blast', 'chill-touch', 'poison-spray', 'mage-hand', 'minor-illusion', 'prestidigitation'],
     1: ['hex', 'hellish-rebuke', 'protection-from-evil-and-good', 'charm-person', 'comprehend-languages', 'unseen-servant'],
     2: ['misty-step', 'hold-person', 'shatter', 'suggestion'],
     3: ['hypnotic-pattern', 'fear', 'vampiric-touch', 'counterspell', 'dispel-magic', 'fly'],
+    4: ['blight', 'dimension-door', 'charm-monster'],
+    5: ['hold-monster'],
   },
 };
 // Cantrips known, and spells you can prepare, by class level (2024 tables).
@@ -430,7 +498,7 @@ export const PREPARED_BY_LEVEL = {
 // A wizard's spellbook starts with 6 level 1 spells and gains 2 a level.
 export const SPELLBOOK_SIZE = byLevel(Array.from({ length: 20 }, (_, i) => 6 + 2 * i));
 // Life Domain spells: always prepared from Cleric level 3, not counted.
-export const DOMAIN_SPELLS = { 3: ['aid', 'bless', 'cure-wounds', 'lesser-restoration'], 5: ['mass-healing-word', 'revivify'] };
+export const DOMAIN_SPELLS = { 3: ['aid', 'bless', 'cure-wounds', 'lesser-restoration'], 5: ['mass-healing-word', 'revivify'], 7: ['aura-of-life', 'death-ward'], 9: ['greater-restoration', 'mass-cure-wounds'] };
 
 // ------------------------------------------------------------- classes ----
 export const CLASSES = {
@@ -611,17 +679,17 @@ export const SUBCLASSES = {
 };
 // Spells a subclass or class feature always has prepared (they don't count).
 export const ALWAYS_PREPARED = {
-  paladin: { 2: ['divine-smite'], 3: ['protection-from-evil-and-good', 'shield-of-faith'], 5: ['aid', 'zone-of-truth', 'find-steed'] },
+  paladin: { 2: ['divine-smite'], 3: ['protection-from-evil-and-good', 'shield-of-faith'], 5: ['aid', 'zone-of-truth', 'find-steed'], 9: ['beacon-of-hope', 'dispel-magic'] },
   ranger: { 1: ['hunters-mark'] },
-  sorcerer: { 3: ['alter-self', 'chromatic-orb', 'command', 'dragons-breath'], 5: ['fear', 'fly'] },
-  warlock: { 3: ['burning-hands', 'command', 'scorching-ray', 'suggestion'], 5: ['fireball', 'stinking-cloud'] },
+  sorcerer: { 3: ['alter-self', 'chromatic-orb', 'command', 'dragons-breath'], 5: ['fear', 'fly'], 7: ['arcane-eye', 'charm-monster'], 9: ['legend-lore', 'summon-dragon'] },
+  warlock: { 3: ['burning-hands', 'command', 'scorching-ray', 'suggestion'], 5: ['fireball', 'stinking-cloud'], 7: ['fire-shield', 'wall-of-fire'], 9: ['geas', 'insect-plague'] },
 };
 // Circle of the Land: pick a land at level 3; its spells are always prepared.
 export const LAND_SPELLS = {
-  arid: { name: 'Arid Land', spells: ['blur', 'burning-hands', 'fire-bolt'], more: { 5: ['fireball'] } },
-  polar: { name: 'Polar Land', spells: ['fog-cloud', 'hold-person', 'ray-of-frost'], more: { 5: ['sleet-storm'] } },
-  temperate: { name: 'Temperate Land', spells: ['misty-step', 'shocking-grasp', 'sleep'], more: { 5: ['lightning-bolt'] } },
-  tropical: { name: 'Tropical Land', spells: ['acid-splash', 'ray-of-sickness', 'web'], more: { 5: ['stinking-cloud'] } },
+  arid: { name: 'Arid Land', spells: ['blur', 'burning-hands', 'fire-bolt'], more: { 5: ['fireball'], 7: ['blight'], 9: ['wall-of-stone'] }, ward: 'Fire' },
+  polar: { name: 'Polar Land', spells: ['fog-cloud', 'hold-person', 'ray-of-frost'], more: { 5: ['sleet-storm'], 7: ['ice-storm'], 9: ['cone-of-cold'] }, ward: 'Cold' },
+  temperate: { name: 'Temperate Land', spells: ['misty-step', 'shocking-grasp', 'sleep'], more: { 5: ['lightning-bolt'], 7: ['freedom-of-movement'], 9: ['tree-stride'] }, ward: 'Lightning' },
+  tropical: { name: 'Tropical Land', spells: ['acid-splash', 'ray-of-sickness', 'web'], more: { 5: ['stinking-cloud'], 7: ['polymorph'], 9: ['insect-plague'] }, ward: 'Poison' },
 };
 // A land's spells at a Druid level: the level 3 ones, then more at 5, 7 and 9.
 export const landSpells = (land, level) => {
@@ -651,6 +719,11 @@ export const INVOCATIONS = {
   'mask-of-many-faces': { name: 'Mask of Many Faces', min: 2, text: 'Cast Disguise Self at will without a spell slot. (Useful outside of fights.)' },
   'misty-visions': { name: 'Misty Visions', min: 2, text: 'Cast Silent Image at will without a spell slot. (Useful outside of fights.)' },
   'thirsting-blade': { name: 'Thirsting Blade', min: 5, needs: 'pact-of-the-blade', text: 'Extra Attack with your pact weapon: you attack twice with it, instead of once, whenever you take the Attack action on your turn.' },
+  'otherworldly-leap': { name: 'Otherworldly Leap', min: 2, text: 'Cast Jump on yourself at will without a spell slot. (Useful outside of fights.)' },
+  'ascendant-step': { name: 'Ascendant Step', min: 5, text: 'Cast Levitate on yourself at will without a spell slot. (Useful outside of fights.)' },
+  'gift-of-the-depths': { name: 'Gift of the Depths', min: 5, text: 'Breathe underwater and swim at your Speed, and cast Water Breathing once per Long Rest without a slot. (Useful outside of fights.)' },
+  'one-with-shadows': { name: 'One with Shadows', min: 5, text: 'In Dim Light or Darkness, cast Invisibility on yourself without a spell slot. (Every fight here is lit, so it is used outside of fights.)' },
+  'lifedrinker': { name: 'Lifedrinker', min: 9, needs: 'pact-of-the-blade', text: 'Once per turn, when you hit with your pact weapon, it deals an extra 1d6 Necrotic damage. (You can also spend a Hit Point Die to heal; that part is left out here.)' },
 };
 export const INVOCATIONS_KNOWN = byLevel([1, 3, 3, 3, 5, 5, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10]);
 // A Sorcerer's Metamagic (two at level 2). cost: Sorcery Points.
@@ -666,12 +739,32 @@ export const METAMAGIC = {
   transmuted: { name: 'Transmuted Spell', cost: 1, text: 'Change a spell\'s Acid, Cold, Fire, Lightning, Poison or Thunder damage to another of those types. (Here: the one it is weakest to.)' },
   twinned: { name: 'Twinned Spell', cost: 1, text: 'A spell that can target one more creature when cast with a higher slot targets one more creature, as if cast one level higher.' },
 };
+// Level 7 choices: a Cleric's Blessed Strikes, a Druid's Elemental Fury, a Hunter's Defensive Tactics.
+export const STRIKES = {
+  cleric: {
+    divine: { name: 'Divine Strike', rule: 'divine-strike', text: 'Once on each of your turns, when you hit a creature with a weapon attack, it takes an extra 1d8 Radiant damage.' },
+    potent: { name: 'Potent Spellcasting', rule: 'potent-spellcasting', text: 'Add your Wisdom modifier to the damage you deal with any Cleric cantrip.' },
+  },
+  druid: {
+    primal: { name: 'Primal Strike', rule: 'primal-strike', text: 'Once on each of your turns, when you hit a creature with a weapon attack or a Beast form\'s attack, it takes an extra 1d8 Cold, Fire, Lightning or Thunder damage (here: the type it is weakest to).' },
+    potent: { name: 'Potent Spellcasting', rule: 'potent-spellcasting', text: 'Add your Wisdom modifier to the damage you deal with any Druid cantrip.' },
+  },
+};
+export const DEFENSIVE_TACTICS = {
+  horde: { name: 'Escape the Horde', rule: 'escape-the-horde', text: 'Opportunity Attacks against you have Disadvantage.' },
+  multi: { name: 'Multiattack Defense', rule: 'multiattack-defense', text: 'When a creature hits you with an attack roll, it has Disadvantage on its other attack rolls against you this turn.' },
+};
+// Fiendish Resilience (Fiend Patron 10): Resistance to one damage type (not Force), chosen after a rest.
+export const RESILIENCE_TYPES = ['Slashing', 'Piercing', 'Bludgeoning', 'Necrotic', 'Fire', 'Cold', 'Poison', 'Lightning', 'Acid', 'Psychic', 'Radiant', 'Thunder'];
+// Wizard spells of the Evocation school (Sculpt Spells, Empowered Evocation).
+export const EVOCATION = ['fire-bolt', 'ray-of-frost', 'shocking-grasp', 'light', 'dancing-lights', 'magic-missile', 'burning-hands', 'thunderwave', 'chromatic-orb',
+  'scorching-ray', 'shatter', 'fireball', 'lightning-bolt', 'ice-storm', 'fire-shield', 'cone-of-cold', 'wall-of-stone', 'flame-strike'];
 // Font of Magic: Sorcery Points it costs to make a spell slot of each level.
 export const SLOT_COST = { 1: 2, 2: 3, 3: 5, 4: 6, 5: 7 };
 // Font of Magic can make a slot of a level up to this, by Sorcerer level.
 export const SLOT_MIN_LEVEL = { 1: 2, 2: 3, 3: 5, 4: 7, 5: 9 };
 // The highest level the campaign reaches so far (the tables above run to 20).
-export const MAX_LEVEL = 5;
+export const MAX_LEVEL = 10;
 // Class tables (SRD 5.2.1): a value that changes at set levels.
 const stepAt = (lv, steps) => { let v = steps[0][1]; for (const [l, x] of steps) if (lv >= l) v = x; return v; };
 export const PROGRESSION = {
@@ -686,6 +779,8 @@ export const PROGRESSION = {
   channelPaladin: (lv) => stepAt(lv, [[1, 0], [3, 2], [11, 3]]),
   wildShape: (lv) => stepAt(lv, [[1, 0], [2, 2], [6, 3], [17, 4]]),
   favoredEnemy: (lv) => stepAt(lv, [[1, 2], [5, 3], [9, 4], [13, 5], [17, 6]]),
+  sparkDice: (lv) => stepAt(lv, [[1, 1], [7, 2], [13, 3], [18, 4]]),
+  landsAidDice: (lv) => stepAt(lv, [[1, 2], [10, 3], [14, 4]]),
 };
 // Kinds of weapons a class can use the mastery property of.
 export const masteryCount = (cls, lv) => cls === 'fighter' ? stepAt(lv, [[1, 3], [4, 4], [10, 5], [16, 6]])
@@ -983,6 +1078,103 @@ export const WIGHT = {
   ],
   drain: { dc: 13, dice: '1d8', flat: 2, type: 'Necrotic' },
   multiattack: 2, xp: 700, cr: '3',
+};
+
+// Levels 6 to 10: the toll keep on the east road, the fen and what lives in it.
+export const BANDIT_CAPTAIN = {
+  kind: 'bandit-captain', name: 'Bandit Captain', emoji: '🗡️', type: 'Medium Humanoid', size: 'medium', creature: 'humanoid',
+  ac: 15, hp: 52, hpFormula: '8d8+16', speed: 30,
+  abilities: { str: 15, dex: 16, con: 14, int: 14, wis: 11, cha: 14 }, saves: { str: 4, dex: 5, wis: 2 }, skills: { athletics: 4, deception: 4 },
+  attacks: [
+    { id: 'scimitar', name: 'Scimitar', kind: 'melee', bonus: 5, dice: '1d6', flat: 3, type: 'Slashing' },
+    { id: 'pistol', name: 'Pistol', kind: 'ranged', bonus: 5, dice: '1d10', flat: 3, type: 'Piercing', range: [30, 90] },
+  ],
+  parry: 2, multiattack: 2, xp: 450, cr: '2',
+};
+export const WARRIOR_VETERAN = {
+  kind: 'veteran', name: 'Warrior Veteran', emoji: '⚔️', type: 'Medium Humanoid', size: 'medium', creature: 'humanoid',
+  ac: 17, hp: 65, hpFormula: '10d8+20', speed: 30,
+  abilities: { str: 16, dex: 13, con: 14, int: 10, wis: 11, cha: 10 }, skills: { athletics: 5, perception: 2 },
+  attacks: [
+    { id: 'greatsword', name: 'Greatsword', kind: 'melee', bonus: 5, dice: '2d6', flat: 3, type: 'Slashing' },
+    { id: 'crossbow', name: 'Heavy Crossbow', kind: 'ranged', bonus: 3, dice: '2d10', flat: 1, type: 'Piercing', range: [100, 400] },
+  ],
+  parry: 2, multiattack: 2, xp: 700, cr: '3',
+};
+export const HOBGOBLIN_CAPTAIN = {
+  kind: 'hobgoblin-captain', name: 'Hobgoblin Captain', emoji: '👺', type: 'Medium Fey (Goblinoid)', size: 'medium', creature: 'fey',
+  ac: 17, hp: 58, hpFormula: '9d8+18', speed: 30,
+  abilities: { str: 15, dex: 14, con: 14, int: 12, wis: 10, cha: 13 },
+  traits: { authority: true },
+  attacks: [
+    { id: 'greatsword', name: 'Greatsword', kind: 'melee', bonus: 4, dice: '2d6', flat: 2, type: 'Slashing', extra: [{ dice: '1d6', type: 'Poison' }] },
+    { id: 'longbow', name: 'Longbow', kind: 'ranged', bonus: 4, dice: '1d8', flat: 2, type: 'Piercing', extra: [{ dice: '2d4', type: 'Poison' }], range: [150, 600] },
+  ],
+  multiattack: 2, xp: 700, cr: '3',
+};
+export const KNIGHT = {
+  kind: 'knight', name: 'Knight', emoji: '🛡️', type: 'Medium Humanoid', size: 'medium', creature: 'humanoid',
+  ac: 18, hp: 52, hpFormula: '8d8+16', speed: 30,
+  abilities: { str: 16, dex: 11, con: 14, int: 11, wis: 11, cha: 15 }, saves: { con: 4, wis: 2 },
+  condImmune: ['frightened'],
+  attacks: [
+    { id: 'greatsword', name: 'Greatsword', kind: 'melee', bonus: 5, dice: '2d6', flat: 3, type: 'Slashing', extra: [{ dice: '1d8', type: 'Radiant' }] },
+    { id: 'crossbow', name: 'Heavy Crossbow', kind: 'ranged', bonus: 2, dice: '2d10', flat: 0, type: 'Piercing', extra: [{ dice: '1d8', type: 'Radiant' }], range: [100, 400] },
+  ],
+  parry: 2, multiattack: 2, xp: 700, cr: '3',
+};
+export const MAGE = {
+  kind: 'mage', name: 'Mage', emoji: '🧙', type: 'Medium Humanoid (Wizard)', size: 'medium', creature: 'humanoid',
+  ac: 15, hp: 81, hpFormula: '18d8', speed: 30,
+  abilities: { str: 9, dex: 14, con: 11, int: 17, wis: 12, cha: 11 }, saves: { int: 6, wis: 4 }, skills: { arcana: 6, history: 6, perception: 4 },
+  attacks: [
+    { id: 'burst-ranged', name: 'Arcane Burst', kind: 'ranged', bonus: 6, dice: '3d8', flat: 3, type: 'Force', range: [120, 120] },
+    { id: 'burst', name: 'Arcane Burst (melee)', kind: 'melee', bonus: 6, dice: '3d8', flat: 3, type: 'Force' },
+  ],
+  casting: { ability: 'int', dc: 14, attack: 6, spells: { fireball: { n: 2, level: 4 }, 'cone-of-cold': 1, 'misty-step': 3, shield: 3 } },
+  multiattack: 3, xp: 2300, cr: '6',
+};
+export const OWLBEAR = {
+  kind: 'owlbear', name: 'Owlbear', emoji: '🦉', type: 'Large Monstrosity', size: 'large', creature: 'monstrosity',
+  ac: 13, hp: 59, hpFormula: '7d10+21', speed: 40,
+  abilities: { str: 20, dex: 12, con: 17, int: 3, wis: 12, cha: 7 }, skills: { perception: 5 },
+  attacks: [{ id: 'rend', name: 'Rend', kind: 'melee', bonus: 7, dice: '2d8', flat: 5, type: 'Slashing' }],
+  multiattack: 2, xp: 700, cr: '3',
+};
+export const TROLL = {
+  kind: 'troll', name: 'Troll', emoji: '🧌', type: 'Large Giant', size: 'large', creature: 'giant',
+  ac: 15, hp: 94, hpFormula: '9d10+45', speed: 30,
+  abilities: { str: 18, dex: 13, con: 20, int: 7, wis: 9, cha: 7 }, skills: { perception: 5 },
+  attacks: [{ id: 'rend', name: 'Rend', kind: 'melee', bonus: 7, dice: '2d6', flat: 4, type: 'Slashing', reach: 10 }],
+  regen: 15, multiattack: 3, xp: 1800, cr: '5',
+};
+export const HILL_GIANT = {
+  kind: 'hill-giant', name: 'Hill Giant', emoji: '🗿', type: 'Huge Giant', size: 'huge', creature: 'giant',
+  ac: 13, hp: 105, hpFormula: '10d12+40', speed: 40,
+  abilities: { str: 21, dex: 8, con: 19, int: 5, wis: 9, cha: 6 }, skills: { perception: 2 },
+  attacks: [
+    { id: 'club', name: 'Tree Club', kind: 'melee', bonus: 8, dice: '3d8', flat: 5, type: 'Bludgeoning', reach: 10, rider: { prone: 'large' } },
+    { id: 'lob', name: 'Trash Lob', kind: 'ranged', bonus: 8, dice: '2d10', flat: 5, type: 'Bludgeoning', range: [60, 240], rider: { poison: true } },
+  ],
+  multiattack: 2, xp: 1800, cr: '5',
+};
+export const BLACK_DRAGON_WYRMLING = {
+  kind: 'wyrmling', name: 'Black Dragon Wyrmling', emoji: '🐊', type: 'Medium Dragon (Chromatic)', size: 'medium', creature: 'dragon',
+  ac: 17, hp: 33, hpFormula: '6d8+6', speed: 30,
+  abilities: { str: 15, dex: 14, con: 13, int: 10, wis: 11, cha: 13 }, saves: { dex: 4, wis: 2 }, skills: { perception: 4, stealth: 4 },
+  immune: ['Acid'], traits: { amphibious: true },
+  attacks: [{ id: 'rend', name: 'Rend', kind: 'melee', bonus: 4, dice: '1d6', flat: 2, type: 'Slashing', extra: [{ dice: '1d4', type: 'Acid' }] }],
+  mbreath: { name: 'Acid Breath', recharge: 5, dc: 11, dice: '5d8', type: 'Acid', shape: 'line', size: 15 },
+  multiattack: 2, xp: 450, cr: '2',
+};
+export const YOUNG_BLACK_DRAGON = {
+  kind: 'young-dragon', name: 'Young Black Dragon', emoji: '🐉', type: 'Large Dragon (Chromatic)', size: 'large', creature: 'dragon',
+  ac: 18, hp: 127, hpFormula: '15d10+45', speed: 40,
+  abilities: { str: 19, dex: 14, con: 17, int: 12, wis: 11, cha: 15 }, saves: { dex: 5, wis: 3 }, skills: { perception: 6, stealth: 5 },
+  immune: ['Acid'], traits: { amphibious: true },
+  attacks: [{ id: 'rend', name: 'Rend', kind: 'melee', bonus: 7, dice: '2d4', flat: 4, type: 'Slashing', reach: 10, extra: [{ dice: '1d6', type: 'Acid' }] }],
+  mbreath: { name: 'Acid Breath', recharge: 5, dc: 14, dice: '14d6', type: 'Acid', shape: 'line', size: 30 },
+  multiattack: 3, xp: 2900, cr: '7',
 };
 
 // Phase 0's one-off skirmish, kept for the quick-fight mode and the tests.

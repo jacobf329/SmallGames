@@ -13,12 +13,13 @@ import {
   CLASSES, BACKGROUNDS, SPECIES, FEATS, ORIGIN_FEATS, SKILLS, SKILL_NAMES, ABILITIES, ABILITY_NAMES, STANDARD_ARRAY,
   DRAGON_ANCESTRY, KITS, FIGHTING_STYLES, WEAPONS, MASTERIES, SPELLS, SPELL_LISTS, POINT_COST, POINT_BUDGET,
   DRUID_ORDERS, LAND_SPELLS, landSpells, HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, PACT_WEAPONS, METAMAGIC, stylesFor,
-  abilityMod, signed, MAX_LEVEL, ASI_FEATS, STYLE_FEATS, asiLevels,
+  abilityMod, signed, MAX_LEVEL, ASI_FEATS, STYLE_FEATS, asiLevels, STRIKES, DEFENSIVE_TACTICS, RESILIENCE_TYPES,
 } from '../rules/data.js';
 import {
   buildHero, defaultSpec, suggestPlus, validateSpec, DEFAULT_BACKGROUND, classSpellCounts, domainSpells,
   maxSpellLevel, miCantrips, miSpells, pointCost, rollTotal, speciesCantrips, bookLimit, SCHOLAR_SKILLS,
   extraSkills, expertiseCount, styleAt, metamagicCount, levelChoices, swapLimit, droppedPicks, alwaysPrepared, alwaysCantrips, finalScores,
+  classSpellList, discoveryOptions, AFFINITY_TYPES,
 } from '../rules/character.js';
 import { GLOSSARY } from '../rules/glossary.js';
 import { $, show } from './dom.js';
@@ -111,6 +112,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
     warriorCantrips: { cap: () => 2, label: 'Fighting Style cantrip' },
     invocations: { cap: () => (d.cls === 'warlock' ? INVOCATIONS_KNOWN[level] : 0), label: 'invocation' },
     metamagic: { cap: () => metamagicCount(d.cls, level), label: 'Metamagic option' },
+    discoveries: { cap: () => (d.cls === 'bard' && level >= 6 ? 2 : 0), label: 'Magical Discoveries spell' },
     masteries: { cap: () => C().masteryCount, label: 'weapon for Weapon Mastery' },
     cantrips: { cap: () => counts().cantrips, label: 'cantrip' },
     book: { cap: () => counts().book, label: 'spellbook spell' },
@@ -189,7 +191,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
   }
   function setClass(cls) {
     d.cls = cls;
-    for (const k of ['skills', 'expertise', 'masteries', 'kit', 'style', 'warriorCantrips', 'order', 'cantrips', 'book', 'prepared', 'scholar', 'invocations', 'pactWeapon', 'metamagic', 'land', 'prey']) delete d[k];
+    for (const k of ['skills', 'expertise', 'masteries', 'kit', 'style', 'warriorCantrips', 'order', 'cantrips', 'book', 'prepared', 'scholar', 'invocations', 'pactWeapon', 'metamagic', 'land', 'prey', 'discoveries', 'affinity', 'strikes', 'style2', 'tactics', 'resilience']) delete d[k];
     if (!touched.background) { d.background = DEFAULT_BACKGROUND[cls]; delete d.bgFeat; }
     if (!touched.scores) { d.method = 'array'; d.scores = { ...CLASSES[cls].suggested }; }
     if (!touched.plus) d.plus = suggestPlus(cls, d.background, d.scores);
@@ -417,7 +419,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
     spells: () => {
       const c = C();
       const n = counts();
-      const list = SPELL_LISTS[d.cls];
+      const list = classSpellList(d.cls, level);
       const top = maxSpellLevel(level, d.cls);
       const leveled = Object.entries(list).filter(([lv]) => +lv >= 1 && +lv <= top).flatMap(([, xs]) => xs);
       const fromSpecies = speciesCantrips(d.species, d.lineage);
@@ -497,6 +499,12 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
       if (d.cls === 'ranger' && level >= 3) parts.push("a Hunter's Prey");
       if (d.cls === 'warlock') parts.push('Eldritch Invocations');
       if (metamagicCount(d.cls, level)) parts.push('Metamagic');
+      if (d.cls === 'bard' && level >= 6) parts.push('two Magical Discoveries');
+      if (d.cls === 'sorcerer' && level >= 6) parts.push('an Elemental Affinity');
+      if ((d.cls === 'cleric' || d.cls === 'druid') && level >= 7) parts.push(d.cls === 'cleric' ? 'Blessed Strikes' : 'Elemental Fury');
+      if (d.cls === 'fighter' && level >= 7) parts.push('a second Fighting Style');
+      if (d.cls === 'ranger' && level >= 7) parts.push('Defensive Tactics');
+      if (d.cls === 'warlock' && level >= 10) parts.push('a Fiendish Resilience type');
       if (c.kits.length > 1) parts.push('starting gear');
       if (c.masteryCount && carried.length > c.masteryCount) parts.push('weapons to master');
       const nSk = LISTS.skills.cap();
@@ -566,6 +574,32 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
       h += pickList('metamagic', Object.entries(METAMAGIC).map(([k, x]) => chip('metamagic', k, x.name, { note: `(${x.cost} SP)` })), `${R('metamagic', 'Metamagic')}: pick ${LISTS.metamagic.cap()}`);
       h += `<div class="ilist">${(d.metamagic || []).map((k) => `<p class="note"><b>${esc(METAMAGIC[k].name)}</b>: ${esc(METAMAGIC[k].text)}</p>`).join('')}</div>`;
       if (only && level > 2) h += '<p class="note">When you gain a level, you can swap one Metamagic option for another.</p>';
+    }
+    if (has('discoveries') && d.cls === 'bard' && level >= 6) {
+      const prepared = new Set(d.prepared || []);
+      h += pickList('discoveries', discoveryOptions(level).map((sid) => chip('discoveries', sid, SPELLS[sid].name, {
+        off: prepared.has(sid), note: prepared.has(sid) ? '(prepared already)' : `(level ${SPELLS[sid].level})`,
+      })), 'College of Lore: Magical Discoveries: two spells from the Cleric, Druid or Wizard lists, always prepared');
+    }
+    if (has('affinity') && d.cls === 'sorcerer' && level >= 6) {
+      h += `<div class="ph sep"><b>${R('elemental-affinity', 'Elemental Affinity')}</b></div><p class="note">Resistance to one damage type, and your Charisma modifier added to one damage roll of a spell of that type.</p>
+        <div class="togs">${AFFINITY_TYPES.map((ty) => `<button class="tog ${d.affinity === ty ? 'on' : ''}" data-set="affinity=${ty}">${esc(ty)}</button>`).join('')}</div>`;
+    }
+    if (has('strikes') && (d.cls === 'cleric' || d.cls === 'druid') && level >= 7) {
+      h += `<div class="ph sep"><b>${d.cls === 'cleric' ? 'Blessed Strikes' : 'Elemental Fury'}</b></div>${Object.entries(STRIKES[d.cls]).map(([k, x]) => card({ on: d.strikes === k, title: x.name, body: `<span>${esc(x.text)}</span>`, attr: `data-set="strikes=${k}"` })).join('')}`;
+    }
+    if (has('style2') && d.cls === 'fighter' && level >= 7) {
+      h += `<div class="ph sep"><b>Champion: Additional Fighting Style</b></div>${stylesFor(d.cls).map((k) => {
+        const f = FIGHTING_STYLES[k];
+        return card({ on: d.style2 === k, title: f.name, body: `<span>${esc(f.text)}</span>`, attr: `data-set="style2=${k}"`, off: d.style === k });
+      }).join('')}`;
+    }
+    if (has('tactics') && d.cls === 'ranger' && level >= 7) {
+      h += `<div class="ph sep"><b>Hunter: Defensive Tactics</b></div>${Object.entries(DEFENSIVE_TACTICS).map(([k, x]) => card({ on: d.tactics === k, title: x.name, body: `<span>${esc(x.text)}</span>`, attr: `data-set="tactics=${k}"` })).join('')}`;
+    }
+    if (has('resilience') && d.cls === 'warlock' && level >= 10) {
+      h += `<div class="ph sep"><b>${R('fiendish-resilience', 'Fiendish Resilience')}</b></div><p class="note">Resistance to one damage type. You can pick again after a rest.</p>
+        <div class="togs">${RESILIENCE_TYPES.map((ty) => `<button class="tog ${d.resilience === ty ? 'on' : ''}" data-set="resilience=${ty}">${esc(ty)}</button>`).join('')}</div>`;
     }
     if (has('feat')) for (const lv of asiLevels(d.cls, level)) if (!only || lv === level) h += featBlock(lv);
     if (!only) {

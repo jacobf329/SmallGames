@@ -12,7 +12,7 @@ import {
   previewMove, reachableSquares, attackOptions, canAttack, canCast, attackFactors,
   hitChance, hitBonus, saveChance, spellAttack, spellDC, scaled, speedOf, acAgainst,
   spellAim, targetError, pointError, areaSquares, areaTargets, areaLabel, BREATH_AREAS, offhandFor, canTarget,
-  smitePay, metaError, spellDCParts,
+  smitePay, metaError, spellDCParts, landsAidDice,
 } from '../rules/combat.js';
 import { occupantAt, cheb, lineOfSight, onBoard, W, H } from '../rules/grid.js';
 import { coach } from '../rules/ai.js';
@@ -585,6 +585,11 @@ function resourceChips(b, me) {
   if (me.sorcery) c(`Sorcery ${me.sorcery.uses}/${me.sorcery.max}`, 'font-of-magic', !me.sorcery.uses);
   if (me.innateOn) c('✨ Innate Sorcery', 'innate-sorcery');
   if (me.sacredOn) c('✨ Sacred Weapon', 'sacred-weapon');
+  if (me.intervention) c(`Divine Intervention ${me.intervention.uses}`, 'divine-intervention', !me.intervention.uses);
+  if (me.indomitable) c(`Indomitable ${me.indomitable.uses}`, 'indomitable', !me.indomitable.uses);
+  if (me.ownLuck) c(`Own Luck ${me.ownLuck.uses}`, 'dark-ones-own-luck', !me.ownLuck.uses);
+  if (me.wholeness) c(`Wholeness ${me.wholeness.uses}`, 'wholeness-of-body', !me.wholeness.uses);
+  if (me.tireless) c(`Tireless ${me.tireless.uses}`, 'tireless', !me.tireless.uses);
   const mk = b.effects.find((e) => e.type === 'mark' && e.by === me.id);
   if (mk) c(`🎯 ${esc(mk.name)}: ${esc(b.creatures[mk.target]?.name || '')}`, mk.spell);
   return out.join('');
@@ -615,7 +620,14 @@ function classButtons(b, me, extra, btn) {
     extra.push(btn('Step of the Wind + Disengage (1 Focus)', { a: 'stepwind', focus: true }, t.bonus && fp, 'monks-focus'));
   }
   if (me.sacredWeapon) extra.push(btn(me.sacredOn ? 'Sacred Weapon (on)' : `Sacred Weapon (${me.channel?.uses || 0})`, { a: 'sacred' }, !me.sacredOn && canAttack(t) && me.channel?.uses > 0, 'sacred-weapon'));
-  if (me.innate) extra.push(btn(me.innateOn ? 'Innate Sorcery (on)' : `Innate Sorcery (${me.innate.uses})`, { a: 'innate' }, !me.innateOn && t.bonus && me.innate.uses > 0, 'innate-sorcery'));
+  if (me.innate) {
+    const inc = !me.innate.uses && me.incarnate;
+    extra.push(btn(me.innateOn ? 'Innate Sorcery (on)' : inc ? 'Innate Sorcery (2 Sorcery)' : `Innate Sorcery (${me.innate.uses})`, { a: 'innate' },
+      !me.innateOn && t.bonus && (me.innate.uses > 0 || (inc && me.sorcery?.uses >= 2)), inc ? 'sorcery-incarnate' : 'innate-sorcery'));
+  }
+  if (me.wholeness) extra.push(btn(`Wholeness of Body (${me.wholeness.uses})`, { a: 'wholeness' }, t.bonus && me.wholeness.uses > 0 && me.hp < me.hpMax, 'wholeness-of-body'));
+  if (me.tireless) extra.push(btn(`Tireless (${me.tireless.uses})`, { a: 'tireless' }, t.action && !t.magicUsed && me.tireless.uses > 0, 'tireless'));
+  if (me.abjure) extra.push(btn(`Abjure Foes (${me.channel?.uses || 0})`, { a: 'abjure' }, t.action && !t.magicUsed && me.channel?.uses > 0, 'abjure-foes'));
   if (me.sorcery) {
     const sp = me.sorcery;
     for (const [lv, sl] of Object.entries(me.casting?.slots || {})) {
@@ -803,6 +815,9 @@ function aimCard(b, me, a) {
       mm += `<button class="btn small up ${a.meta === m ? 'on' : ''}" data-aimmeta="${m}" ${e ? 'disabled' : ''} title="${esc(e || METAMAGIC[m].text)}">${esc(METAMAGIC[m].name)} (${METAMAGIC[m].cost})</button>`;
     }
     if (mm) slotBtns += `<div class="opt slots"><a class="rl" data-rule="metamagic">Metamagic</a> ${mm}</div>`;
+    if (sp.level && sp.level <= 5 && me.intervention?.uses > 0 && me.cls === 'cleric') {
+      slotBtns += `<div class="opt slots"><button class="btn small up ${a.meta === 'intervene' ? 'on' : ''}" data-aimmeta="intervene" title="Cast it with no spell slot, once per Long Rest">Divine Intervention (no slot)</button></div>`;
+    }
     const types = sp.pickType || sp.buff === 'dbreath' ? sp.types : a.meta === 'transmuted' ? ['Acid', 'Cold', 'Fire', 'Lightning', 'Poison', 'Thunder'] : null;
     if (types) slotBtns += `<div class="opt slots">${types.map((ty) => `<button class="btn small up ${(a.toType || (sp.buff === 'dbreath' ? 'Fire' : '')) === ty ? 'on' : ''}" data-aimtype="${ty}">${ty}</button>`).join('')}</div>`;
   }
@@ -835,7 +850,7 @@ function aimCard(b, me, a) {
     const sum = (parts) => parts.reduce((s2, p) => s2 + p.value, 0);
     const dc = a.kind === 'breath' ? sum(me.breath.dc) : a.kind === 'landsaid' ? sum(me.casting.stats.wis.dc) : db ? sum(db.dcParts) : spellDC(me, a.spell);
     const ab = a.kind === 'breath' || db ? 'dex' : a.kind === 'landsaid' ? 'con' : sp.save;
-    const dmg = a.kind === 'breath' ? `${me.breath.dice} ${me.breath.type}, half on a save` : a.kind === 'landsaid' ? '2d6 Necrotic to enemies, half on a save; one friend inside heals 2d6'
+    const dmg = a.kind === 'breath' ? `${me.breath.dice} ${me.breath.type}, half on a save` : a.kind === 'landsaid' ? `${landsAidDice(me)}d6 Necrotic to enemies, half on a save; one friend inside heals ${landsAidDice(me)}d6`
       : db ? `${db.dice} ${db.dmgType}, half on a save`
       : sp.cond === 'sleep' ? 'enemies only: Incapacitated, then Unconscious after a second failed save'
       : sp.cond === 'slow' ? `up to ${sp.choose} enemies only: ${R0('slow', 'Slowed')} on a failure`

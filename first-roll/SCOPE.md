@@ -3,7 +3,7 @@
 *Working title. A light, co-op, turn-based RPG that teaches the 2024
 fifth-edition rules by playing them with friends.*
 
-Status: **Phase 2 built, levels 4 and 5 added** (see [README.md](README.md)): chapters 0 to 11, levels 1 to 5, co-op for 1–4 players. Next: levels 6 to 20, in chunks, with chapters to match. What Phase 2 left for Phase 3 is listed under section 8.
+Status: **Phase 2 built, levels 4 to 10 added** (see [README.md](README.md)): chapters 0 to 16, levels 1 to 10, co-op for 1–4 players. Next: levels 11 to 20, in chunks, with chapters to match. What Phase 2 left for Phase 3 is listed under section 8.
 Builds here in `SmallGames/first-roll/` and ships to
 `jteef/public/play/first-roll/` the same way Skyline Hustle and Turbo Surfers do.
 
@@ -256,7 +256,7 @@ Co-op is built in from the first prototype rather than added on later.
 | **1. Vertical slice (early access)** | Lobby with hero builder (4 classes, 9 species, 4 backgrounds), chapters 0–3, reactions, Help, votes, pings, AI companions for empty or dropped seats, saves and rejoin. Firestore rule updated. Deployed to `/play/first-roll/` | 4–5 sessions |
 | **2. Full curriculum** | Chapters 4–8, spells, conditions, rests, death saves, level 2–3 and subclasses, shared glossary, per-player coaching levels, "use my own dice", turn timer | 4–6 sessions |
 | **3. Polish** | Sound, animation, accessibility pass (colour-blind-safe player colours, screen-reader log), credits and attribution, replayable **Skirmish** mode (random co-op encounters for an evening), LAN mode | 2–3 sessions |
-| **Later** | Levels 6–20 with spells up to level 9 and Epic Boons (levels 4–5 are done); TURN relay for strict networks; host migration; AI narrator for scene text | separate scope |
+| **Later** | Levels 11–20 with spells up to level 9 and Epic Boons (levels 4–10 are done); TURN relay for strict networks; host migration; AI narrator for scene text | separate scope |
 
 ### What Phase 2 built, and what moved to Phase 3
 
@@ -292,6 +292,15 @@ features, level 3 spells (Fireball, Spirit Guardians, Revivify, Haste, Slow,
 Hypnotic Pattern, Counterspell, Dispel Magic and more), and six SRD monsters
 (Ghoul, Ghast, Dire Wolf, Ogre, Animated Armor, Wight) with Paralysis,
 Stench and Life Drain.
+
+Also on Nov 9, levels 6 to 10 and chapters 12 to 16 (The Toll Keep,
+Coldharbour, Gallow Causeway, The Giant's Yard, The Black Water): every
+class's features up to level 10, level 4 and 5 spells (Ice Storm, Polymorph,
+Wall of Fire, Cone of Cold, Hold Monster, Mass Cure Wounds and more), and ten
+SRD monsters (Bandit Captain, Warrior Veteran, Hobgoblin Captain, Knight,
+Mage, Owlbear, Troll, Hill Giant, Black Dragon Wyrmling, Young Black Dragon)
+with Parry, Aura of Authority, Regeneration, monster spellcasting and Acid
+Breath.
 
 Moved to Phase 3:
 

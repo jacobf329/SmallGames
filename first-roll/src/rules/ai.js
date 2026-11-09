@@ -16,7 +16,7 @@ import { cheb, incap, down, hasCond, condOf, reachMap, canEndAt, pathFrom, key, 
 import {
   attackOptions, enemiesOf, alliesOf, previewMove, canCast, canAttack, spellAttack, spellDC,
   attackFactors, hitChance, hitBonus, saveChance, spellMod, scaled, areaTargets, pointError, offhandFor, canTarget,
-  provokers, speedOf, seenBy, preservePlan, damageMult, acAgainst, reachOf, BREATH_AREAS, spellAim, smitePay, spellDCParts,
+  provokers, speedOf, seenBy, preservePlan, damageMult, acAgainst, reachOf, BREATH_AREAS, spellAim, smitePay, spellDCParts, landsAidDice,
 } from './combat.js';
 import { inBounds } from './grid.js';
 import { SPELLS } from './data.js';
@@ -117,6 +117,7 @@ export function specialOptions(b, me, { light = false } = {}) {
     const cost = slotCost(can);
     const sc = scaled(sid, can.slot, me.level);
     const dc = spellDC(me, sid);
+    const immune = (T) => s.notOn?.includes(T.creature) || (s.only && T.creature !== s.only);
     switch (s.kind) {
       case 'attack': case 'rays': {
         const atk = spellAttack(me, sid, { melee: !!s.melee });
@@ -133,7 +134,7 @@ export function specialOptions(b, me, { light = false } = {}) {
       }
       case 'save': {
         for (const T of foes) {
-          if (!sees(b, me, T, range)) continue;
+          if (!sees(b, me, T, range) || immune(T)) continue;
           const pFail = 1 - saveChance(b, T, s.save, dc);
           const avg = avgDice(sc.dice) * damageMult(T, s.type);
           add({ a: 'cast', spell: sid, target: T.id }, (pFail + (s.half ? (1 - pFail) / 2 : 0)) * avg + finishing(T, avg) - cost + pFail * (s.rider === 'mocked' ? 1.5 : s.rider === 'flee' ? 1 : 0), { T, pFail, dc });
@@ -158,9 +159,9 @@ export function specialOptions(b, me, { light = false } = {}) {
       }
       case 'hold': {
         for (const T of foes) {
-          if (down(T) || T.creature !== s.only || hasCond(T, 'paralyzed') || !sees(b, me, T, s.range)) continue;
+          if (down(T) || immune(T) || hasCond(T, 'paralyzed') || !sees(b, me, T, s.range)) continue;
           const pFail = 1 - saveChance(b, T, 'wis', dc);
-          add({ a: 'cast', spell: sid, target: T.id }, pFail * 16 - cost, { T, pFail, dc });
+          add({ a: 'cast', spell: sid, target: T.id }, pFail * (s.level >= 5 ? 22 : 16) - cost, { T, pFail, dc });
         }
         break;
       }
@@ -237,7 +238,10 @@ export function specialOptions(b, me, { light = false } = {}) {
         for (const F of friends) {
           if (F !== me && cheb(me, F) > 1) continue;
           const c = (F.conds || []).find((x) => s.cures.includes(x.id));
-          if (!c) continue;
+          if (!c) {
+            if (s.greater && ((F.drained || 0) >= 5 || (F.exhaustion || 0) >= 1)) add({ a: 'cast', spell: sid, target: F.id }, 3 + (F.drained || 0) * 0.3 + (F.exhaustion || 0) * 3 - cost, { T: F }, s.time);
+            continue;
+          }
           add({ a: 'cast', spell: sid, target: F.id, cond: c.id }, (c.id === 'paralyzed' ? 16 : 3) - cost, { T: F, cond: c.id }, s.time);
         }
         break;
@@ -254,6 +258,11 @@ export function specialOptions(b, me, { light = false } = {}) {
             if (n && (!best || n > best.n)) best = { F, n };
           }
           if (best) add({ a: 'cast', spell: sid, target: best.F.id }, 1 + best.n * 2.5 - cost, { T: best.F }, 'bonus');
+        } else if (s.buff === 'beacon') {
+          const ids = pool.filter((F) => F.side === me.side).slice(0, sc.targets).map((c) => c.id);
+          const healers = friends.some((F) => Object.keys(F.casting?.known || {}).some((k) => ['heal', 'massheal'].includes(SPELLS[k].kind)) || F.layOnHands);
+          const hurt = friends.filter((F) => F.hp < F.hpMax / 2).length;
+          if (ids.length >= 2 && totalFoeHp(b, me) > 25 && (healers || hurt)) add({ a: 'cast', spell: sid, targets: ids }, 1 + ids.length * 1.2 + hurt * 1.5 - cost, { ids });
         } else if (s.buff === 'aid') {
           const dying = friends.filter((F) => F.hp <= 0 && !F.dead && sees(b, me, F, s.range)).slice(0, sc.targets);
           if (dying.length) add({ a: 'cast', spell: sid, targets: dying.map((c) => c.id) }, 14 * dying.length - cost, { ids: dying.map((c) => c.id) });
@@ -277,6 +286,16 @@ export function specialOptions(b, me, { light = false } = {}) {
           if (close && canAttack(t)) add({ a: 'cast', spell: sid }, 2 + 2.5 * Math.min(3, totalFoeHp(b, me) / 10) - cost, { T: me }, 'bonus');
         } else if (s.buff === 'blur') {
           if (threatened(b, me) || foes.filter((T) => !down(T)).length >= 2) add({ a: 'cast', spell: sid }, 6 - cost, { T: me });
+        } else if (s.buff === 'fireshield') {
+          if (b.effects.some((e) => e.type === 'fireshield' && e.target === me.id)) break;
+          const melee = foes.filter((T) => !down(T) && cheb(me, T) <= 2 && T.attacks?.some((a) => a.kind === 'melee')).length;
+          if (melee) add({ a: 'cast', spell: sid }, 3 + melee * 4 - cost, { T: me });
+        } else if (s.buff === 'auralife') {
+          if (b.effects.some((e) => e.type === 'auralife' && e.by === me.id)) break;
+          const near = friends.filter((F) => !F.dead && feetBetween(me, F) <= 30);
+          const ups = near.filter((F) => F.hp <= 0).length;
+          const hurt = near.filter((F) => F.hp > 0 && F.hp < F.hpMax / 2).length;
+          if ((ups || hurt >= 2) && totalFoeHp(b, me) > 20) add({ a: 'cast', spell: sid }, ups * 10 + hurt * 3 + (enemiesOf(b, me).some((e) => !down(e) && (e.attacks || []).some((a) => a.type === 'Necrotic')) ? 4 : 0) - cost, { T: me });
         }
         break;
       }
@@ -304,7 +323,12 @@ export function specialOptions(b, me, { light = false } = {}) {
           if (hit.some((c) => c.side === me.side)) continue;
           const fs = hit.filter((c) => !down(c) && !c.dead);
           if (fs.length < 2) continue;
-          add({ a: 'cast', spell: sid, x, y }, fs.reduce((acc, c) => acc + (1 - saveChance(b, c, s.save, dc)) * (s.zone === 'stink' ? 5 : 3), 0) - cost, { foes: fs });
+          const each = (c) => {
+            const pFail = 1 - saveChance(b, c, s.save, dc);
+            if (s.dice) return (pFail + (s.half ? (1 - pFail) / 2 : 0)) * avgDice(sc.dice) * damageMult(c, s.type) * 1.4;
+            return pFail * (s.zone === 'stink' ? 5 : 3);
+          };
+          add({ a: 'cast', spell: sid, x, y }, fs.reduce((acc, c) => acc + each(c), 0) - cost, { foes: fs });
         }
         break;
       }
@@ -326,7 +350,7 @@ export function specialOptions(b, me, { light = false } = {}) {
       default: break;
     }
     // Buffs added with the new classes (Heroism, Protection from Evil and Good, Barkskin, Dragon's Breath).
-    if (s.kind === 'buff' && ['heroism', 'pfe', 'bark', 'dbreath', 'haste', 'magicweapon'].includes(s.buff)) {
+    if (s.kind === 'buff' && ['heroism', 'pfe', 'bark', 'dbreath', 'haste', 'magicweapon', 'invis', 'stoneskin', 'deathward'].includes(s.buff)) {
       const pool = friends.filter((F) => !down(F) && (F === me || sees(b, me, F, range)) && !b.effects.some((e) => e.type === s.buff && e.target === F.id));
       let best = null;
       for (const F of pool) {
@@ -338,6 +362,9 @@ export function specialOptions(b, me, { light = false } = {}) {
         else if (s.buff === 'dbreath') v = foes.filter((T) => !down(T) && cheb(T, F) <= 3).length >= 2 ? 6 : 0;
         else if (s.buff === 'haste') v = totalFoeHp(b, me) > 20 && F.attacks?.some((a) => a.kind === 'melee' || a.kind === 'ranged') ? 4 + (F.multiattack || 1) * 2 : 0;
         else if (s.buff === 'magicweapon') v = F !== me || !me.casting ? 0 : totalFoeHp(b, me) > 15 && F.multiattack > 1 ? 4 : 0;
+        else if (s.buff === 'invis') v = totalFoeHp(b, me) > 25 && F.attacks?.some((a) => a.kind === 'melee' || a.kind === 'ranged') ? 4 + (F.multiattack || 1) * 2.5 + (near.length ? 2 : 0) : 0;
+        else if (s.buff === 'stoneskin') v = near.length && totalFoeHp(b, me) > 25 && !F.raging ? near.length * 3 + (F.hp < F.hpMax / 2 ? 2 : 0) : 0;
+        else if (s.buff === 'deathward') v = near.length && F.hp <= F.hpMax / 3 && F.hp > 0 ? 9 : 0;
         if (v && (!best || v > best.v)) best = { F, v };
       }
       if (best) add({ a: 'cast', spell: sid, targets: [best.F.id] }, best.v - cost, { T: best.F }, s.time);
@@ -355,6 +382,18 @@ export function specialOptions(b, me, { light = false } = {}) {
       }
     }
   }
+  // A monster's recharge breath (Acid Breath): the whole action, so it has to beat its Multiattack.
+  if (me.mbreath?.ready && t.action && !t.attacksLeft && !(t.attacked || []).length && !light) {
+    const br = me.mbreath;
+    const area = { shape: br.shape, size: br.size, from: 'self' };
+    for (const T of foes) {
+      const hit = areaTargets(b, me, area, T.x, T.y);
+      const fs = hit.filter((c) => c.side !== me.side && !down(c));
+      if (!fs.length || hit.some((c) => c.side === me.side)) continue;
+      const exp = fs.reduce((acc, c) => acc + avgDice(br.dice) * damageMult(c, br.type) * (1 - saveChance(b, c, 'dex', br.dc) / 2), 0);
+      add({ a: 'mbreath', x: T.x, y: T.y }, exp - (me.multiattack || 1) * 4, { foes: fs });
+    }
+  }
   if (me.web?.ready && t.action) {
     for (const T of foes) {
       if (down(T) || hasCond(T, 'restrained') || !sees(b, me, T, me.web.range)) continue;
@@ -368,7 +407,7 @@ export function specialOptions(b, me, { light = false } = {}) {
       const dc = me.casting ? me.casting.stats.wis.dc.reduce((s, p) => s + p.value, 0) : 10;
       for (const T of foes) {
         if (!sees(b, me, T, 30)) continue;
-        const avg = (4.5 + me.mods.wis) * damageMult(T, 'Radiant');
+        const avg = (4.5 * (me.sparkDice || 1) + me.mods.wis) * damageMult(T, 'Radiant');
         add({ a: 'spark', target: T.id }, avg * (1 - saveChance(b, T, 'con', dc) / 2) + finishing(T, avg) - 2, { T, dc });
       }
       for (const F of friends) {
@@ -432,7 +471,7 @@ function classOptions(b, me, add, { friends, foes, light }) {
       const fs = inside.filter((c) => c.side !== me.side && !down(c) && !c.dead);
       if (!fs.length) continue;
       const hurt = inside.some((c) => c.side === me.side && c.hp < c.hpMax / 2);
-      const exp = fs.reduce((acc, c) => acc + 7 * damageMult(c, 'Necrotic') * (1 - saveChance(b, c, 'con', dc) / 2), 0);
+      const exp = fs.reduce((acc, c) => acc + 3.5 * landsAidDice(me) * damageMult(c, 'Necrotic') * (1 - saveChance(b, c, 'con', dc) / 2), 0);
       add({ a: 'landsaid', x, y }, exp + (hurt ? 5 : 0) - 3, { foes: fs });
     }
   }
@@ -443,7 +482,7 @@ function classOptions(b, me, add, { friends, foes, light }) {
       const o = attackOptions(b, me, T).find((x) => x.atk.id === 'unarmed');
       if (!o?.ok) continue;
       add({ a: 'martial', target: T.id }, o.expected + finishing(T, o.avg), { T, o }, 'bonus');
-      if (me.focus?.uses > 0) add({ a: 'flurry', target: T.id, tech: 'topple' }, 2 * o.expected + finishing(T, o.avg) + (me.openHand ? 1 : 0) - 2, { T, o }, 'bonus');
+      if (me.focus?.uses > 0) add({ a: 'flurry', target: T.id, tech: 'topple' }, (me.level >= 10 ? 3 : 2) * o.expected + finishing(T, o.avg) + (me.openHand ? 1 : 0) - 2, { T, o }, 'bonus');
     }
   }
   // Lay on Hands: bring a fallen friend back up, or top up a badly hurt one.
@@ -467,7 +506,19 @@ function classOptions(b, me, add, { friends, foes, light }) {
     }
   }
   // Innate Sorcery: early in a fight worth it.
-  if (me.innate && !me.innateOn && me.innate.uses > 0 && t.bonus && totalFoeHp(b, me) > 15) add({ a: 'innate' }, 5, { T: me }, 'bonus');
+  if (me.innate && !me.innateOn && (me.innate.uses > 0 || (me.incarnate && me.sorcery?.uses >= 4)) && t.bonus && totalFoeHp(b, me) > 15) add({ a: 'innate' }, me.innate.uses > 0 ? 5 : 3, { T: me }, 'bonus');
+  // Wholeness of Body (Open Hand monk): a Bonus Action heal when hurt.
+  if (me.wholeness?.uses > 0 && t.bonus && me.hp > 0 && me.hp <= me.hpMax * 0.6) add({ a: 'wholeness' }, 4 + (me.hp <= me.hpMax / 3 ? 4 : 0), { T: me }, 'bonus');
+  // Tireless (Ranger 10): Temporary Hit Points as a Magic action.
+  if (me.tireless?.uses > 0 && t.action && !t.magicUsed && !(me.tempHp > 0) && !light) add({ a: 'tireless' }, threatened(b, me) ? 3.5 : 1.5, { T: me });
+  // Abjure Foes (Paladin 9): frighten the worst threats.
+  if (me.abjure && me.channel?.uses > 0 && t.action && !t.magicUsed && !light) {
+    const dc = me.casting ? me.casting.stats.cha.dc.reduce((s2, p) => s2 + p.value, 0) : 10;
+    const pick = up.filter((T) => !hasCond(T, 'frightened') && feetBetween(me, T) <= 60 && lineOfSight(b, me, T))
+      .sort((p, q) => (q.hp + 10 * (q.multiattack || 1)) - (p.hp + 10 * (p.multiattack || 1))).slice(0, Math.max(1, me.mods.cha));
+    const exp = pick.reduce((acc, T) => acc + (1 - saveChance(b, T, 'wis', dc)) * (3 + 2 * (T.multiattack || 1)) * Math.min(1, T.hp / 20), 0);
+    if (pick.length && exp > 3) add({ a: 'abjure', targets: pick.map((T) => T.id) }, exp, { ids: pick.map((T) => T.id) });
+  }
   // Dragon's Breath: exhale a 15-foot Cone.
   const db = b.effects.find((e) => e.type === 'dbreath' && e.target === me.id);
   if (db && t.action && !t.magicUsed && !light) {
@@ -816,15 +867,21 @@ export function coach(b, id) {
       else if (s.kind === 'save') text = `Cast ${s.name} on ${T.name}: it must beat DC ${o?.why.dc} on a ${s.save.toUpperCase()} save, so ${Math.round((o?.why.pFail || 0) * 100)}% it fails (${lvl}).`;
       else if (s.kind === 'missile') text = `Cast ${s.name} at ${T.name}: it never misses (${lvl}).`;
       else if (s.kind === 'buff') text = `Cast ${s.name} on your allies (${lvl}).${conc}`;
-      else if (s.kind === 'cure') text = `Cast ${s.name} to end ${T.name}'s ${intent.cond} condition (${lvl}).`;
+      else if (s.kind === 'cure' && intent.cond) text = `Cast ${s.name} to end ${T.name}'s ${intent.cond} condition (${lvl}).`;
       else if (s.kind === 'teleport') text = `You're in an enemy's reach: Misty Step away (${lvl}). Teleporting doesn't provoke Opportunity Attacks.`;
       else if (s.kind === 'spiritual') text = `Cast ${s.name} next to ${T.name} (${lvl}, a Bonus Action). It keeps attacking on later turns.${conc}`;
       else if (s.kind === 'area' && s.cond) text = `Cast ${s.name} on the marked square: ${(o?.why.foes || []).map((c) => c.name).join(' and ')} must save or be ${s.cond === 'sleep' ? 'Incapacitated, then Unconscious' : 'Restrained'} (${lvl}).${conc}`;
       else if (s.kind === 'mark') text = `Cast ${s.name} on ${T.name} (${lvl}, a Bonus Action): an extra ${s.dice} ${s.type} damage each time you hit it.${conc}`;
+      else if (s.kind === 'selfbuff' && s.buff === 'fireshield') text = `Cast ${s.name} (${lvl}): Resistance to Cold, and 2d8 Fire damage to anything that hits you in melee.`;
+      else if (s.kind === 'selfbuff' && s.buff === 'auralife') text = `Cast ${s.name} (${lvl}): you and your allies within 30 feet resist Necrotic damage, and a fallen ally there gets back up with 1 Hit Point on your turns.${conc}`;
+      else if (s.kind === 'zone') text = intent.x == null ? `Cast ${s.name} around you (${lvl}).${conc}` : `Cast ${s.name} on the marked square: it catches ${(o?.why.foes || []).map((c) => c.name).join(' and ')} and none of your allies (${lvl}).${conc}`;
+      else if (s.kind === 'hold') text = `Cast ${s.name} on ${T?.name}: ${Math.round((o?.why.pFail || 0) * 100)}% it fails its Wisdom save and is Paralyzed (${lvl}).${conc}`;
+      else if (s.kind === 'cure' && !intent.cond) text = `Cast ${s.name} on ${T.name} to undo what's been drained from them (${lvl}).`;
       else if (s.kind === 'selfbuff') text = s.buff === 'favor' ? `Cast ${s.name} (${lvl}, a Bonus Action): +1d4 Radiant damage on your weapon hits for 1 minute.` : `Cast ${s.name} (${lvl}): attackers have Disadvantage against you.${conc}`;
       else if (s.kind === 'bane') text = `Cast ${s.name} on ${(intent.targets || []).map((x) => b.creatures[x]?.name).join(', ')}: on a failed Charisma save, they subtract 1d4 from attack rolls and saves (${lvl}).${conc}`;
       else if (s.kind === 'buff' && intent.targets?.length === 1 && s.buff !== 'bless') text = `Cast ${s.name} on ${b.creatures[intent.targets[0]]?.name} (${lvl}${s.time === 'bonus' ? ', a Bonus Action' : ''}).${conc}`;
       else if (s.kind === 'rays') text = `Cast ${s.name}: ${o?.why.n || 3} rays at ${T.name}, ${Math.round((o?.why.p || 0) * 100)}% each to hit (${lvl}).`;
+      else if (!T) text = `Cast ${s.name} (${lvl}).${conc}`;
       else text = `Cast ${s.name} at ${T.name}: ${Math.round((o?.why.p || 0) * 100)}% to hit (${lvl}).`;
       break;
     }
@@ -855,14 +912,17 @@ export function coach(b, id) {
     case 'inspire': text = `Give ${T.name} Bardic Inspiration (Bonus Action): a d${me.bardic.die} to add when one of their D20 Tests falls short.`; break;
     case 'shape': text = 'You have no spell slots left: use Wild Shape (Bonus Action) to become a Wolf and fight with its Bite.'; break;
     case 'unshape': text = 'Return to your normal form (Bonus Action).'; break;
-    case 'landsaid': text = "Use Land's Aid on the marked square: Necrotic damage to enemies in it (half on a Constitution save), and a friend in it heals 2d6."; break;
+    case 'landsaid': text = `Use Land's Aid on the marked square: Necrotic damage to enemies in it (half on a Constitution save), and a friend in it heals ${landsAidDice(me)}d6.`; break;
     case 'martial': text = `Make a Bonus Action Unarmed Strike at ${T.name} (Martial Arts).`; break;
-    case 'flurry': text = `Spend 1 Focus Point on Flurry of Blows: two Unarmed Strikes at ${T.name} as a Bonus Action.`; break;
+    case 'flurry': text = `Spend 1 Focus Point on Flurry of Blows: ${me.level >= 10 ? 'three' : 'two'} Unarmed Strikes at ${T.name} as a Bonus Action.`; break;
     case 'patient': case 'stepwind': text = intent.a === 'patient' ? 'Use Patient Defense (Bonus Action).' : 'Use Step of the Wind (Bonus Action).'; break;
     case 'lay': text = intent.cure ? `Use Lay on Hands to end ${T.name}'s Poisoned condition (5 from the pool).` : `${T.name} needs help: use Lay on Hands (Bonus Action) to restore ${intent.amount} Hit Points.`; break;
     case 'sacred': text = 'Use Channel Divinity: Sacred Weapon as you attack: your Charisma modifier is added to your melee attack rolls.'; break;
     case 'remark': text = `Your mark's creature is down: move it to ${T.name} (Bonus Action).`; break;
     case 'innate': text = 'Use Innate Sorcery (Bonus Action): +1 to your spell save DC and Advantage on your Sorcerer spell attacks for 1 minute.'; break;
+    case 'wholeness': text = `Use Wholeness of Body (Bonus Action): heal 1d${String(me.martialDie || '1d6').split('d')[1]} + your Wisdom modifier.`; break;
+    case 'tireless': text = 'Use Tireless (Magic action): 1d8 + your Wisdom modifier in Temporary Hit Points.'; break;
+    case 'abjure': text = `Use Channel Divinity: Abjure Foes on ${(intent.targets || []).map((x) => b.creatures[x]?.name).join(', ')}. On a failed Wisdom save, each is Frightened until it takes damage.`; break;
     case 'font': text = 'Use Font of Magic to trade Sorcery Points and spell slots.'; break;
     case 'exhale': text = "Exhale your Dragon's Breath at the marked square: a 15-foot Cone, half damage on a Dexterity save."; break;
     case 'end': text = "You've done what you can: end your turn."; break;

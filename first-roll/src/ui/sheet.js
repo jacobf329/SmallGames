@@ -21,6 +21,11 @@ function nowHtml(c) {
   use('actionSurge', 'Action Surge', 'action-surge');
   use('channel', 'Channel Divinity', 'channel-divinity');
   use('adrenaline', 'Adrenaline Rush', 'adrenaline-rush');
+  use('intervention', 'Divine Intervention', 'divine-intervention');
+  use('indomitable', 'Indomitable', 'indomitable');
+  use('ownLuck', "Dark One's Own Luck", 'dark-ones-own-luck');
+  use('wholeness', 'Wholeness of Body', 'wholeness-of-body');
+  use('tireless', 'Tireless', 'tireless');
   if (c.breath) L.push(`<div class="ln"><span>${R('breath-weapon', 'Breath Weapon')}</span><b>${c.breath.uses} left</b></div>`);
   if (c.hitDice) L.push(`<div class="ln"><span>${R('hit-point-dice', `Hit Point Dice (d${c.hitDice.die})`)}</span><b>${pips(c.hitDice.left, c.hitDice.max)}</b></div>`);
   if (c.inspiration) L.push(`<div class="ln"><span>${R('heroic-inspiration', 'Heroic Inspiration')}</span><b>ready</b></div>`);

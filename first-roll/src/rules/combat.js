@@ -10,7 +10,11 @@ import {
   lineSquares, squaresWithin, cubeAt, isWall, spellTerrain
 } from './grid.js';
 import { setMageArmor } from './character.js';
-import { MASTERIES, SPELLS, ABILITY_NAMES, signed, METAMAGIC, SLOT_COST, SLOT_MIN_LEVEL, cantripTier } from './data.js';
+import { MASTERIES, SPELLS, ABILITY_NAMES, signed, METAMAGIC, SLOT_COST, SLOT_MIN_LEVEL, cantripTier, EVOCATION } from './data.js';
+
+// The battle being resolved right now, for rules that need it but are asked
+// about one creature (Resistance from Stoneskin or Aura of Life).
+let CUR = null;
 
 // ------------------------------------------------------------- set-up ----
 
@@ -20,12 +24,13 @@ export function createBattle({ heroes, foes, walls = [], cover = [], seed = 1 })
     c.conds ||= [];
     creatures[c.id] = c;
   }
-  return {
+  CUR = {
     creatures, walls: [...walls], cover: [...cover], rng: makeRng(seed),
     order: [], idx: -1, round: 0, turn: null,
     effects: [], log: [], seq: 0, post: [],
     pending: null, moveCtx: null, over: null,
   };
+  return CUR;
 }
 
 function emit(b, r) {
@@ -59,12 +64,33 @@ export const COND_NAMES = {
 export function addCond(b, T, cond) {
   if (T.condImmune?.includes(cond.id)) return false;
   if (cond.id === 'frightened' && effectOn(b, 'heroism', T.id)) return false;
+  if (condGuard(b, T, cond.id)) return false;
   T.conds = (T.conds || []).filter((x) => !(x.id === cond.id && x.by === cond.by));
   T.conds.push(cond);
   if (incap(T) && T.conc) endConc(b, T, `${T.name} is ${COND_NAMES[cond.id]}`);
   if (incap(T) && hasCond(T, 'hidden')) dropCond(T, 'hidden');
   if (incap(T)) { endRage(b, T, `${T.name} is ${COND_NAMES[cond.id]}`); revertShape(b, T, `${T.name} is ${COND_NAMES[cond.id]}`); }
   return true;
+}
+
+// What keeps T from being Charmed or Frightened right now: Mindless Rage, and a
+// paladin's Aura of Devotion (Charmed) or Aura of Courage (Frightened).
+function condGuard(b, T, id) {
+  if (id !== 'charmed' && id !== 'frightened') return null;
+  if (T.raging && T.mindlessRage) return { name: 'Mindless Rage', rule: 'mindless-rage' };
+  const P = auraPaladin(b, T, id === 'charmed' ? 'auraDevotion' : 'auraCourage');
+  if (P) return id === 'charmed' ? { name: `Aura of Devotion (${P.name})`, rule: 'aura-of-devotion' } : { name: `Aura of Courage (${P.name})`, rule: 'aura-of-courage' };
+  return null;
+}
+// A paladin on T's side whose 10-foot aura (with this feature) covers T.
+function auraPaladin(b, T, feature) {
+  let best = null;
+  for (const P of Object.values(b.creatures)) {
+    if (!P[feature] || P.side !== T.side || P.dead || P.hp <= 0 || incap(P) || !onBoard(P) || !onBoard(T)) continue;
+    if (P !== T && feetBetween(P, T) > 10) continue;
+    if (feature !== 'auraProt' || !best || P.auraProt > best.auraProt) best = P;
+  }
+  return best;
 }
 
 // Rage (Barbarian): ends early when the barbarian is Incapacitated, and at the
@@ -117,6 +143,7 @@ export function speedOf(b, c) {
   let s = c.speed - 5 * (c.exhaustion || 0);
   if (b.effects.some((e) => e.type === 'chill' && e.target === c.id)) s -= 10;
   if (b.effects.some((e) => e.type === 'slowed' && e.target === c.id)) s -= 10;
+  if (b.effects.some((e) => e.type === 'hamstrung' && e.target === c.id)) s -= 15;
   if (b.effects.some((e) => e.type === 'stride' && e.target === c.id)) s += 10;
   if (b.effects.some((e) => e.type === 'staggered' && e.target === c.id)) s = Math.floor(s / 2 / 5) * 5;
   if (hasCond(c, 'slow')) s = Math.floor(s / 2 / 5) * 5;
@@ -200,6 +227,13 @@ function blessing(b, T, byId) {
 function retaliate(b, T, X) {
   if (!X || X.dead || !onBoard(X) || T.dead || T.hp <= 0 || incap(T) || !T.reaction || b.over) return;
   if (feetBetween(T, X) > 60 || !lineOfSight(b, T, X)) return;
+  // Retaliation (Berserker 10): a melee attack back at a creature within 5 feet.
+  if (T.retaliation && !b.pending && feetBetween(T, X) <= 5 && T.attacks.some((a) => a.kind === 'melee')) {
+    T.reaction = false;
+    emit(b, { kind: 'note', by: T.id, target: X.id, rule: 'retaliation', text: `${X.name} hurt ${T.name} from 5 feet away: Retaliation (Reaction), one melee attack back.` });
+    attack(b, T, X, bestMelee(b, T, X), { reaction: true, why: 'Retaliation' });
+    return;
+  }
   if (T.giant?.kind === 'storm' && T.giant.uses > 0) {
     T.giant.uses--;
     T.reaction = false;
@@ -318,8 +352,14 @@ function bardicTry(b, c, need) {
 }
 
 // A saving throw: d20 + ability modifier (+ PB if proficient) vs a DC.
+// Aura of Authority (Hobgoblin Captain): it and its allies within 10 feet have Advantage on attack rolls and saves.
+function authorityOver(b, X) {
+  return Object.values(b.creatures).find((L) => L.authority && L.side === X.side && !L.dead && L.hp > 0 && !incap(L) && onBoard(L) && (L === X || feetBetween(L, X) <= 10)) || null;
+}
 export function saveFactors(b, T, ability, { cond = null, extraDis = [] } = {}) {
   const adv = [], dis = [...extraDis];
+  const au = authorityOver(b, T);
+  if (au) adv.push({ text: `Aura of Authority (${au.name})`, rule: 'aura-of-authority' });
   if (ability === 'str' && T.raging) adv.push({ text: `${T.name} is raging`, rule: 'rage' });
   if (ability === 'dex' && T.dangerSense && !incap(T)) adv.push({ text: 'Danger Sense', rule: 'danger-sense' });
   if (cond === 'concentration' && T.conc?.extended) adv.push({ text: 'Extended Spell', rule: 'metamagic' });
@@ -330,12 +370,13 @@ export function saveFactors(b, T, ability, { cond = null, extraDis = [] } = {}) 
   if (cond === 'poisoned' && T.poisonSaveAdv) adv.push({ text: 'Dwarven Resilience', rule: 'poisoned' });
   if (cond === 'frightened' && T.braveSaveAdv) adv.push({ text: 'Brave', rule: 'frightened' });
   if (ability === 'dex' && b.effects.some((e) => e.type === 'haste' && e.target === T.id)) adv.push({ text: `${T.name} is hasted`, rule: 'haste' });
+  if (ability === 'wis' && effectOn(b, 'beacon', T.id)) adv.push({ text: 'Beacon of Hope', rule: 'beacon-of-hope' });
   return { adv, dis, mode: modeFrom(adv, dis) };
 }
 
 export function saveChance(b, T, ability, dc, extra = 0) {
   if (helpless(T) && (ability === 'str' || ability === 'dex')) return 0;
-  const mod = (T.saves?.[ability] ?? T.mods[ability]) + sumParts(testParts(T)) + blessAvg(b, T) + extra;
+  const mod = (T.saves?.[ability] ?? T.mods[ability]) + sumParts(testParts(T)) + blessAvg(b, T) + (auraPaladin(b, T, 'auraProt')?.auraProt || 0) + extra;
   const f = saveFactors(b, T, ability);
   let p = Math.min(20, Math.max(0, 21 - (dc - mod))) / 20;   // saves have no automatic 1/20
   if (f.mode === 'advantage') p = 1 - (1 - p) ** 2;
@@ -358,11 +399,26 @@ function savingThrow(b, T, ability, dc, { cover = null, cond = null, extraDis = 
   if (cover && ability === 'dex') mods.push({ label: `Half Cover (${cover.what})`, value: 2, rule: 'cover' });
   if (ability === 'dex' && hasCond(T, 'slow')) mods.push({ label: 'Slow', value: -2, rule: 'slow' });
   mods.push(...testParts(T));
+  const ap = auraPaladin(b, T, 'auraProt');
+  if (ap) mods.push({ label: `Aura of Protection (${ap.name}, CHA modifier)`, value: ap.auraProt, rule: 'aura-of-protection' });
   const bl = blessPart(b, T);
   if (bl) mods.push(bl);
   const bn = banePart(b, T);
   if (bn) mods.push(bn);
   let total = d20.kept + sumParts(mods);
+  const notes = [];
+  // Countercharm (Bard 7): a bard's Reaction rerolls a failed save against Charmed or Frightened, with Advantage.
+  if (total < dc && (cond === 'charmed' || cond === 'frightened')) {
+    const B = Object.values(b.creatures).find((H) => H.countercharm && H.side === T.side && H.reaction && !incap(H) && !H.dead && H.hp > 0 && (H === T || feetBetween(H, T) <= 30));
+    if (B) {
+      B.reaction = false;
+      const again = rollD20(b, T, 'advantage');
+      d20.rolls = [...d20.rolls, ...again.rolls];
+      d20.kept = again.kept;
+      total = d20.kept + sumParts(mods);
+      notes.push(`Countercharm (${B.name}'s Reaction): rerolled with Advantage, got ${again.kept}`);
+    }
+  }
   if (total < dc && T.side === 'hero') {
     if (inspire(b, T, d20)) total = d20.kept + sumParts(mods);
   }
@@ -370,7 +426,25 @@ function savingThrow(b, T, ability, dc, { cover = null, cond = null, extraDis = 
     const bi = bardicTry(b, T, dc - total);
     if (bi) { mods.push(bi); total += bi.value; }
   }
-  return { target: T.id, d20: { ...d20, adv: f.adv, dis: f.dis }, mods, total, success: total >= dc };
+  // Dark One's Own Luck (Fiend Warlock 6): add a d10 when it could turn the failure around.
+  if (total < dc && T.ownLuck?.uses > 0 && dc - total <= 10) {
+    T.ownLuck.uses--;
+    const r = die(b.rng, 10);
+    mods.push({ label: `Dark One's Own Luck (d10; ${T.ownLuck.uses} left)`, value: r, rolls: [r], rule: 'dark-ones-own-luck' });
+    total += r;
+  }
+  // Indomitable (Fighter 9): reroll a failed save with a bonus equal to the Fighter level.
+  if (total < dc && T.indomitable?.uses > 0 && dc - (sumParts(mods) + T.level) <= 20) {
+    T.indomitable.uses--;
+    const was = d20.kept;
+    const fresh = die(b.rng, 20);
+    d20.rolls = [...d20.rolls, fresh];
+    d20.kept = fresh;
+    mods.push({ label: `Indomitable (+${T.level}, Fighter level)`, value: T.level, rule: 'indomitable' });
+    total = fresh + sumParts(mods);
+    notes.push(`Indomitable: rerolled the ${was}, got ${fresh}`);
+  }
+  return { target: T.id, d20: { ...d20, adv: f.adv, dis: f.dis }, mods, total, success: total >= dc, note: notes.join('; ') || undefined };
 }
 
 // An ability check (escaping a grapple, hiding): d20 + skill vs DC.
@@ -382,6 +456,8 @@ function abilityCheck(b, A, skills, dc, { adv = [], dis = [] } = {}) {
   if (fr) dis.push({ text: `${A.name} is Frightened of ${fr.name}`, rule: 'frightened' });
   const mode = modeFrom(adv, dis);
   const d20 = rollD20(b, A, mode);
+  // Reliable Talent (Rogue 7): a 9 or lower counts as a 10 on a proficient skill.
+  if (A.reliable && (A.profSkills || []).includes(best.s.id) && d20.kept < 10) { d20.reliable = d20.kept; d20.kept = 10; }
   const mods = [{ label: `${best.s.name}`, value: best.v, rule: 'skills' }, ...testParts(A)];
   let total = d20.kept + sumParts(mods);
   if (total < dc) {
@@ -428,6 +504,7 @@ export function acAgainst(b, A, T, atk) {
   if (b.effects.some((e) => e.type === 'shield' && e.target === T.id)) parts.push({ label: 'Shield spell', value: 5, rule: 'shield' });
   if (b.effects.some((e) => e.type === 'haste' && e.target === T.id)) parts.push({ label: 'Haste', value: 2, rule: 'haste' });
   if (hasCond(T, 'slow')) parts.push({ label: 'Slow', value: -2, rule: 'slow' });
+  if (b.effects.some((e) => e.type === 'madef' && e.by === T.id && e.target === A.id)) parts.push({ label: `Multiattack Defense (${A.name} already hit this turn)`, value: 4, rule: 'multiattack-defense' });
   const floor = 17 - sumParts(parts);
   if (effectOn(b, 'bark', T.id) && floor > 0) parts.push({ label: "Barkskin (AC can't be less than 17)", value: floor, rule: 'barkskin' });
   const cov = atk.ignoreCover ? null : coverBetween(b, A, T);
@@ -474,6 +551,10 @@ export function attackFactors(b, A, T, atk) {
       uses.push(e);
     } else if (e.type === 'blur' && e.target === T.id) {
       dis.push({ text: `${T.name} is blurred`, rule: 'blur' });
+    } else if (e.type === 'invis' && e.target === T.id) {
+      dis.push({ text: `${T.name} is Invisible (Greater Invisibility)`, rule: 'greater-invisibility' });
+    } else if (e.type === 'invis' && e.target === A.id) {
+      adv.push({ text: `${A.name} is Invisible (Greater Invisibility)`, rule: 'greater-invisibility' });
     } else if (e.type === 'pfe' && e.target === T.id && PFE_TYPES.includes(A.creature)) {
       dis.push({ text: `Protection from Evil and Good on ${T.name}`, rule: 'protection-from-evil-and-good' });
     }
@@ -497,6 +578,8 @@ export function attackFactors(b, A, T, atk) {
   const gr = condOf(A, 'grappled');
   if (gr && gr.by !== T.id) dis.push({ text: `${A.name} is Grappled and ${T.name} isn't the grappler`, rule: 'grappled' });
   if (hasCond(A, 'hidden')) adv.push({ text: `${A.name} is Hidden`, rule: 'hide' });
+  const au = authorityOver(b, A);
+  if (au) adv.push({ text: `Aura of Authority (${au.name})`, rule: 'aura-of-authority' });
   if (A.packTactics && alliesOf(b, A).some((o) => !incap(o) && cheb(o, T) <= 1)) adv.push({ text: `Pack Tactics: an ally of ${A.name} is next to ${T.name}`, rule: 'pack-tactics' });
   if ((atk.advIfGrappled || A.grappler) && T.conds?.some((x) => x.id === 'grappled' && x.by === A.id)) adv.push({ text: `${T.name} is Grappled by ${A.name}`, rule: A.grappler ? 'grappler' : 'grappled' });
   if (atk.kind === 'ranged') {
@@ -529,16 +612,32 @@ function sneakAllowed(b, A, T, atk, mode) {
 }
 
 // What damage would do to T after Resistance, Vulnerability and Immunity.
-export function damageMult(T, type) {
+export function damageMult(T, type, b = CUR) {
   if (T.immune?.includes(type)) return 0;
   let m = 1;
-  if (T.resist?.includes(type) || (T.raging && BPS.includes(type))) m /= 2;
+  if (T.resist?.includes(type) || (T.raging && BPS.includes(type)) || (b && spellResist(b, T).includes(type))) m /= 2;
   if (T.vuln?.includes(type)) m *= 2;
   return m;
 }
 
+// Resistances from spells: Stoneskin, Fire Shield (warm: Cold), Aura of Life.
+function spellResist(b, T) {
+  const out = [];
+  if (!b?.effects?.length || !T) return out;
+  for (const e of b.effects) {
+    if (e.type === 'stoneskin' && e.target === T.id) out.push(...BPS);
+    else if (e.type === 'fireshield' && e.target === T.id) out.push('Cold');
+    else if (e.type === 'auralife') {
+      const P = b.creatures[e.by];
+      if (P && !P.dead && P.side === T.side && (P === T || feetBetween(P, T) <= 30)) out.push('Necrotic');
+    }
+  }
+  return out;
+}
+
 // Options for the UI and the AI: every weapon attack A could make against T now.
 export function attackOptions(b, A, T) {
+  CUR = b;
   return A.attacks.map((atk) => optionFor(b, A, T, atk));
 }
 
@@ -554,6 +653,13 @@ function hitExtras(b, A, T, atk) {
     if (e.type === 'magicweapon' && e.target === A.id && weapon && !atk.unarmed) out.push({ label: `Magic Weapon (+${e.amount})`, flat: e.amount, type: atk.type, rule: 'magic-weapon' });
   }
   if (A.prey === 'colossus' && weapon && T.hp < T.hpMax && A.colossusKey !== turnKey(b)) out.push({ label: 'Colossus Slayer', dice: '1d8', type: atk.type, rule: 'colossus-slayer', key: 'colossusKey' });
+  if (A.divineStrike && weapon && A.strikeKey !== turnKey(b)) out.push({ label: 'Divine Strike', dice: '1d8', type: 'Radiant', rule: 'divine-strike', key: 'strikeKey' });
+  if (A.primalStrike && weapon && A.strikeKey !== turnKey(b)) {
+    const type = ['Cold', 'Fire', 'Lightning', 'Thunder'].sort((p, q) => damageMult(T, q, b) - damageMult(T, p, b))[0];
+    out.push({ label: `Primal Strike (${type})`, dice: '1d8', type, rule: 'primal-strike', key: 'strikeKey' });
+  }
+  if (A.lifedrinker && weapon && atk.base === 'pact' && A.drinkKey !== turnKey(b)) out.push({ label: 'Lifedrinker', dice: '1d6', type: 'Necrotic', rule: 'lifedrinker', key: 'drinkKey' });
+  if (atk.spell && A.potentSpell && SPELLS[atk.spell]?.level === 0) out.push({ label: 'Potent Spellcasting (WIS modifier)', flat: A.mods.wis, type: atk.type, rule: 'potent-spellcasting' });
   if (A.frenzy && A.raging && weapon && atk.ability === 'str' && b.turn?.who === A.id && A.frenzyKey !== turnKey(b)
     && b.effects.some((e) => e.type === 'reckless' && e.by === A.id)) out.push({ label: 'Frenzy', dice: `${A.rageDmg}d6`, type: atk.type, rule: 'frenzy', key: 'frenzyKey' });
   return out;
@@ -647,6 +753,7 @@ function rollDamage(b, A, T, atk, crit, mode) {
     A.sneakKey = turnKey(b);
   }
   if (atk.advDice && mode === 'advantage') extra('Extra (attacked with Advantage)', atk.advDice, 'stat-block', atk.type);
+  if (atk.brutal) extra('Brutal Strike', A.brutal, 'brutal-strike', atk.type);
   for (const x of hitExtras(b, A, T, atk)) {
     if (x.dice) extra(x.label, x.dice, x.rule, x.type);
     else parts.push({ label: x.label, value: x.flat, rule: x.rule, type: x.type });
@@ -712,18 +819,32 @@ function applyDamage(b, T, amount, meta = {}) {
     if (amount <= 0) { b.post.push({ kind: 'hurt', id: T.id, dmg: soak }); return out; }
   }
   b.post.push({ kind: 'hurt', id: T.id, dmg: amount + (out.temp || 0) });
+  const burned = !!T.regen && (meta.types || []).some((ty) => ty === 'Fire' || ty === 'Acid');
+  if (burned) T.regen.blocked = true;
   if (T.hp > 0) {
     const left = T.hp - amount;
     if (left > 0) { T.hp = left; out.after = left; return out; }
     T.hp = 0;
     out.after = 0;
+    const ward = effectOn(b, 'deathward', T.id);
+    if (ward) {
+      b.effects = b.effects.filter((e) => e !== ward);
+      T.hp = 1; out.after = 1; out.deathward = true;
+      return out;
+    }
     if (T.undeadFortitude && !crit && !(meta.types || []).includes('Radiant')) {
       const dc = 5 + amount;
       const sv = savingThrow(b, T, 'con', dc);
       out.fortitude = { dc, total: sv.total, success: sv.success, d20: sv.d20, mods: sv.mods };
       if (sv.success) { T.hp = 1; out.after = 1; return out; }
     }
-    if (T.side === 'foe') { T.dead = true; out.dead = true; b.post.push({ kind: 'blessing', id: T.id, by: meta.by || null }); return out; }
+    // Regeneration (Troll): at 0 Hit Points it isn't dead yet, unless Fire or Acid has stopped it regenerating.
+    if (T.side === 'foe' && T.regen && !T.regen.blocked) {
+      out.downed = true; out.regenDown = true;
+      if (!hasCond(T, 'prone')) T.conds.push({ id: 'prone', why: 'dropped' });
+      return out;
+    }
+    if (T.side === 'foe') { T.dead = true; out.dead = true; out.burned = !!T.regen; b.post.push({ kind: 'blessing', id: T.id, by: meta.by || null }); return out; }
     if (-left >= T.hpMax) { T.dead = true; T.diedRound = b.round; out.dead = true; out.massive = true; return out; }
     if (T.relentless && !T.relentless.used) {
       T.relentless.used = true;
@@ -737,6 +858,12 @@ function applyDamage(b, T, amount, meta = {}) {
     T.stable = false;
     dropCond(T, 'hidden');
     if (!hasCond(T, 'prone')) T.conds.push({ id: 'prone', why: 'fell Unconscious' });
+    return out;
+  }
+  // A Troll at 0 HP that takes Fire or Acid won't regenerate on its turn, so it dies.
+  if (T.side === 'foe' && T.regen && !T.dead && burned) {
+    T.dead = true; out.dead = true; out.burned = true;
+    b.post.push({ kind: 'blessing', id: T.id, by: meta.by || null });
     return out;
   }
   // Already at 0 HP: damage is a failed death save (two on a Critical Hit).
@@ -756,8 +883,11 @@ function afterText(T, after) {
   if (after.fortitude?.success) return ` ${T.name} should drop, but Undead Fortitude holds it up: CON save ${after.fortitude.total} vs DC ${after.fortitude.dc}, 1 HP left.`;
   let pre = '';
   if (after.fortitude) pre = ` Undead Fortitude fails (CON save ${after.fortitude.total} vs DC ${after.fortitude.dc}).`;
+  if (after.burned) return `${pre} The Fire or Acid stops its Regeneration: ${T.name} is destroyed.`;
   if (after.dead) return `${pre}${T.side === 'foe' ? ` ${T.name} is defeated.` : ` ${T.name} dies.`}`;
+  if (after.regenDown) return ` ${T.name} drops to 0 HP but isn't dead: Regeneration brings it back on its turn, unless it takes Fire or Acid damage first.`;
   if (after.relentless) return ` ${T.name} drops to 1 HP instead of 0 (Relentless Endurance).`;
+  if (after.deathward) return ` ${T.name} drops to 1 HP instead of 0, and Death Ward ends.`;
   if (after.downed) return ` ${T.name} drops to 0 HP and falls Unconscious.`;
   if (after.deathFail) return ` ${T.name} suffers ${after.deathFail} failed death save${after.deathFail > 1 ? 's' : ''}.`;
   return pre;
@@ -785,8 +915,10 @@ function shieldWorks(b, T, total, ac, natural) {
   return !!slotFor(b, T, 'shield');
 }
 
-function attack(b, A, T0, atk, { reaction = false } = {}) {
+function attack(b, A, T0, atk, { reaction = false, why = null, oa = false } = {}) {
   const T = redirect(b, A, T0);
+  // Empowered Strikes (Monk 6): an Unarmed Strike can deal Force damage instead.
+  if (A.empoweredStrikes && atk.unarmed && damageMult(T, 'Force', b) > damageMult(T, atk.type, b)) atk = { ...atk, type: 'Force', name: `${atk.name} (Force: Empowered Strikes)` };
   if (T !== T0 && !inRange(A, T, atk)) {
     emit(b, { kind: 'note', by: A.id, text: `${T.name} is out of reach: the attack is lost.`, rule: 'redirect-attack' });
     return;
@@ -796,14 +928,25 @@ function attack(b, A, T0, atk, { reaction = false } = {}) {
   if (A.raging && hostile(A, T)) A.raging.kept = true;
   const f = attackFactors(b, A, T, atk);
   if (A.revealed) { f.adv.push({ text: `${A.name} attacked from hiding`, rule: 'hide' }); f.mode = modeFrom(f.adv, f.dis); A.revealed = false; }
+  if (oa && T.tactics === 'horde') { f.dis.push({ text: `Escape the Horde: Opportunity Attacks against ${T.name} have Disadvantage`, rule: 'escape-the-horde' }); f.mode = modeFrom(f.adv, f.dis); }
   b.effects = b.effects.filter((e) => !f.uses.includes(e));
+  // Brutal Strike (Barbarian 9): give up the Advantage of a Reckless Strength attack for +1d10 and a blow.
+  let brutal = false;
+  if (A.brutal && !reaction && b.turn?.who === A.id && A.brutalKey !== turnKey(b) && atk.ability === 'str' && !atk.spell && f.mode === 'advantage' && !f.dis.length
+    && b.effects.some((e) => e.type === 'reckless' && e.by === A.id)
+    && hitChance(hitBonus(atk) + sumParts(hitExtraParts(A, atk, b)) + sumParts(testParts(A)), acAgainst(b, A, T, atk).value, 'normal', A.luck) >= 0.55) {
+    brutal = true;
+    A.brutalKey = turnKey(b);
+    f.mode = 'normal';
+    atk = { ...atk, brutal: true };
+  }
   const d20 = rollD20(b, A, f.mode);
   const mods = [...atk.hit, ...hitExtraParts(A, atk, b), ...testParts(A)];
   const bl = blessPart(b, A);
   if (bl) mods.push(bl);
   const bn = banePart(b, A);
   if (bn) mods.push(bn);
-  const ctx = { a: A.id, t: T.id, atk, d20: { ...d20, adv: f.adv, dis: f.dis }, mode: f.mode, mods, reaction, notes: [] };
+  const ctx = { a: A.id, t: T.id, atk, d20: { ...d20, adv: brutal ? [] : f.adv, dis: f.dis }, mode: f.mode, mods, reaction, why, notes: brutal ? [{ text: 'Brutal Strike: gives up the Advantage from Reckless Attack for +1d10 damage and a blow', rule: 'brutal-strike' }] : [] };
   const ac = acAgainst(b, A, T, atk);
   let total = d20.kept + sumParts(mods);
   if (A.side === 'hero' && d20.kept < critOn(A, atk) && (d20.kept === 1 || total < ac.value)) {
@@ -836,8 +979,23 @@ function attack(b, A, T0, atk, { reaction = false } = {}) {
       ctx.notes.push({ text: `${bard.name} uses Cutting Words (Reaction, ${s1(bard.bardic.uses, 'Bardic Inspiration')} left): −${r}`, rule: 'cutting-words' });
     }
   }
+  // Parry (Knight, Warrior Veteran, Bandit Captain): a Reaction that adds to AC against one melee hit, used when it turns the hit into a miss.
+  if (T.parry && T.reaction && !incap(T) && T.hp > 0 && atk.kind === 'melee' && ctx.d20.kept !== 1 && ctx.d20.kept < critOn(A, atk) && total >= ac.value && total < ac.value + T.parry) {
+    T.reaction = false;
+    ctx.parry = T.parry;
+    ctx.notes.push({ text: `${T.name} parries (Reaction): +${T.parry} AC against this attack`, rule: 'parry' });
+  }
+  // Protective Magic (Mage): a stat-block Shield, cast without a prompt when +5 AC turns the hit into a miss.
+  const ks = T.side === 'foe' ? T.casting?.known?.shield : null;
+  if (ks?.free > 0 && T.reaction && !incap(T) && T.hp > 0 && !ctx.parry && ctx.d20.kept !== 1 && ctx.d20.kept < critOn(A, atk) && total >= ac.value && total < ac.value + 5) {
+    T.reaction = false;
+    ks.free--;
+    b.effects.push({ type: 'shield', by: T.id, target: T.id, expires: { when: 'start', who: T.id } });
+    emit(b, { kind: 'cast', by: T.id, spell: 'shield', level: 1, slot: 1, pay: 'free', reaction: true, rule: 'shield',
+      text: `${T.name} casts Shield as a Reaction (${ks.free} left today): +5 AC until the start of its next turn.` });
+  }
   ctx.total = total;
-  if (d20.kept < critOn(A, atk) && ctx.d20.kept !== 1 && total >= ac.value && shieldWorks(b, T, total, ac.value, ctx.d20.kept)) {
+  if (d20.kept < critOn(A, atk) && ctx.d20.kept !== 1 && total >= ac.value + (ctx.parry || 0) && shieldWorks(b, T, total, ac.value, ctx.d20.kept)) {
     flushMove(b);
     b.pending = { kind: 'shield', reactor: T.id, attacker: A.id, ctx, total, ac: ac.value };
     emit(b, { kind: 'prompt', by: T.id, target: A.id, text: `${A.name}'s attack (${total}) would hit ${T.name} (AC ${ac.value}).`, rule: 'shield' });
@@ -849,7 +1007,8 @@ function attack(b, A, T0, atk, { reaction = false } = {}) {
 function finishAttack(b, ctx) {
   const A = C(b, ctx.a), T = C(b, ctx.t), atk = ctx.atk;
   const d20 = ctx.d20, total = ctx.total;
-  const ac = acAgainst(b, A, T, atk);
+  const ac0 = acAgainst(b, A, T, atk);
+  const ac = ctx.parry ? { value: ac0.value + ctx.parry, parts: [...ac0.parts, { label: 'Parry', value: ctx.parry, rule: 'parry' }] } : ac0;
   let outcome;
   if (d20.kept >= critOn(A, atk)) outcome = 'crit';
   else if (d20.kept === 1) outcome = 'fumble';
@@ -985,6 +1144,9 @@ function finishAttack(b, ctx) {
     if (atk.rider?.prone && alive && SIZE[T.size || 'medium'] <= SIZE[atk.rider.prone] && !hasCond(T, 'prone')) {
       if (addCond(b, T, { id: 'prone', by: A.id })) rider = { text: `${T.name} is knocked Prone.`, rule: 'prone' };
     }
+    if (atk.rider?.poison && alive && !hasCond(T, 'poisoned')) {
+      if (addCond(b, T, { id: 'poisoned', by: A.id, endsOn: { when: 'end', who: T.id, skip: b.turn?.who === T.id ? 1 : 0 }, rule: 'poisoned' })) rider = { text: `${T.name} is Poisoned until the end of its next turn.`, rule: 'poisoned' };
+    }
     if (atk.rider?.paralyze && alive && T.creature !== 'undead' && !(atk.rider.paralyze.notElf && T.speciesId === 'elf') && !hasCond(T, 'paralyzed')) {
       const dc = atk.rider.paralyze.dc;
       const sv = savingThrow(b, T, 'con', dc, { cond: 'paralyzed' });
@@ -995,6 +1157,18 @@ function finishAttack(b, ctx) {
       if (addCond(b, T, { id: 'grappled', by: A.id, dc: atk.rider.grapple, reach: atk.reach || 5 })) {
         rider = { text: `${T.name} is Grappled (escape DC ${atk.rider.grapple}): Speed 0, and Disadvantage on attacks against anyone but ${A.name}.`, rule: 'grappled' };
       }
+    }
+    if (atk.brutal && alive) {
+      const more = b.turn?.who === A.id && b.turn.attacksLeft > 0;
+      const ft = more ? 0 : push(b, A, T, 15);
+      let blow;
+      if (ft) { blow = `Brutal Strike (Forceful Blow): ${T.name} is pushed ${ft} feet away.`; tidy(b); }
+      else {
+        b.effects = b.effects.filter((e) => !(e.type === 'hamstrung' && e.target === T.id));
+        b.effects.push({ type: 'hamstrung', by: A.id, target: T.id, expires: { when: 'start', who: A.id } });
+        blow = `Brutal Strike (Hamstring Blow): ${T.name}'s Speed drops by 15 feet until the start of ${A.name}'s next turn.`;
+      }
+      rider = rider ? { text: `${rider.text} ${blow}`, rule: rider.rule } : { text: blow, rule: 'brutal-strike' };
     }
     // Stunning Strike (Monk 5): once per turn, 1 Focus Point, on a Monk weapon or Unarmed Strike hit.
     if (A.stunningStrike && alive && atk.monk && A.focus?.uses > 0 && A.stunKey !== turnKey(b) && !hasCond(T, 'stunned') && !(T.condImmune || []).includes('stunned')) {
@@ -1023,7 +1197,7 @@ function finishAttack(b, ctx) {
   let text = `${A.name} ${verb} ${T.name} with ${atk.name}`;
   if (damage) text += `${damage.potent ? ', but Potent Cantrip deals' : damage.graze ? ', but Graze deals' : ' for'} ${damage.total} ${damage.type} damage${adjustText(damage)}`;
   if (deflect) text += ` (${deflect.from} before Deflect Attacks)`;
-  text += ctx.reaction ? ' (Opportunity Attack).' : '.';
+  text += ctx.reaction ? ` (${ctx.why || 'Opportunity Attack'}).` : '.';
   text += afterText(T, after);
   if (rider && hit) text += ` ${rider.text}`;
   emit(b, {
@@ -1032,6 +1206,18 @@ function finishAttack(b, ctx) {
     outcome, notes, damage, after, mastery, rider, text,
     rule: ctx.reaction ? 'opportunity-attack' : atk.spell ? 'spell-attack' : 'attack-roll',
   });
+  // Multiattack Defense (Hunter 7): +4 AC against this attacker for the rest of the turn.
+  if (hit && T.tactics === 'multi' && !T.dead && !b.effects.some((e) => e.type === 'madef' && e.by === T.id && e.target === A.id)) {
+    b.effects.push({ type: 'madef', by: T.id, target: A.id, expires: { when: 'end', who: b.turn?.who || A.id } });
+  }
+  // Fire Shield (warm): a creature within 5 feet that hits with a melee attack takes 2d8 Fire.
+  if (hit && atk.kind === 'melee' && effectOn(b, 'fireshield', T.id) && cheb(A, T) <= 1 && !A.dead && !b.over) {
+    const r = rollDice(b.rng, 2, 8);
+    const dmg = finishDamage(A, [{ label: 'Fire Shield 2d8', rolls: r, value: sum(r), rule: 'fire-shield', type: 'Fire' }]);
+    const after = applyDamage(b, A, dmg.total, { types: ['Fire'], by: T.id });
+    emit(b, { kind: 'note', by: T.id, target: A.id, rule: 'fire-shield', damage: dmg, after,
+      text: `Fire Shield: flames lash ${A.name} for 2d8 (${r.join(' + ')}) = ${dmg.total} Fire damage${adjustText(dmg)}.${afterText(A, after)}` });
+  }
   if (deflect?.back && !b.over) {
     areaSave(b, T, [A], { name: 'Deflect Attacks (sent back)', ability: 'dex', dcParts: T.focusDc, dice: `2d${parseDice(T.martialDie).sides}`, flat: T.mods.dex, type: atk.type, half: false, rule: 'deflect-attacks' });
   }
@@ -1114,8 +1300,13 @@ export function scaled(sid, slot, lvl = 1) {
     const a = parseDice(dice);
     dice = `${a.n * tier}d${a.sides}`;
   }
+  let also = s.also ? { ...s.also } : null;
+  if (also && up.also && k) {
+    const a = parseDice(also.dice), u = parseDice(up.also);
+    also.dice = `${a.n + u.n * k}d${a.sides}`;
+  }
   return {
-    dice, beams, darts: (s.darts || 0) + (up.darts || 0) * k, rays: (s.rays || 0) + (up.rays || 0) * k,
+    dice, also, beams, darts: (s.darts || 0) + (up.darts || 0) * k, rays: (s.rays || 0) + (up.rays || 0) * k,
     targets: (s.targets || 1) + (up.targets || 0) * k, amount: (s.amount || 0) + (up.amount || 0) * k,
     flat: (s.flat || 0) + (up.flat || 0) * k,
   };
@@ -1155,10 +1346,14 @@ export function canCast(b, A, sid, want = 0, meta = null) {
   if (s.again && A.conc?.spell === sid && A.conc.key !== turnKey(b)) return { ok: true, pay: 'again', slot: A.conc.slot || s.level, time: 'action' };
   if (s.again && A.conc?.spell === sid) return { ok: false, error: `${s.name} is going: use it again on a later turn.` };
   if (k.atWill && !(want > s.level)) return { ok: true, pay: 'atwill', slot: s.level, time };
-  if (k.free > 0 && !(want > s.level && slotFor(b, A, sid, want))) return { ok: true, pay: 'free', slot: s.level, time };
+  if (k.free > 0 && !(want > s.level && slotFor(b, A, sid, want))) return { ok: true, pay: 'free', slot: k.atLevel || s.level, time };
   if (k.perDay) return { ok: false, error: `No uses of ${s.name} left today.` };
-  if (A.slotKey === turnKey(b)) return { ok: false, error: 'You can expend only one spell slot per turn.' };
+  // Divine Intervention (Cleric 10): once per Long Rest, a Cleric spell of level 5 or lower with no slot.
+  const di = A.intervention?.uses > 0 && A.cls === 'cleric' && s.level <= 5;
+  if (di && meta === 'intervene' && !quick) return { ok: true, pay: 'intervene', slot: s.level, time };
+  if (A.slotKey === turnKey(b)) return di ? { ok: true, pay: 'intervene', slot: s.level, time } : { ok: false, error: 'You can expend only one spell slot per turn.' };
   const lv = slotFor(b, A, sid, want);
+  if (!lv && di && !quick) return { ok: true, pay: 'intervene', slot: s.level, time };
   if (!lv) return { ok: false, error: want > s.level ? `No level ${want}+ spell slots left.` : 'No spell slots left.' };
   return { ok: true, pay: 'slot', slot: lv, time };
 }
@@ -1166,7 +1361,7 @@ export function canCast(b, A, sid, want = 0, meta = null) {
 // Metamagic (Sorcerer 2): which options fit this spell. Returns an error or null.
 const TRANSMUTE = ['Acid', 'Cold', 'Fire', 'Lightning', 'Poison', 'Thunder'];
 export function metaError(b, A, sid, meta) {
-  if (!meta) return null;
+  if (!meta || meta === 'intervene') return null;
   const s = SPELLS[sid], M = METAMAGIC[meta];
   if (!M || !(A.metamagic || []).includes(meta)) return "You don't know that Metamagic option.";
   if (!A.sorcery || A.sorcery.uses < M.cost) return `${M.name} costs ${s1(M.cost, 'Sorcery Point')}; you have ${A.sorcery?.uses || 0}.`;
@@ -1271,12 +1466,13 @@ export function targetError(b, A, X, sid, aim = spellAim(sid)) {
     if (!lineOfSight(b, A, X)) return `You can't see ${X.name}: a wall is in the way.`;
   }
   if (s.only && X.creature !== s.only) return `${s.name} only works on a ${s.only[0].toUpperCase()}${s.only.slice(1)}.`;
+  if (s.notOn?.includes(X.creature)) return `${s.name} has no effect on ${X.creature === 'undead' ? 'Undead' : `a ${X.creature[0].toUpperCase()}${X.creature.slice(1)}`}.`;
   if (s.kind === 'armor') {
     if (hostile(A, X)) return 'Mage Armor needs a willing creature.';
     if (X.armorId !== 'none') return `${X.name} is wearing armor, so Mage Armor does nothing.`;
     if (X.mageArmor) return `${X.name} already has Mage Armor.`;
   }
-  if (s.kind === 'cure' && !(X.conds || []).some((c) => s.cures.includes(c.id))) return `${X.name} has nothing ${s.name} can end.`;
+  if (s.kind === 'cure' && !(X.conds || []).some((c) => s.cures.includes(c.id)) && !(s.greater && (X.exhaustion > 0 || X.drained > 0))) return `${X.name} has nothing ${s.name} can end.`;
   if ((s.kind === 'buff' || s.kind === 'stride') && hostile(A, X)) return `${s.name} needs a willing creature.`;
   return null;
 }
@@ -1369,35 +1565,52 @@ function saveRider(b, A, T, rider) {
 }
 
 function areaSave(b, A, targets, { name, ability, dcParts, dice, flat = 0, flatLabel = 'DEX modifier', type, half, rule, cantrip = false, ignoreCover = false, push: pushFt = 0, from = null,
-  rider = null, careful = [], heighten = null, empower = 0 }) {
+  rider = null, careful = [], heighten = null, empower = 0, also = null, bonus = [], bonus2 = [], sculpt = [], cond = null }) {
   const dc = sumParts(dcParts);
   const { n, sides } = parseDice(dice);
   const rolls = rollDice(b.rng, n, sides);
   const emp = empower ? empowerRolls(b, rolls, sides, empower) : null;
-  const full = sum(rolls) + flat;
+  const full = sum(rolls) + flat + sumParts(bonus);
+  // A second damage type rolled alongside (Ice Storm, Flame Strike).
+  const rolls2 = also ? rollDice(b.rng, parseDice(also.dice).n, parseDice(also.dice).sides) : null;
+  const full2 = also ? sum(rolls2) + sumParts(bonus2) : 0;
   const results = [];
   for (const T of targets) {
+    const sculpted = sculpt.includes(T.id);
     const cover = ignoreCover ? null : coverBetween(b, from || A, T);
-    const sv = savingThrow(b, T, ability, dc, { cover, careful: careful.includes(T.id),
-      extraDis: heighten === T.id ? [{ text: 'Heightened Spell', rule: 'metamagic' }] : [] });
-    let raw = sv.success ? (half && !sv.careful ? Math.floor(full / 2) : 0) : full;
+    const sv = sculpted ? { target: T.id, auto: 'success', success: true, mods: [], total: dc, d20: null, sculpt: true, note: 'Sculpt Spells: succeeds automatically' }
+      : savingThrow(b, T, ability, dc, { cover, cond, careful: careful.includes(T.id),
+        extraDis: heighten === T.id ? [{ text: 'Heightened Spell', rule: 'metamagic' }] : [] });
+    // Evasion (Monk, Rogue 7): no damage on a success, half on a failure.
+    const evade = !sculpted && !sv.careful && T.evasion && ability === 'dex' && half && !incap(T);
+    const portion = (v) => {
+      if (sculpted || sv.careful) return 0;
+      if (sv.success) return half && !evade ? Math.floor(v / 2) : 0;
+      return evade ? Math.floor(v / 2) : v;
+    };
+    let raw = portion(full);
     let potent = false;
-    if (sv.success && cantrip && A.potentCantrip && !half && !sv.careful) { raw = Math.floor(full / 2); potent = true; }
-    const dmg = finishDamage(T, [{ label: name, value: raw, type }]);
-    const after = applyDamage(b, T, dmg.total, { types: [type], by: A.id });
+    if (sv.success && cantrip && A.potentCantrip && !half && !sv.careful && !sculpted) { raw = Math.floor(full / 2); potent = true; }
+    const parts = [{ label: name, value: raw, type }];
+    if (also) parts.push({ label: `${name} (${also.type})`, value: portion(full2), type: also.type });
+    const dmg = finishDamage(T, parts);
+    const after = applyDamage(b, T, dmg.total, { types: dmg.types, by: A.id });
     let pushed = 0;
     if (!sv.success && pushFt && !T.dead && T.hp > 0) pushed = push(b, A, T, pushFt);
     const extra = !sv.success ? saveRider(b, A, T, rider) : '';
+    const how = sculpted ? ' automatically (Sculpt Spells)' : sv.careful ? ' automatically (Careful Spell)' : sv.auto ? ' automatically' : ` (${sv.total}${sv.note ? `; ${sv.note}` : ''})`;
     results.push({
       ...sv, damage: dmg.total, adjust: dmg.adjust, after, pushed, potent,
-      text: `${T.name} ${sv.success ? 'succeeds' : 'fails'}${sv.careful ? ' automatically (Careful Spell)' : sv.auto ? ' automatically' : ` (${sv.total})`}: ${dmg.total} damage${adjustText(dmg)}${potent ? ' (Potent Cantrip: half on a success)' : ''}${pushed ? `, pushed ${pushed} ft` : ''}.${afterText(T, after)}${extra}`,
+      text: `${T.name} ${sv.success ? 'succeeds' : 'fails'}${how}: ${dmg.total} damage${adjustText(dmg)}${evade ? ' (Evasion)' : ''}${potent ? ' (Potent Cantrip: half on a success)' : ''}${pushed ? `, pushed ${pushed} ft` : ''}.${afterText(T, after)}${extra}`,
     });
   }
   const hits = results.map((r) => `${C(b, r.target).name} ${r.damage}`).join(', ');
-  const parts = [{ label: `${name} ${dice}`, rolls, value: sum(rolls), rule, gwf: emp }];
+  const parts = [{ label: `${name} ${dice}`, rolls, value: sum(rolls), rule, gwf: emp, type }];
   if (flat) parts.push({ label: flatLabel, value: flat, rule: flatLabel === 'DEX modifier' ? 'ability-modifier' : 'stat-block' });
+  parts.push(...bonus);
+  if (also) parts.push({ label: `${name} ${also.dice} (${also.type})`, rolls: rolls2, value: sum(rolls2), rule, type: also.type }, ...bonus2);
   emit(b, {
-    kind: 'save-spell', by: A.id, what: name, ability, dc, dcParts, damage: { parts, total: full, type },
+    kind: 'save-spell', by: A.id, what: name, ability, dc, dcParts, damage: { parts, total: full + full2, type: also ? `${type} and ${also.type}` : type },
 
     half, results, rule,
     text: targets.length ? `${A.name} uses ${name}: DC ${dc} ${ABILITY_NAMES[ability]} save. ${hits ? `Damage: ${hits}.` : ''}` : `${A.name} uses ${name}, but nobody is caught in it.`,
@@ -1406,22 +1619,43 @@ function areaSave(b, A, targets, { name, ability, dcParts, dice, flat = 0, flatL
   checkOver(b);
 }
 
+// Flat bonuses to one damage roll of a spell: Empowered Evocation (Wizard 10),
+// Elemental Affinity (Draconic Sorcerer 6) and Potent Spellcasting (Cleric, Druid 7).
+function spellBonus(A, sid, type) {
+  const s = SPELLS[sid];
+  const out = [];
+  if (!s) return out;
+  if (A.empEvocation && A.cls === 'wizard' && EVOCATION.includes(sid)) out.push({ label: 'Empowered Evocation (INT modifier)', value: A.empEvocation, rule: 'empowered-evocation', type });
+  if (A.affinity && A.affinity === type) out.push({ label: 'Elemental Affinity (CHA modifier)', value: A.mods.cha, rule: 'elemental-affinity', type });
+  if (A.potentSpell && s.level === 0) out.push({ label: 'Potent Spellcasting (WIS modifier)', value: A.mods.wis, rule: 'potent-spellcasting', type });
+  return out;
+}
+
 // A save against a condition (Command, Hold Person, Web, Turn Undead).
 function condSave(b, A, T, ability, dc, rule, cond = null, heighten = null) {
   const cover = ability === 'dex' ? coverBetween(b, A, T) : null;
   return savingThrow(b, T, ability, dc, { cover, cond, extraDis: heighten === T.id ? [{ text: 'Heightened Spell', rule: 'metamagic' }] : [] });
 }
 
-function heal(b, A, T, amount, what, rule, roll, mods) {
+// most: the largest amount the dice could give (Beacon of Hope heals that much).
+function heal(b, A, T, amount, what, rule, roll, mods, most = null) {
   const before = T.hp;
   if (b.effects.some((e) => e.type === 'grave' && e.target === T.id)) {
     emit(b, { kind: 'note', by: A.id, target: T.id, text: `${T.name} can't regain Hit Points right now (Chill Touch).`, rule: 'chill-touch' });
-    return;
+    return 0;
   }
+  const beacon = most != null && most > amount && effectOn(b, 'beacon', T.id);
+  if (beacon) amount = most;
   T.hp = Math.min(T.hpMax, T.hp + amount);
   if (before === 0 && T.hp > 0) { T.deathSaves = { s: 0, f: 0 }; T.stable = false; }
   emit(b, { kind: 'heal', by: A.id, target: T.id, what, roll, mods, total: amount, before, after: T.hp,
-    text: `${T.name} regains ${T.hp - before} HP${before === 0 && T.hp > 0 ? ' and is conscious again (still Prone)' : ''}.`, rule });
+    text: `${T.name} regains ${T.hp - before} HP${beacon ? ' (Beacon of Hope: the most the dice could give)' : ''}${before === 0 && T.hp > 0 ? ' and is conscious again (still Prone)' : ''}.`, rule: beacon ? 'beacon-of-hope' : rule });
+  return T.hp - before;
+}
+// Blessed Healer (Life Cleric 6): healing someone else with a slot heals the cleric 2 + the slot level.
+function blessedHealer(b, A, targets, can) {
+  if (!A.blessedHealer || can.pay !== 'slot' || !targets.some((X) => X !== A) || A.dead || A.hp <= 0) return;
+  heal(b, A, A, 2 + can.slot, 'Blessed Healer', 'blessed-healer', { label: `2 + slot level ${can.slot}`, rolls: [] }, []);
 }
 
 // The damage type a spell deals: its own, or the one the target is weakest to
@@ -1477,14 +1711,18 @@ function castSpell(b, A, intent) {
     A.slotKey = turnKey(b);
     paid = ` (level ${can.slot} spell slot${can.slot > s.level ? `, cast at a higher level` : ''}; ${A.casting.slots[can.slot].left} left)`;
   }
+  if (can.pay === 'intervene') {
+    A.intervention.uses--;
+    paid = ' through Divine Intervention (no spell slot; once per Long Rest)';
+  }
   if (hasCond(A, 'hidden')) dropCond(A, 'hidden');
   let metaText = '';
-  if (meta) {
+  if (meta && METAMAGIC[meta]) {
     const M = METAMAGIC[meta];
     A.sorcery.uses -= M.cost;
     metaText = ` ${M.name}: ${s1(M.cost, 'Sorcery Point')} (${A.sorcery.uses} left).`;
   }
-  emit(b, { kind: 'cast', by: A.id, spell: sid, level: s.level, slot: can.slot, pay: can.pay, rule: s.level ? 'spell-slots' : 'cantrips', meta,
+  emit(b, { kind: 'cast', by: A.id, spell: sid, level: s.level, slot: can.slot, pay: can.pay, rule: can.pay === 'intervene' ? 'divine-intervention' : s.level ? 'spell-slots' : 'cantrips', meta,
     targets: aim.targets, point: aim.point || null,
     text: `${A.name} casts ${s.name}${s.level === 0 ? ' (a cantrip: no slot needed)' : paid}${can.time !== s.time ? ' as a Bonus Action' : ''}.${metaText}` });
   if (s.conc && can.pay !== 'again') {
@@ -1502,19 +1740,26 @@ function castSpell(b, A, intent) {
   // Careful Spell: up to CHA modifier allies (you too) in the area are spared.
   const careful = meta === 'careful' ? targets.filter((X) => !hostile(A, X)).slice(0, Math.max(1, A.mods.cha)).map((X) => X.id) : [];
   const sopts = { distant: meta === 'distant', seeking: meta === 'seeking', empowered: empower, type: dmgType };
+  const bonus = spellBonus(A, sid, dmgType);
+  const bonus2 = sc.also ? spellBonus(A, sid, sc.also.type).filter((x) => x.rule === 'elemental-affinity' && !bonus.some((y) => y.rule === x.rule)) : [];
+  // Sculpt Spells (Evoker 6): up to 1 + the spell's level of allies in an Evocation spell save and take nothing.
+  const sculpt = A.sculpt && EVOCATION.includes(sid) && s.area ? targets.filter((X) => !hostile(A, X)).slice(0, 1 + s.level).map((X) => X.id) : [];
+  const firstFlat = { ...sopts, flat: bonus };
 
   switch (s.kind) {
     case 'attack':
       if (sc.beams > 1) {
         emit(b, { kind: 'note', by: A.id, text: `${sc.beams} beams: one spell attack roll each.`, rule: 'cantrips' });
+        let first = true;
         for (const X of targets) {
           if (b.over || !X || X.dead || !onBoard(X)) continue;
-          attack(b, A, X, { ...spellAttack(A, sid, sopts), dice: sc.dice });
+          attack(b, A, X, { ...spellAttack(A, sid, first ? firstFlat : sopts), dice: sc.dice });
+          first = false;
           if (b.pending) break;
         }
-      } else attack(b, A, T, { ...spellAttack(A, sid, sopts), dice: sc.dice });
+      } else attack(b, A, T, { ...spellAttack(A, sid, firstFlat), dice: sc.dice });
       break;
-    case 'save': areaSave(b, A, [T], { name: s.name, ability: s.save, dcParts, dice: sc.dice, type: dmgType, half: !!s.half, rule: sid, cantrip: s.level === 0, ignoreCover: !!s.noCover, rider: s.rider || null, heighten, empower }); break;
+    case 'save': areaSave(b, A, [T], { name: s.name, ability: s.save, dcParts, dice: sc.dice, type: dmgType, half: !!s.half, rule: sid, cantrip: s.level === 0, ignoreCover: !!s.noCover, rider: s.rider || null, heighten, empower, bonus }); break;
     case 'area': {
       const from = s.area.from === 'self' ? A : aim.point;
       if (s.cond) { condArea(b, A, sid, targets, { dc, dcParts, from, careful, heighten }); break; }
@@ -1537,7 +1782,7 @@ function castSpell(b, A, intent) {
         if (!caught) endConc(b, A, 'nobody is affected');
       } else {
         areaSave(b, A, targets, { name: s.name, ability: s.save, dcParts, dice: sc.dice, type: dmgType, half: !!s.half, rule: sid, push: s.push || 0, ignoreCover: !!s.noCover, from,
-          careful, heighten, empower, cantrip: s.level === 0 });
+          careful, heighten, empower, cantrip: s.level === 0, also: sc.also, bonus, bonus2, sculpt });
       }
       break;
     }
@@ -1549,10 +1794,12 @@ function castSpell(b, A, intent) {
         if (!per.has(X.id)) per.set(X.id, []);
         per.get(X.id).push({ rolls: r, value: r[0] + sc.flat });
       }
+      let extraB = sumParts(bonus);
       for (const [id, darts] of per) {
         const X = C(b, id);
         if (X.dead || !onBoard(X)) continue;
-        const raw = sum(darts.map((d) => d.value));
+        const raw = sum(darts.map((d) => d.value)) + extraB;
+        if (extraB) { darts.push({ rolls: [], value: extraB, label: bonus.map((x) => x.label).join(', ') }); extraB = 0; }
         const dmg = finishDamage(X, [{ label: s.name, value: raw, type: s.type }]);
         const after = applyDamage(b, X, dmg.total, { types: [s.type], by: A.id });
         emit(b, { kind: 'missile', by: A.id, target: X.id, darts, total: dmg.total, type: s.type, after, rule: 'magic-missile',
@@ -1565,10 +1812,12 @@ function castSpell(b, A, intent) {
     case 'rays': {
       emit(b, { kind: 'note', by: A.id, text: `${sc.rays} rays of fire: one spell attack roll each.`, rule: 'scorching-ray' });
       let seeking = meta === 'seeking';
+      let first = true;
       for (const X of targets) {
         if (b.over || !X || X.dead || !onBoard(X)) continue;
         const before = b.seq;
-        attack(b, A, X, spellAttack(A, sid, { ...sopts, seeking }));
+        attack(b, A, X, spellAttack(A, sid, { ...(first ? firstFlat : sopts), seeking }));
+        first = false;
         if (seeking && b.log.some((r) => r.seq > before && r.notes?.some((x) => x.rule === 'metamagic'))) seeking = false;
         if (b.pending) break;
       }
@@ -1580,7 +1829,8 @@ function castSpell(b, A, intent) {
       const mods = [{ label: 'Spellcasting modifier', value: spellMod(A, sid) }];
       if (A.discipleOfLife && can.pay === 'slot') mods.push({ label: `Disciple of Life (2 + slot level ${can.slot})`, value: 2 + can.slot, rule: 'disciple-of-life' });
       const amount = Math.max(0, sum(rolls) + sumParts(mods));
-      heal(b, A, T, amount, s.name, sid, { label: sc.dice, rolls }, mods);
+      heal(b, A, T, amount, s.name, sid, { label: sc.dice, rolls }, mods, n * sides + sumParts(mods));
+      blessedHealer(b, A, [T], can);
       break;
     }
     case 'stabilize':
@@ -1643,6 +1893,10 @@ function castSpell(b, A, intent) {
           dbreath: `can exhale ${breathType} as a Magic action: a 15-foot Cone, DC ${dc} Dexterity save, ${sc.dice} damage (half on a success), ${keep}.`,
           haste: `Speed doubled, +2 Armor Class, Advantage on Dexterity saves, and one extra action each turn (one weapon attack, Dash, Disengage or Hide), ${keep}. When it ends: a turn of lethargy.`,
           magicweapon: `weapons are magic for 1 hour: +${can.slot >= 6 ? 3 : can.slot >= 4 ? 2 : 1} to attack and damage rolls (no Concentration).`,
+          beacon: `Advantage on Wisdom saves and death saves, and any healing gives them the most Hit Points it could, ${keep}.`,
+          invis: `Invisible: attack rolls against them have Disadvantage and theirs have Advantage, ${keep}.`,
+          stoneskin: `Resistance to Bludgeoning, Piercing and Slashing damage, ${keep}.`,
+          deathward: 'the first time they would drop to 0 Hit Points in the next 8 hours, they drop to 1 instead and the spell ends (no Concentration).',
         }[s.buff] || 'blessed.';
         emit(b, { kind: 'note', by: A.id, text: `${names(targets)}: ${text}`, rule: sid });
       }
@@ -1653,9 +1907,12 @@ function castSpell(b, A, intent) {
       const e = { type: s.buff, by: A.id, target: A.id, expires: { when: 'never' } };
       if (s.conc) e.conc = A.id;
       b.effects.push(e);
-      emit(b, { kind: 'note', by: A.id, rule: sid, text: s.buff === 'favor'
-        ? `${A.name}'s weapon attacks deal an extra 1d4 Radiant damage on a hit for 1 minute.`
-        : `${A.name}'s body blurs: attack rolls against them have Disadvantage while they keep Concentration.` });
+      emit(b, { kind: 'note', by: A.id, rule: sid, text: {
+        favor: `${A.name}'s weapon attacks deal an extra 1d4 Radiant damage on a hit for 1 minute.`,
+        blur: `${A.name}'s body blurs: attack rolls against them have Disadvantage while they keep Concentration.`,
+        fireshield: `Warm flames wrap ${A.name} for 10 minutes: Resistance to Cold damage, and a creature within 5 feet that hits them with a melee attack takes 2d8 Fire damage.`,
+        auralife: `A 30-foot aura of life around ${A.name}: allies in it have Resistance to Necrotic damage, and an ally at 0 Hit Points who starts a turn in it regains 1 Hit Point, while ${A.name} keeps Concentration.`,
+      }[s.buff] || `${A.name} is protected.` });
       break;
     }
     case 'mark': {
@@ -1681,8 +1938,17 @@ function castSpell(b, A, intent) {
 
     case 'cure': {
       const x = T.conds.find((y) => s.cures.includes(y.id) && (!intent.cond || y.id === intent.cond)) || T.conds.find((y) => s.cures.includes(y.id));
-      T.conds = T.conds.filter((y) => y !== x);
-      emit(b, { kind: 'note', by: A.id, target: T.id, text: `${T.name} is no longer ${COND_NAMES[x.id]}.`, rule: sid });
+      if (x) {
+        T.conds = T.conds.filter((y) => y !== x);
+        emit(b, { kind: 'note', by: A.id, target: T.id, text: `${T.name} is no longer ${COND_NAMES[x.id]}.`, rule: sid });
+      } else if (T.drained > 0) {
+        T.hpMax += T.drained;
+        emit(b, { kind: 'note', by: A.id, target: T.id, text: `${T.name}'s Hit Point maximum comes back by ${T.drained} to ${T.hpMax}.`, rule: sid });
+        T.drained = 0;
+      } else {
+        T.exhaustion = Math.max(0, (T.exhaustion || 0) - 1);
+        emit(b, { kind: 'note', by: A.id, target: T.id, text: `${T.name}'s Exhaustion drops by 1 (now ${T.exhaustion}).`, rule: sid });
+      }
       break;
     }
     case 'teleport': {
@@ -1709,7 +1975,7 @@ function castSpell(b, A, intent) {
       let held = 0;
       for (const X of targets) {
         const sv = condSave(b, A, X, 'wis', dc, sid, null, heighten);
-        if (!sv.success) { held++; addCond(b, X, { id: 'paralyzed', by: A.id, conc: A.id, saveEnds: { ability: 'wis', dc }, rule: 'hold-person' }); }
+        if (!sv.success) { held++; addCond(b, X, { id: 'paralyzed', by: A.id, conc: A.id, saveEnds: { ability: 'wis', dc }, rule: sid }); }
         results.push({ ...sv, damage: 0, text: `${X.name} ${sv.success ? 'succeeds' : 'fails'} (${sv.total})${sv.success ? '' : ': Paralyzed, saving again at the end of each of its turns'}.` });
       }
       emit(b, { kind: 'save-spell', by: A.id, what: s.name, ability: 'wis', dc, dcParts, damage: null, half: false, rule: sid, results,
@@ -1731,7 +1997,8 @@ function castSpell(b, A, intent) {
       if (A.discipleOfLife && can.pay === 'slot') mods.push({ label: `Disciple of Life (2 + slot level ${can.slot})`, value: 2 + can.slot, rule: 'disciple-of-life' });
       const amount = Math.max(0, sum(rolls) + sumParts(mods));
       emit(b, { kind: 'note', by: A.id, rule: sid, text: `${s.name}: ${sc.dice} (${rolls.join(' + ')}) + ${sumParts(mods)} = ${amount} Hit Points for each of ${names(targets)}.` });
-      for (const X of targets) heal(b, A, X, amount, s.name, sid, { label: sc.dice, rolls }, mods);
+      for (const X of targets) heal(b, A, X, amount, s.name, sid, { label: sc.dice, rolls }, mods, n * sides + sumParts(mods));
+      blessedHealer(b, A, targets, can);
       break;
     }
     case 'revive': {
@@ -1764,6 +2031,8 @@ const ZONES = {
   guardians: { on: ['enter', 'end'], foesOnly: true, difficult: true },
   stink: { on: ['start'] },
   sleet: { on: ['enter', 'start'], difficult: true },
+  plague: { on: ['enter', 'end'], difficult: true, onCast: true },
+  kill: { on: ['enter', 'end'], onCast: true },
 };
 function startZone(b, A, sid, aim, sc, dcParts) {
   const s = SPELLS[sid];
@@ -1774,8 +2043,16 @@ function startZone(b, A, sid, aim, sc, dcParts) {
     r: sqOf(s.area.size), dice: sc.dice || null, dcParts, dc: sumParts(dcParts), save: s.save, dmgType: s.type || null, half: !!s.half,
     foesOnly: !!Z.foesOnly, difficult: !!Z.difficult, on: Z.on, hits: {}, expires: { when: 'never' } });
   const where = at ? `a ${s.area.size}-foot-radius Sphere` : `a ${s.area.size}-foot Emanation around ${A.name}`;
-  const when = { guardians: 'enters it or ends its turn there', stink: 'starts its turn in it', sleet: 'enters it or starts its turn there' }[s.zone];
+  const when = { guardians: 'enters it or ends its turn there', stink: 'starts its turn in it', sleet: 'enters it or starts its turn there',
+    plague: 'is in it now, enters it or ends its turn there', kill: 'is in it now, enters it or ends its turn there' }[s.zone];
   emit(b, { kind: 'note', by: A.id, rule: sid, text: `${s.name} fills ${where}. Each ${s.zone === 'guardians' ? 'enemy' : 'creature'} that ${when} makes a DC ${sumParts(dcParts)} ${ABILITY_NAMES[s.save]} save.` });
+  // Insect Plague and Cloudkill: everyone inside saves as the spell appears.
+  if (Z.onCast) {
+    const e = b.effects[b.effects.length - 1];
+    const inside = Object.values(b.creatures).filter((X) => zoneAffects(b, e, X) && inZone(b, e, X));
+    for (const X of inside) e.hits[X.id] = turnKey(b);
+    if (inside.length) areaSave(b, A, inside, { name: s.name, ability: e.save, dcParts, dice: e.dice, type: e.dmgType, half: e.half, rule: sid, ignoreCover: true });
+  }
 }
 const zoneCenter = (b, e) => (e.follow ? C(b, e.follow) : e);
 function inZoneAt(b, e, c, p) {
@@ -1838,6 +2115,7 @@ const EFFECT_SPELL = {
   bless: 'bless', faith: 'shield-of-faith', heroism: 'heroism', pfe: 'protection-from-evil-and-good', bark: 'barkskin', dbreath: 'dragons-breath',
   haste: 'haste', magicweapon: 'magic-weapon', bane: 'bane', outlined: 'faerie-fire', favor: 'divine-favor', blur: 'blur', stride: 'longstrider',
   shield: 'shield', guided: 'guiding-bolt', mocked: 'vicious-mockery', grave: 'chill-touch', chill: 'ray-of-frost', shocked: 'shocking-grasp', wisp: 'starry-wisp',
+  beacon: 'beacon-of-hope', invis: 'greater-invisibility', stoneskin: 'stoneskin', deathward: 'death-ward', fireshield: 'fire-shield', auralife: 'aura-of-life',
 };
 function dispelOn(b, A, T, slot) {
   const ended = new Set();
@@ -1885,7 +2163,7 @@ function condArea(b, A, sid, targets, { dc, dcParts, from, careful = [], heighte
       continue;
     }
     const cover = s.save === 'dex' ? coverBetween(b, from, X) : null;
-    const sv = savingThrow(b, X, s.save, dc, { cover, careful: careful.includes(X.id), extraDis: heighten === X.id ? [{ text: 'Heightened Spell', rule: 'metamagic' }] : [] });
+    const sv = savingThrow(b, X, s.save, dc, { cover, cond: s.cond === 'fear' ? 'frightened' : s.cond === 'pattern' ? 'charmed' : null, careful: careful.includes(X.id), extraDis: heighten === X.id ? [{ text: 'Heightened Spell', rule: 'metamagic' }] : [] });
     let immune = false;
     if (!sv.success) {
       caught++;
@@ -1969,10 +2247,11 @@ function expire(b, when, who) {
 
 // opts.surprised: ids of creatures that roll Initiative with Disadvantage.
 export function rollInitiative(b, { surprised = [] } = {}) {
+  CUR = b;
   // Everyone can take a Reaction before their first turn.
   for (const c of Object.values(b.creatures)) c.reaction = !incap(c);
   const entries = Object.values(b.creatures).map((c) => {
-    const adv = c.initAdv ? [{ text: 'Remarkable Athlete', rule: 'remarkable-athlete' }] : [];
+    const adv = c.initAdv ? [c.cls === 'barbarian' ? { text: 'Feral Instinct', rule: 'feral-instinct' } : { text: 'Remarkable Athlete', rule: 'remarkable-athlete' }] : [];
     const dis = surprised.includes(c.id) ? [{ text: 'Surprised', rule: 'surprise' }] : [];
     const mode = modeFrom(adv, dis);
     const d20 = rollD20(b, c, mode);
@@ -2010,7 +2289,39 @@ function startTurn(b, c) {
   emit(b, { kind: 'turn', who: c.id, text: `${c.name}'s turn.`, rule: 'your-turn' });
   zoneTick(b, c, 'start');
   stenchTick(b, c);
+  if (c.regen && !c.dead && !b.over) {
+    if (c.regen.blocked) {
+      c.regen.blocked = false;
+      if (c.hp <= 0) {
+        c.dead = true;
+        emit(b, { kind: 'note', by: c.id, text: `${c.name} starts its turn at 0 Hit Points and can't regenerate (Fire or Acid): it dies.`, rule: 'regeneration' });
+        checkOver(b);
+        return false;
+      }
+      emit(b, { kind: 'note', by: c.id, text: `${c.name} took Fire or Acid damage: no Regeneration this turn.`, rule: 'regeneration' });
+    } else if (c.hp < c.hpMax) {
+      const was = c.hp;
+      c.hp = Math.min(c.hpMax, c.hp + c.regen.hp);
+      emit(b, { kind: 'heal', by: c.id, target: c.id, what: 'Regeneration', roll: { label: String(c.regen.hp), rolls: [] }, mods: [{ label: 'Stat block', value: c.regen.hp }], total: c.hp - was, before: was, after: c.hp, rule: 'regeneration',
+        text: `Regeneration: ${c.name} regains ${c.hp - was} Hit Points (${c.hp}/${c.hpMax})${was <= 0 ? ' and gets back up' : ''}.` });
+    }
+  }
+  if (c.mbreath && !c.mbreath.ready && c.hp > 0) {
+    const r = die(b.rng, 6);
+    c.mbreath.ready = r >= c.mbreath.recharge;
+    emit(b, { kind: 'note', by: c.id, text: `${c.name} rolls a d6 to recharge ${c.mbreath.name}: ${r}${c.mbreath.ready ? ', ready again' : `, not yet (needs ${c.mbreath.recharge}${c.mbreath.recharge < 6 ? '-6' : ''})`}.`, rule: 'recharge' });
+  }
   if (b.over || c.dead || (c.side === 'foe' && c.hp <= 0)) return false;
+  // Aura of Life: an ally at 0 Hit Points starting a turn in it regains 1 Hit Point.
+  if (c.side === 'hero' && c.hp === 0 && !c.dead) {
+    const e = b.effects.find((z) => z.type === 'auralife' && C(b, z.by)?.side === c.side && !C(b, z.by).dead && (z.by === c.id || feetBetween(C(b, z.by), c) <= 30));
+    if (e) heal(b, C(b, e.by), c, 1, 'Aura of Life', 'aura-of-life', { label: '1', rolls: [] }, []);
+  }
+  // Heroic Warrior (Fighter 10): start a turn without Heroic Inspiration, gain it.
+  if (c.heroicWarrior && !c.inspiration && c.hp > 0) {
+    c.inspiration = true;
+    emit(b, { kind: 'note', by: c.id, text: `Heroic Warrior: ${c.name} gains Heroic Inspiration.`, rule: 'heroic-inspiration' });
+  }
   const hero = effectOn(b, 'heroism', c.id);
   if (hero && c.hp > 0 && hero.amount > (c.tempHp || 0)) {
     c.tempHp = hero.amount;
@@ -2046,7 +2357,7 @@ function endTurn(b, who) {
       // Fear: the save comes only at the end of a turn out of the caster's sight.
       const src = x.saveEnds.unseen ? C(b, x.saveEnds.unseen) : null;
       if (src && !src.dead && onBoard(src) && lineOfSight(b, c, src)) continue;
-      const sv = savingThrow(b, c, x.saveEnds.ability, x.saveEnds.dc);
+      const sv = savingThrow(b, c, x.saveEnds.ability, x.saveEnds.dc, { cond: x.id });
       const name = COND_NAMES[x.id];
       emit(b, { kind: 'save', save: 'condition', by: c.id, ...sv, dc: x.saveEnds.dc, outcome: sv.success ? 'success' : 'fail', rule: x.rule || x.id,
         text: `${c.name} repeats the ${ABILITY_NAMES[x.saveEnds.ability]} save against being ${name}: ${sv.total} vs DC ${x.saveEnds.dc}, ${sv.success ? `no longer ${name}` : `still ${name}`}.` });
@@ -2063,6 +2374,14 @@ function endTurn(b, who) {
       }
       emit(b, { kind: 'save', save: 'condition', by: c.id, ...sv, dc: x.sleep.dc, outcome: sv.success ? 'success' : 'fail', rule: 'sleep',
         text: `${c.name} repeats the Wisdom save against Sleep: ${sv.total} vs DC ${x.sleep.dc}, ${sv.success ? 'shakes it off' : 'falls Unconscious (and Prone) until it takes damage or the spell ends'}.` });
+    }
+    // Self-Restoration (Monk 10): end Charmed, Frightened or Poisoned on yourself.
+    if (c.selfRestore && c.hp > 0) {
+      const x = (c.conds || []).find((y) => ['charmed', 'frightened', 'poisoned'].includes(y.id) && !y.pattern);
+      if (x) {
+        c.conds = c.conds.filter((y) => y !== x);
+        emit(b, { kind: 'note', by: c.id, text: `Self-Restoration: ${c.name} is no longer ${COND_NAMES[x.id]}.`, rule: 'self-restoration' });
+      }
     }
     // Rage goes on only if it started this turn or was kept going.
     if (c.raging) {
@@ -2085,7 +2404,7 @@ function endTurn(b, who) {
 }
 
 function deathSave(b, c) {
-  const d20 = rollD20(b, c, 'normal');
+  const d20 = rollD20(b, c, effectOn(b, 'beacon', c.id) ? 'advantage' : 'normal');
   const v = d20.kept;
   let outcome, text;
   if (v === 20) {
@@ -2270,6 +2589,7 @@ function flushMove(b) {
 // The reactor's answer to a pending prompt: an Opportunity Attack, Shield,
 // Divine Smite (opts.slot picks a higher slot) or Hellish Rebuke.
 export function resolveReaction(b, accept, opts = {}) {
+  CUR = b;
   const p = b.pending;
   if (!p) return [];
   const before = b.seq;
@@ -2334,7 +2654,7 @@ export function resolveReaction(b, accept, opts = {}) {
     if (accept && !incap(R) && R.reaction) {
       const atk = bestMelee(b, R, M);
       R.reaction = false;
-      attack(b, R, M, atk, { reaction: true });
+      attack(b, R, M, atk, { reaction: true, oa: true });
     } else if (b.moveCtx) {
       b.moveCtx.skip.push(R.id);
       emit(b, { kind: 'note', by: R.id, text: `${R.name} lets ${M.name} go.`, rule: 'opportunity-attack' });
@@ -2418,6 +2738,9 @@ export function seenBy(b, A) {
   return enemiesOf(b, A).filter((e) => !incap(e) && lineOfSight(b, e, A));
 }
 
+// Land's Aid grows: 2d6, 3d6 at Druid 10, 4d6 at 14.
+export const landsAidDice = (A) => (A.level >= 14 ? 4 : A.level >= 10 ? 3 : 2);
+
 // What Channel Divinity / Preserve Life could heal, for the UI and the AI.
 export function preservePlan(b, A) {
   let budget = 5 * A.level;
@@ -2439,6 +2762,7 @@ const fail = (error) => ({ ok: false, error });
 // What Haste's extra action can be (and the moves around it).
 const HASTE_OK = ['attack', 'dash', 'disengage', 'hide', 'move', 'stand', 'end', 'haste'];
 export function perform(b, id, intent) {
+  CUR = b;
   const t = b.turn;
   const A = t && C(b, t.who);
   // Haste's action can't be used for anything else: hide it from other intents.
@@ -2451,7 +2775,7 @@ export function perform(b, id, intent) {
     if (!r.ok && /action/.test(r.error || '') && !/Bonus Action/.test(r.error || '')) return fail("Haste's extra action can only be one weapon attack, Dash, Disengage or Hide.");
   }
   // Slow: an action or a Bonus Action on its turn, not both.
-  if (r.ok && A && b.turn === t && hasCond(A, 'slow')) {
+  if (r.ok && A && b.turn === t && (hasCond(A, 'slow') || A.conds?.some((x) => x.abjured))) {
     if (t.action < a0) t.bonus = 0;
     else if (t.bonus < b0) { t.action = 0; t.attacksLeft = 0; }
   }
@@ -2652,6 +2976,19 @@ function performStep(b, id, intent) {
       }
       break;
     }
+    case 'mbreath': {
+      const br = A.mbreath;
+      if (!br?.ready) return fail('Its breath is not recharged.');
+      err = needAction(); if (err) return fail(err);
+      if (t.attacked?.length || t.attacksLeft) return fail('The breath takes the whole action.');
+      if (!Number.isInteger(intent.x) || !Number.isInteger(intent.y) || (intent.x === A.x && intent.y === A.y)) return fail('Pick a direction.');
+      t.action--;
+      br.ready = false;
+      const area = { shape: br.shape, size: br.size, from: 'self' };
+      areaSave(b, A, areaTargets(b, A, area, intent.x, intent.y), { name: `${br.name} (${br.size}-ft ${br.shape === 'line' ? 'Line' : 'Cone'})`, ability: 'dex',
+        dcParts: [{ label: 'Stat block', value: br.dc, rule: 'stat-block' }], dice: br.dice, type: br.type, half: true, rule: 'recharge' });
+      break;
+    }
     case 'web': {
       if (!A.web?.ready) return fail('Web is not recharged.');
       err = needAction(); if (err) return fail(err);
@@ -2822,20 +3159,22 @@ function performStep(b, id, intent) {
       const harm = hostile(A, T);
       t.action--; t.magicUsed = true;
       A.channel.uses--;
-      const r = die(b.rng, 8);
+      const nd = A.sparkDice || 1;
+      const rs = rollDice(b.rng, nd, 8);
+      const r = sum(rs);
       const mods = [{ label: 'WIS modifier', value: A.mods.wis, rule: 'ability-modifier' }];
       const amount = Math.max(0, r + A.mods.wis);
       emit(b, { kind: 'action', by: id, what: 'Divine Spark', text: `${A.name} uses Channel Divinity: Divine Spark (${s1(A.channel.uses, 'use')} left).`, rule: 'channel-divinity' });
-      if (!harm) heal(b, A, T, amount, 'Divine Spark', 'channel-divinity', { label: '1d8', rolls: [r] }, mods);
+      if (!harm) heal(b, A, T, amount, 'Divine Spark', 'channel-divinity', { label: `${nd}d8`, rolls: rs }, mods, nd * 8 + A.mods.wis);
       else {
         const dcParts = A.casting.stats.wis.dc;
         const dc = sumParts(dcParts);
         const sv = savingThrow(b, T, 'con', dc);
         const raw = sv.success ? Math.floor(amount / 2) : amount;
         const dmg = finishDamage(T, [{ label: 'Divine Spark', value: raw, type: 'Radiant' }]);
-        const after = applyDamage(b, T, dmg.total, { types: ['Radiant'] });
+        const after = applyDamage(b, T, dmg.total, { types: ['Radiant'], by: id });
         emit(b, { kind: 'save-spell', by: id, what: 'Divine Spark', ability: 'con', dc, dcParts, rule: 'channel-divinity', half: true,
-          damage: { parts: [{ label: 'Divine Spark 1d8', rolls: [r], value: r }, ...mods], total: amount, type: 'Radiant' },
+          damage: { parts: [{ label: `Divine Spark ${nd}d8`, rolls: rs, value: r }, ...mods], total: amount, type: 'Radiant' },
           results: [{ ...sv, damage: dmg.total, adjust: dmg.adjust, after, text: `${T.name} ${sv.success ? 'succeeds' : 'fails'} (${sv.total}): ${dmg.total} Radiant damage${adjustText(dmg)}.${afterText(T, after)}` }],
           text: `Divine Spark: DC ${dc} Constitution save. ${T.name} takes ${dmg.total} Radiant damage.` });
         flushPost(b);
@@ -2902,6 +3241,18 @@ function performStep(b, id, intent) {
       if (A.conc) endConc(b, A, `${A.name} flies into a Rage`);
       emit(b, { kind: 'action', by: id, what: 'Rage', rule: 'rage',
         text: `${A.name} flies into a Rage (${s1(A.rage.uses, 'use')} left): Resistance to Bludgeoning, Piercing and Slashing damage, +${A.rageDmg} damage on Strength attacks, Advantage on Strength checks and saves. No spells.` });
+      if (A.mindlessRage) {
+        const gone = (A.conds || []).filter((x) => (x.id === 'charmed' || x.id === 'frightened') && !x.pattern);
+        if (gone.length) {
+          A.conds = A.conds.filter((x) => !gone.includes(x));
+          emit(b, { kind: 'note', by: id, rule: 'mindless-rage', text: `Mindless Rage: ${A.name} is no longer ${[...new Set(gone.map((x) => COND_NAMES[x.id]))].join(' or ')}.` });
+        }
+      }
+      if (A.pounce && speedOf(b, A) > 0) {
+        const ft = Math.floor(speedOf(b, A) / 2 / FT) * FT;
+        t.moveLeft += ft;
+        emit(b, { kind: 'note', by: id, rule: 'instinctive-pounce', text: `Instinctive Pounce: ${A.name} can move ${ft} more feet this turn.` });
+      }
       break;
     }
     case 'reckless': {
@@ -2970,10 +3321,11 @@ function performStep(b, id, intent) {
       const foes = inside.filter((X) => hostile(A, X));
       const ally = inside.filter((X) => !hostile(A, X) && X.hp < X.hpMax && !X.dead).sort((p, q) => p.hp / p.hpMax - q.hp / q.hpMax)[0];
       emit(b, { kind: 'action', by: id, what: "Land's Aid", rule: 'lands-aid', text: `${A.name} uses Land's Aid (a Wild Shape use; ${A.wildShape.uses} left): thorny flowers in a 10-foot Sphere.` });
-      areaSave(b, A, foes, { name: "Land's Aid", ability: 'con', dcParts: A.casting.stats.wis.dc, dice: '2d6', type: 'Necrotic', half: true, rule: 'lands-aid', from: { x: intent.x, y: intent.y } });
+      const nd = landsAidDice(A);
+      areaSave(b, A, foes, { name: "Land's Aid", ability: 'con', dcParts: A.casting.stats.wis.dc, dice: `${nd}d6`, type: 'Necrotic', half: true, rule: 'lands-aid', from: { x: intent.x, y: intent.y } });
       if (ally && !b.over) {
-        const r = rollDice(b.rng, 2, 6);
-        heal(b, A, ally, sum(r), "Land's Aid", 'lands-aid', { label: '2d6', rolls: r }, []);
+        const r = rollDice(b.rng, nd, 6);
+        heal(b, A, ally, sum(r), "Land's Aid", 'lands-aid', { label: `${nd}d6`, rolls: r }, [], nd * 6);
       }
       break;
     }
@@ -2999,16 +3351,17 @@ function performStep(b, id, intent) {
       t.bonus = 0;
       A.focus.uses--;
       const tech = A.openHand ? (['addle', 'push', 'topple'].includes(intent.tech) ? intent.tech : 'topple') : null;
-      emit(b, { kind: 'action', by: id, what: 'Flurry of Blows', rule: 'monks-focus',
-        text: `${A.name} uses Flurry of Blows (1 Focus Point; ${A.focus.uses} left): two Unarmed Strikes${tech ? `, each hit with Open Hand Technique (${tech[0].toUpperCase()}${tech.slice(1)})` : ''}.` });
+      const strikes = A.heightened ? 3 : 2;
+      emit(b, { kind: 'action', by: id, what: 'Flurry of Blows', rule: A.heightened ? 'heightened-focus' : 'monks-focus',
+        text: `${A.name} uses Flurry of Blows (1 Focus Point; ${A.focus.uses} left): ${strikes === 3 ? 'three Unarmed Strikes (Heightened Focus)' : 'two Unarmed Strikes'}${tech ? `, each hit with Open Hand Technique (${tech[0].toUpperCase()}${tech.slice(1)})` : ''}.` });
       const strike = (X) => attack(b, A, X, { ...atk, name: 'Unarmed Strike (Flurry of Blows)', flurry: tech });
       strike(T);
-      if (!b.over && !b.pending) {
-        const want = intent.target2 ? C(b, intent.target2) : T;
-        const ok = (X) => X && hostile(A, X) && canTarget(b, A, X, atk).ok;
-        const T2 = ok(want) ? want : enemiesOf(b, A).find(ok);
+      for (let i = 1; i < strikes && !b.over && !b.pending; i++) {
+        const want = (i === 1 ? intent.target2 : intent.target3) ? C(b, i === 1 ? intent.target2 : intent.target3) : T;
+        const ok = (X) => X && hostile(A, X) && !X.dead && X.hp > 0 && canTarget(b, A, X, atk).ok;
+        const T2 = ok(want) ? want : ok(T) ? T : enemiesOf(b, A).find(ok);
         if (T2) strike(T2);
-        else emit(b, { kind: 'note', by: id, text: 'Nobody is in reach for the second strike.', rule: 'monks-focus' });
+        else { emit(b, { kind: 'note', by: id, text: 'Nobody is in reach for another strike.', rule: 'monks-focus' }); break; }
       }
       break;
     }
@@ -3029,6 +3382,12 @@ function performStep(b, id, intent) {
         b.effects = b.effects.filter((e) => !(e.type === 'dodge' && e.by === id));
         b.effects.push({ type: 'dodge', by: id, expires: { when: 'start', who: id } });
         parts.push('Dodge');
+        if (A.heightened) {
+          const md = parseDice(A.martialDie || '1d6').sides;
+          const rs = rollDice(b.rng, 2, md);
+          A.tempHp = Math.max(A.tempHp || 0, sum(rs));
+          parts.push(`${sum(rs)} Temporary Hit Points (Heightened Focus: 2d${md}, ${rs.join(' + ')})`);
+        }
       }
       if (intent.a === 'stepwind') {
         const gain = speedOf(b, A) ? Math.max(0, A.speed - 5 * (A.exhaustion || 0)) : 0;
@@ -3089,13 +3448,14 @@ function performStep(b, id, intent) {
     case 'innate': {
       if (!A.innate) return fail('Only a Sorcerer has Innate Sorcery.');
       if (A.innateOn) return fail('Innate Sorcery is already active.');
-      if (A.innate.uses < 1) return fail('No Innate Sorcery uses left. They come back on a Long Rest.');
+      const incarnate = A.innate.uses < 1 && A.incarnate && A.sorcery?.uses >= 2;
+      if (A.innate.uses < 1 && !incarnate) return fail(A.incarnate ? 'No Innate Sorcery uses left, and Sorcery Incarnate needs 2 Sorcery Points.' : 'No Innate Sorcery uses left. They come back on a Long Rest.');
       err = needBonus(); if (err) return fail(err);
       t.bonus = 0;
-      A.innate.uses--;
+      if (incarnate) A.sorcery.uses -= 2; else A.innate.uses--;
       A.innateOn = true;
-      emit(b, { kind: 'action', by: id, what: 'Innate Sorcery', rule: 'innate-sorcery',
-        text: `${A.name} unleashes Innate Sorcery (${s1(A.innate.uses, 'use')} left): +1 to Sorcerer spell save DCs and Advantage on Sorcerer spell attack rolls for 1 minute.` });
+      emit(b, { kind: 'action', by: id, what: 'Innate Sorcery', rule: incarnate ? 'sorcery-incarnate' : 'innate-sorcery',
+        text: `${A.name} unleashes Innate Sorcery (${incarnate ? `Sorcery Incarnate: 2 Sorcery Points, ${A.sorcery.uses} left` : s1(A.innate.uses, 'use') + ' left'}): +1 to Sorcerer spell save DCs and Advantage on Sorcerer spell attack rolls for 1 minute.` });
       break;
     }
     case 'font': {
@@ -3132,6 +3492,59 @@ function performStep(b, id, intent) {
       t.action--; t.magicUsed = true;
       const area = { shape: 'cone', size: 15, from: 'self' };
       areaSave(b, A, areaTargets(b, A, area, intent.x, intent.y), { name: `Dragon's Breath (${e.dmgType}, 15-ft Cone)`, ability: 'dex', dcParts: e.dcParts, dice: e.dice, type: e.dmgType, half: true, rule: 'dragons-breath' });
+      break;
+    }
+    case 'wholeness': {
+      if (!A.wholeness) return fail('Wholeness of Body comes at Monk level 6 (Warrior of the Open Hand).');
+      if (A.wholeness.uses < 1) return fail('No Wholeness of Body uses left. They come back on a Long Rest.');
+      err = needBonus(); if (err) return fail(err);
+      if (A.hp >= A.hpMax) return fail("You're at full Hit Points.");
+      t.bonus = 0;
+      A.wholeness.uses--;
+      const md = parseDice(A.martialDie || '1d6').sides;
+      const r = die(b.rng, md);
+      const w = Math.max(1, A.mods.wis);
+      emit(b, { kind: 'action', by: id, what: 'Wholeness of Body', rule: 'wholeness-of-body', text: `${A.name} uses Wholeness of Body (Bonus Action; ${s1(A.wholeness.uses, 'use')} left).` });
+      heal(b, A, A, Math.max(1, r + w), 'Wholeness of Body', 'wholeness-of-body', { label: `1d${md}`, rolls: [r] }, [{ label: 'WIS modifier', value: w }], md + w);
+      break;
+    }
+    case 'tireless': {
+      if (!A.tireless) return fail('Tireless comes at Ranger level 10.');
+      if (A.tireless.uses < 1) return fail('No Tireless uses left. They come back on a Long Rest.');
+      err = magic(); if (err) return fail(err);
+      t.action--; t.magicUsed = true;
+      A.tireless.uses--;
+      const r = die(b.rng, 8);
+      const amount = r + Math.max(1, A.mods.wis);
+      const had = A.tempHp || 0;
+      A.tempHp = Math.max(had, amount);
+      emit(b, { kind: 'action', by: id, what: 'Tireless', rule: 'tireless',
+        text: `${A.name} uses Tireless (${s1(A.tireless.uses, 'use')} left): 1d8 (${r}) + ${Math.max(1, A.mods.wis)} = ${amount} Temporary Hit Points${had >= amount ? `, but already has ${had}, and they don't stack` : ''}.` });
+      break;
+    }
+    case 'abjure': {
+      if (!A.abjure) return fail('Abjure Foes comes at Paladin level 9.');
+      if (!A.channel || A.channel.uses < 1) return fail('No Channel Divinity uses left.');
+      err = magic(); if (err) return fail(err);
+      const n = Math.max(1, A.mods.cha);
+      const ok = (X) => X && hostile(A, X) && !X.dead && X.hp > 0 && onBoard(X) && feetBetween(A, X) <= 60 && lineOfSight(b, A, X) && !hasCond(X, 'hidden');
+      let list = (intent.targets || []).map((x) => C(b, x)).filter(ok);
+      if (!list.length) list = enemiesOf(b, A).filter(ok).filter((X) => !hasCond(X, 'frightened')).sort((p, q) => (q.hp + 10 * (q.multiattack || 1)) - (p.hp + 10 * (p.multiattack || 1)));
+      list = [...new Set(list)].slice(0, n);
+      if (!list.length) return fail('No enemy you can see within 60 feet.');
+      t.action--; t.magicUsed = true;
+      A.channel.uses--;
+      if (hasCond(A, 'hidden')) dropCond(A, 'hidden');
+      const dcParts = A.casting.stats.cha.dc;
+      const dc = sumParts(dcParts);
+      const results = [];
+      for (const X of list) {
+        const sv = savingThrow(b, X, 'wis', dc, { cond: 'frightened' });
+        const got = !sv.success && addCond(b, X, { id: 'frightened', by: id, endsOnDamage: true, abjured: true, rule: 'abjure-foes' });
+        results.push({ ...sv, damage: 0, text: `${X.name} ${sv.success ? 'succeeds' : 'fails'} (${sv.total})${sv.success ? '' : got ? ': Frightened until it takes damage, and on its turns it can move, act or take a Bonus Action, only one' : ", but it can't be Frightened"}.` });
+      }
+      emit(b, { kind: 'save-spell', by: id, what: 'Abjure Foes', ability: 'wis', dc, dcParts, damage: null, half: false, results, rule: 'abjure-foes',
+        text: `${A.name} uses Channel Divinity: Abjure Foes (${s1(A.channel.uses, 'use')} left). DC ${dc} Wisdom save for ${list.map((X) => X.name).join(', ')}.` });
       break;
     }
     case 'end': {

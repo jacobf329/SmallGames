@@ -5,9 +5,17 @@
 //   level 3: Low 150, Moderate 225, High 400
 //   level 4: Low 250, Moderate 375, High 500
 //   level 5: Low 500, Moderate 750, High 1100
+//   level 6: Low 600, Moderate 1000, High 1400
+//   level 7: Low 750, Moderate 1300, High 1700
+//   level 8: Low 1000, Moderate 1700, High 2100
+//   level 9: Low 1300, Moderate 2000, High 2600
+//   level 10: Low 1600, Moderate 2300, High 3100
 // XP: Goblin Warrior 50, Goblin Boss 200, Wolf 50, Skeleton 50, Zombie 50,
 // Cultist 25, Giant Spider 200, Bugbear Warrior 200, Cultist Fanatic 450,
-// Ghoul 200, Dire Wolf 200, Animated Armor 200, Ghast 450, Ogre 450, Wight 700.
+// Ghoul 200, Dire Wolf 200, Animated Armor 200, Ghast 450, Ogre 450, Wight 700,
+// Bandit Captain 450, Black Dragon Wyrmling 450, Warrior Veteran 700, Hobgoblin
+// Captain 700, Knight 700, Owlbear 700, Troll 1800, Hill Giant 1800, Mage 2300,
+// Young Black Dragon 2900.
 //
 // The board is 8 squares wide and 10 deep, heroes start at the bottom.
 // `walls` are solid (Total Cover, no line of sight); `cover` squares are low
@@ -18,6 +26,7 @@ import { buildMonster } from '../rules/character.js';
 import {
   GOBLIN_WARRIOR, GOBLIN_BOSS, WOLF, SKELETON, ZOMBIE, GIANT_SPIDER, CULTIST, CULTIST_FANATIC, BUGBEAR_WARRIOR,
   GHOUL, GHAST, DIRE_WOLF, OGRE, ANIMATED_ARMOR, WIGHT,
+  BANDIT_CAPTAIN, WARRIOR_VETERAN, HOBGOBLIN_CAPTAIN, KNIGHT, MAGE, OWLBEAR, TROLL, HILL_GIANT, BLACK_DRAGON_WYRMLING, YOUNG_BLACK_DRAGON,
 } from '../rules/data.js';
 
 const W = GOBLIN_WARRIOR, BOSS = GOBLIN_BOSS;
@@ -186,6 +195,107 @@ export const ENCOUNTERS = {
       else list = [wight, ghast, armor[0], armor[1], gh[0], gh[1], zom[0]];      // 2050 XP: Low for four
       // A quiet way in (flag `quiet`) leaves the Zombies in the cellar.
       if (flags.quiet) list = list.filter((f) => f.def !== ZOMBIE);
+      return label(list);
+    },
+  },
+  // Chapter 12, "The Toll Keep" (level 6): mercenaries holding the Baron's
+  // keep on the east road, led by a Hobgoblin Captain. Aura of Authority and
+  // Parry. Talking your way in (flag `inside`) leaves the archers on the wall.
+  keep: {
+    name: 'The toll keep', level: 6,
+    walls: ['0,3', '1,3', '2,3', '5,3', '6,3', '7,3'],
+    cover: ['3,5', '4,5', '1,7', '6,7'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const cap = { ...at(HOBGOBLIN_CAPTAIN, 4, 2), label: 'Captain Hesk' };
+      const vet = [at(WARRIOR_VETERAN, 3, 2), at(WARRIOR_VETERAN, 5, 2)];
+      const bc = [at(BANDIT_CAPTAIN, 1, 1, 'archer'), at(BANDIT_CAPTAIN, 6, 1, 'archer')];
+      let list;
+      if (n <= 1) list = [vet[0]];                                              // 700 XP: Moderate for one
+      else if (n === 2) list = [cap, vet[0]];                                   // 1400 XP: Moderate for two
+      else if (n === 3) list = [cap, vet[0], bc[0]];                            // 1850 XP: Low for three
+      else list = [cap, vet[0], bc[0], bc[1]];                                  // 2300 XP: Low for four
+      if (flags.inside) list = list.filter((f) => f.def !== BANDIT_CAPTAIN);
+      return label(list);
+    },
+  },
+  // Chapter 13, "The Tower Room" (level 7): the Mage who hired them, with her
+  // Knight. Fireball, Shield and Misty Step on the other side for once.
+  tower: {
+    name: 'The tower room', level: 7,
+    walls: ['0,1', '7,1', '0,6', '7,6'],
+    cover: ['2,2', '5,2', '3,4', '4,4'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const mage = { ...at(MAGE, 4, 0, 'caster'), label: 'Hester Marr' };
+      const knight = { ...at(KNIGHT, 3, 2), label: 'Sir Osric Penn' };
+      const vet = [at(WARRIOR_VETERAN, 2, 3), at(WARRIOR_VETERAN, 5, 3)];
+      let list;
+      if (n <= 1) list = [knight, at(BANDIT_CAPTAIN, 5, 2)];                   // 1150 XP: Low to Moderate for one
+      else if (n === 2) list = [mage];                                          // 2300 XP: Moderate for two
+      else if (n === 3) list = [mage, knight];                                  // 3000 XP: Low to Moderate for three
+      else list = [mage, knight, vet[0]];                                       // 3700 XP: Low to Moderate for four
+      // Sir Osric, told the truth (flag `told`), stands aside. Alone, you
+      // meet a Veteran on the stairs in his place.
+      if (flags.told) list = n > 1 ? list.filter((f) => f.def !== KNIGHT) : [vet[0], list[1]];      // 1150 XP either way for one
+      return label(list);
+    },
+  },
+  // Chapter 14, "Gallow Causeway" (level 8): trolls on the causeway into the
+  // fen, and an owlbear in the alders. Regeneration: only Fire or Acid keeps
+  // a troll down.
+  causeway: {
+    name: 'The causeway', level: 8,
+    walls: ['0,2', '0,3', '0,4', '0,5', '0,6', '7,2', '7,3', '7,4', '7,5', '7,6'],
+    cover: ['2,4', '5,5'],
+    heroStarts: BOTTOM,
+    foes(n) {
+      const tr = [at(TROLL, 3, 1), at(TROLL, 5, 1)];
+      const ow = [at(OWLBEAR, 2, 0), at(OWLBEAR, 6, 0)];
+      if (n <= 1) return label([tr[0]]);                                        // 1800 XP: Moderate to High for one
+      if (n === 2) return label([tr[0], ow[0]]);                                // 2500 XP: Low to Moderate for two
+      if (n === 3) return label([tr[0], ow[0]]);                                // 2500 XP: Low for three
+      return label([tr[0], tr[1]]);                                             // 3600 XP: Low for four
+    },
+  },
+  // Chapter 15, "The Giant's Yard" (level 9): hill giants and their ogres at
+  // the Rudds' peat farm. Reach 10 feet, Prone, Poisoned.
+  yard: {
+    name: "The giant's yard", level: 9,
+    walls: ['2,3', '3,3', '6,5'],
+    cover: ['1,5', '5,2', '4,6'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const hg = [{ ...at(HILL_GIANT, 4, 1), label: 'Mudge' }, { ...at(HILL_GIANT, 1, 1), label: 'Big Ada' }];
+      const og = [at(OGRE, 6, 2), at(OGRE, 0, 2), at(OGRE, 5, 0)];
+      let list;
+      if (n <= 1) list = [hg[0]];                                               // 1800 XP: Moderate for one
+      else if (n === 2) list = [hg[0], og[0], og[1]];                           // 2700 XP: Moderate for two
+      else if (n === 3) list = [hg[0], hg[1], og[0]];                           // 4050 XP: Low to Moderate for three
+      else list = [hg[0], hg[1], og[0], og[1]];                                 // 4500 XP: Low for four
+      // Getting the Rudds out first (flag `freed`) draws one Ogre off.
+      if (flags.freed) list = list.filter((f) => f !== og[0]);
+      return label(list);
+    },
+  },
+  // Chapter 16, "The Black Water" (level 10): the Young Black Dragon in its
+  // drowned church, with its wyrmlings and the troll that guards the way in.
+  // Acid Breath (Recharge 5-6) in a 30-foot Line. Coming in by the bell tower
+  // (flag `tower`) leaves the trolls at the door.
+  fen: {
+    name: 'The black water', level: 10,
+    walls: ['1,2', '6,2', '1,5', '6,5'],
+    cover: ['3,3', '4,6'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const drake = { ...at(YOUNG_BLACK_DRAGON, 4, 0), label: 'Skellmaw' };
+      const wy = [at(BLACK_DRAGON_WYRMLING, 2, 1), at(BLACK_DRAGON_WYRMLING, 5, 1), at(BLACK_DRAGON_WYRMLING, 4, 2)];
+      const tr = [at(TROLL, 3, 3), at(TROLL, 5, 3)];
+      let list;
+      if (n <= 2) list = [drake];                                               // 2900 XP: Moderate to High for one, Low for two
+      else if (n === 3) list = [drake, wy[0], wy[1], tr[0]];                    // 5600 XP: Moderate for three
+      else list = [drake, wy[0], wy[1], wy[2], tr[0]];                          // 6050 XP: Low for four
+      if (flags.tower) list = list.filter((f) => f.def !== TROLL);
       return label(list);
     },
   },

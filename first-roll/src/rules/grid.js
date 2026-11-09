@@ -20,8 +20,9 @@ export const incap = (c) => c.hp <= 0 || !!c.conds?.some((x) => x.id === 'paraly
 // Automatically fails Strength and Dexterity saves; hits from within 5 ft are Critical Hits.
 export const helpless = (c) => c.hp <= 0 || hasCond(c, 'paralyzed') || hasCond(c, 'unconscious');
 export const hostile = (a, b) => a.side !== b.side;
-// Dead monsters leave the board; fallen heroes stay where they dropped.
-export const onBoard = (c) => !(c.side === 'foe' && c.hp <= 0);
+// Dead monsters leave the board; fallen heroes stay where they dropped, and so
+// does a Troll at 0 Hit Points that can still regenerate.
+export const onBoard = (c) => !(c.side === 'foe' && c.hp <= 0 && !(c.regen && !c.dead));
 
 export function isWall(b, x, y) {
   return b.walls.includes(key(x, y));
