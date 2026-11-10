@@ -572,7 +572,7 @@ export function attackFactors(b, A, T, atk) {
     } else if (e.type === 'reckless' && e.by === T.id) {
       adv.push({ text: `${T.name} is attacking recklessly`, rule: 'reckless-attack' });
     } else if (e.type === 'mocked' && e.target === A.id) {
-      dis.push({ text: `Vicious Mockery: ${A.name}'s next attack roll`, rule: 'vicious-mockery' });
+      dis.push({ text: `${e.what || 'Vicious Mockery'}: ${A.name}'s next attack roll`, rule: e.rule || 'vicious-mockery' });
       uses.push(e);
     } else if (e.type === 'blur' && e.target === T.id) {
       dis.push({ text: `${T.name} is blurred`, rule: 'blur' });
@@ -1069,10 +1069,10 @@ function attack(b, A, T0, atk, { reaction = false, why = null, oa = false } = {}
     }
   }
   // Parry (Knight, Warrior Veteran, Bandit Captain): a Reaction that adds to AC against one melee hit, used when it turns the hit into a miss.
-  if (T.parry && T.reaction && !incap(T) && T.hp > 0 && atk.kind === 'melee' && ctx.d20.kept !== 1 && ctx.d20.kept < critOn(A, atk) && total >= ac.value && total < ac.value + T.parry) {
+  if (T.parry && T.reaction && !incap(T) && T.hp > 0 && (atk.kind === 'melee' || T.parryAny) && ctx.d20.kept !== 1 && ctx.d20.kept < critOn(A, atk) && total >= ac.value && total < ac.value + T.parry) {
     T.reaction = false;
     ctx.parry = T.parry;
-    ctx.notes.push({ text: `${T.name} parries (Reaction): +${T.parry} AC against this attack`, rule: 'parry' });
+    ctx.notes.push({ text: T.parryName ? `${T.name} uses ${T.parryName} (Reaction): +${T.parry} AC against this attack` : `${T.name} parries (Reaction): +${T.parry} AC against this attack`, rule: 'parry' });
   }
   // Protective Magic (Mage): a stat-block Shield, cast without a prompt when +5 AC turns the hit into a miss.
   const ks = T.side === 'foe' ? T.casting?.known?.shield : null;
@@ -1097,7 +1097,7 @@ function finishAttack(b, ctx) {
   const A = C(b, ctx.a), T = C(b, ctx.t), atk = ctx.atk;
   const d20 = ctx.d20, total = ctx.total;
   const ac0 = acAgainst(b, A, T, atk);
-  const ac = ctx.parry ? { value: ac0.value + ctx.parry, parts: [...ac0.parts, { label: 'Parry', value: ctx.parry, rule: 'parry' }] } : ac0;
+  const ac = ctx.parry ? { value: ac0.value + ctx.parry, parts: [...ac0.parts, { label: T.parryName || 'Parry', value: ctx.parry, rule: 'parry' }] } : ac0;
   let outcome;
   if (d20.kept >= critOn(A, atk)) outcome = 'crit';
   else if (d20.kept === 1) outcome = 'fumble';
@@ -1260,7 +1260,7 @@ function finishAttack(b, ctx) {
     if (atk.rider === 'chill' && alive) {
       b.effects = b.effects.filter((e) => !(e.type === 'chill' && e.target === T.id));
       b.effects.push({ type: 'chill', by: A.id, target: T.id, expires: { when: 'start', who: A.id } });
-      rider = { text: `${T.name}'s Speed drops by 10 feet until the start of ${A.name}'s next turn.`, rule: 'ray-of-frost' };
+      rider = { text: `${T.name}'s Speed drops by 10 feet until the start of ${A.name}'s next turn.`, rule: atk.spell ? 'ray-of-frost' : 'stat-block' };
     }
     if (atk.rider === 'pull' && alive && SIZE[T.size || 'medium'] <= SIZE.large) {
       const ft = pull(b, A, T, 10);
@@ -1297,6 +1297,19 @@ function finishAttack(b, ctx) {
     }
     if (atk.rider?.poison && alive && !hasCond(T, 'poisoned')) {
       if (addCond(b, T, { id: 'poisoned', by: A.id, endsOn: { when: 'end', who: T.id, skip: b.turn?.who === T.id ? 1 : 0 }, rule: 'poisoned' })) rider = { text: `${T.name} is Poisoned until the end of its next turn.`, rule: 'poisoned' };
+    }
+    if (atk.rider?.noHeal && alive) {
+      b.effects = b.effects.filter((e) => !(e.type === 'grave' && e.target === T.id && e.by === A.id));
+      b.effects.push({ type: 'grave', by: A.id, target: T.id, what: atk.name, expires: { when: 'start', who: A.id } });
+      const t0 = rider?.text ? `${rider.text} ` : '';
+      rider = { text: `${t0}${atk.rider.noHeal === 'curse' ? `Cursed: ${T.name}` : T.name} can't regain Hit Points until the start of ${A.name}'s next turn.`, rule: rider?.rule || 'stat-block' };
+    }
+    if (atk.rider?.push && alive && SIZE[T.size || 'medium'] <= SIZE.large) {
+      const ft = push(b, A, T, atk.rider.push);
+      b.effects = b.effects.filter((e) => !(e.type === 'mocked' && e.target === T.id));
+      b.effects.push({ type: 'mocked', by: A.id, target: T.id, what: atk.rider.shaken, rule: 'stat-block', expires: { when: 'end', who: T.id, skip: b.turn?.who === T.id ? 1 : 0 } });
+      rider = { text: `${ft ? `${T.name} is knocked ${ft} feet back` : `${T.name} stands firm`}, and has Disadvantage on their next attack roll before the end of their next turn.`, rule: 'stat-block' };
+      tidy(b);
     }
     if (atk.rider?.paralyze && alive && T.creature !== 'undead' && !(atk.rider.paralyze.notElf && T.speciesId === 'elf') && !hasCond(T, 'paralyzed')) {
       const dc = atk.rider.paralyze.dc;
@@ -1736,6 +1749,11 @@ function saveRider(b, A, T, rider, dc = 10) {
     b.effects.push({ type: 'mocked', by: A.id, target: T.id, expires: { when: 'end', who: T.id } });
     return ` Disadvantage on its next attack roll before the end of its next turn.`;
   }
+  if (rider === 'glare') {
+    const mine = b.turn?.who === A.id;
+    if (addCond(b, T, { id: 'paralyzed', by: A.id, endsOn: { when: 'end', who: A.id, skip: mine ? 0 : 1 }, rule: 'paralyzed' })) return ` Paralyzed until the end of ${A.name}'s ${mine ? '' : 'next '}turn.`;
+    return '';
+  }
   if (rider === 'blind') {
     if (addCond(b, T, { id: 'blinded', by: A.id, endsOn: { when: 'start', who: A.id }, rule: 'blinded' })) return ` Blinded until the start of ${A.name}'s next turn.`;
     return '';
@@ -1851,8 +1869,9 @@ function condSave(b, A, T, ability, dc, rule, cond = null, heighten = null) {
 // most: the largest amount the dice could give (Beacon of Hope heals that much).
 function heal(b, A, T, amount, what, rule, roll, mods, most = null) {
   const before = T.hp;
-  if (b.effects.some((e) => e.type === 'grave' && e.target === T.id)) {
-    emit(b, { kind: 'note', by: A.id, target: T.id, text: `${T.name} can't regain Hit Points right now (Chill Touch).`, rule: 'chill-touch' });
+  const grave = b.effects.find((e) => e.type === 'grave' && e.target === T.id);
+  if (grave) {
+    emit(b, { kind: 'note', by: A.id, target: T.id, text: `${T.name} can't regain Hit Points right now (${grave.what || 'Chill Touch'}).`, rule: grave.what ? 'stat-block' : 'chill-touch' });
     return 0;
   }
   const beacon = most != null && most > amount && effectOn(b, 'beacon', T.id);
@@ -2624,6 +2643,7 @@ function startTurn(b, c) {
   expire(b, 'start', c.id);
   c.reaction = !incap(c);
   if (hasCond(c, 'slow')) c.reaction = false;
+  if (c.legendary) { c.legendary.uses = c.legendary.max; c.legendary.spent = []; }
   b.turn = { who: c.id, action: 1, bonus: 1, moveLeft: speedOf(b, c), moves: 0, steps: 0, attacksLeft: 0, magicUsed: false, surged: false, attacked: [], rolled: false };
   if (effectOn(b, 'haste', c.id)) b.turn.hasteAct = 1;
   emit(b, { kind: 'turn', who: c.id, text: `${c.name}'s turn.`, rule: 'your-turn' });
@@ -2770,9 +2790,93 @@ function deathSave(b, c) {
   checkOver(b);
 }
 
+// Dreadful Glare (Mummy Lord): a save against psychic damage and Paralysis.
+function glareAt(b, A, T) {
+  const g = A.glare;
+  return areaSave(b, A, [T], { name: g.name, ability: g.ability, dcParts: [{ label: 'Stat block', value: g.dc, rule: 'stat-block' }], dice: g.dice, flat: g.flat, flatLabel: 'Stat block', flatRule: 'stat-block',
+    type: g.type, half: false, rule: 'paralyzed', rider: 'glare' });
+}
+export const glareTargets = (b, A) => enemiesOf(b, A).filter((T) => !T.dead && T.hp > 0 && onBoard(T) && feetBetween(A, T) <= A.glare.range && lineOfSight(b, A, T));
+
+// Legendary Actions: right after another creature's turn, a legendary
+// creature takes one, if it has any left. The engine picks it, like the
+// stat-block reactions: a once-a-round power when it has a good target, else
+// an attack on whoever is in reach, else Pounce over to someone.
+function legendaryAfter(b, who) {
+  for (const L of living(b, 'foe')) {
+    if (b.over) return;
+    const lg = L.legendary;
+    if (!lg || lg.uses < 1 || L.id === who || L.hp <= 0 || incap(L) || !onBoard(L)) continue;
+    const foes = enemiesOf(b, L).filter((T) => !T.dead && T.hp > 0 && onBoard(T));
+    if (!foes.length) continue;
+    const pickWeak = (xs) => [...xs].sort((p, q) => (q.concentration ? 1 : 0) - (p.concentration ? 1 : 0) || p.hp - q.hp)[0];
+    let done = null;
+    for (const o of lg.options) {
+      if (done) break;
+      if (o.once && lg.spent.includes(o.id)) continue;
+      if (o.kind === 'glare' && L.glare) {
+        const ts = glareTargets(b, L).filter((T) => !hasCond(T, 'paralyzed'));
+        if (!ts.length) continue;
+        const T = [...ts].sort((p, q) => (p.saves?.wis ?? p.mods.wis) - (q.saves?.wis ?? q.mods.wis))[0];
+        emit(b, { kind: 'note', by: L.id, rule: 'legendary-actions', text: `${L.name} takes a Legendary Action: ${o.name} (${lg.uses - 1} left).` });
+        glareAt(b, L, T);
+        done = o;
+      } else if (o.kind === 'save') {
+        const ts = foes.filter((T) => feetBetween(L, T) <= o.range && lineOfSight(b, L, T));
+        if (!ts.length) continue;
+        const T = pickWeak(ts);
+        emit(b, { kind: 'note', by: L.id, rule: 'legendary-actions', text: `${L.name} takes a Legendary Action: ${o.name} (${lg.uses - 1} left).` });
+        areaSave(b, L, [T], { name: o.name, ability: o.ability, dcParts: [{ label: 'Stat block', value: o.dc, rule: 'stat-block' }], dice: o.dice, type: o.type, half: false, rule: 'legendary-actions' });
+        done = o;
+      } else if (o.kind === 'strike') {
+        const reachable = (at) => foes.map((T) => ({ T, atk: L.attacks.filter((a) => a.kind === 'melee' && !a.solo && cheb(at, T) * FT <= (a.reach || 5))[0] })).filter((x) => x.atk);
+        let opts = reachable(L);
+        if (!opts.length && !o.move) {
+          opts = foes.filter((T) => lineOfSight(b, L, T)).map((T) => ({ T, atk: L.attacks.find((a) => a.kind === 'ranged' && !a.solo && feetBetween(L, T) <= (a.range?.[0] || 0)) })).filter((x) => x.atk);
+        }
+        let moved = null;
+        if (!opts.length && o.move) {
+          // Pounce: up to half its Speed, along a path that provokes no Opportunity Attack.
+          const map = reachMap(b, L, Math.floor(speedOf(b, L) / 2 / FT) * FT);
+          let best = null;
+          for (const [k, d] of map.dist) {
+            const [x, y] = k.split(',').map(Number);
+            if (!d || !canEndAt(b, L, x, y)) continue;
+            const r = reachable({ x, y });
+            if (!r.length) continue;
+            const path = pathFrom(map, L, x, y);
+            let from = { x: L.x, y: L.y }, safe = true;
+            for (const to of path) { if (provokers(b, L, from, to).length) { safe = false; break; } from = to; }
+            if (!safe) continue;
+            const T = pickWeak(r.map((z) => z.T));
+            if (!best || T.hp < best.T.hp || (T === best.T && d < best.d)) best = { x, y, d, T, path };
+          }
+          if (!best) continue;
+          moved = { path: best.path, feet: best.d };
+          L.x = best.x; L.y = best.y;
+          opts = reachable(L);
+        }
+        if (!opts.length) continue;
+        const T = pickWeak(opts.map((z) => z.T));
+        const atk = opts.find((z) => z.T === T).atk;
+        emit(b, { kind: moved ? 'move' : 'note', by: L.id, rule: 'legendary-actions', ...(moved ? { path: moved.path, feet: moved.feet, left: 0 } : {}),
+          text: `${L.name} takes a Legendary Action: ${o.name} (${lg.uses - 1} left)${moved ? `, moving ${moved.feet} feet` : ''}.` });
+        attack(b, L, T, atk, { reaction: true, why: o.name });
+        done = o;
+      }
+    }
+    if (done) {
+      lg.uses--;
+      if (done.once) lg.spent.push(done.id);
+      flushPost(b);
+      checkOver(b);
+    }
+  }
+}
+
 function nextTurn(b) {
   for (let guard = 0; guard < 80 && !b.over; guard++) {
-    if (b.turn) endTurn(b, b.turn.who);
+    if (b.turn) { const was = b.turn.who; endTurn(b, was); if (!b.over) legendaryAfter(b, was); }
     if (b.over) return;
     b.idx = (b.idx + 1) % b.order.length;
     if (b.idx === 0) { if (b.begun) b.round++; b.begun = true; }
@@ -3328,6 +3432,16 @@ function performStep(b, id, intent) {
       }
       break;
     }
+    case 'glare': {
+      // Dreadful Glare (Mummy Lord): part of its Multiattack, once a turn.
+      if (!A.glare) return fail('No Dreadful Glare.');
+      if (t.glared) return fail('It has already used Dreadful Glare this turn.');
+      if (!(t.action > 0 || t.attacksLeft > 0 || (t.attacked || []).length)) return fail('Dreadful Glare is part of its Attack action.');
+      if (!T || !hostile(A, T) || T.dead || T.hp <= 0 || !glareTargets(b, A).includes(T)) return fail(`Pick an enemy it can see within ${A.glare.range} feet.`);
+      t.glared = true;
+      glareAt(b, A, T);
+      break;
+    }
     case 'mbreath': {
       const br = A.mbreath;
       if (!br?.ready) return fail('Its breath is not recharged.');
@@ -3773,7 +3887,7 @@ function performStep(b, id, intent) {
       if (pool.uses < 1) return fail('Your Lay on Hands pool is empty until a Long Rest.');
       const need = T.hpMax - T.hp;
       if (need <= 0) return fail(`${T.name} is at full Hit Points.`);
-      if (effectOn(b, 'grave', T.id)) return fail(`${T.name} can't regain Hit Points right now (Chill Touch).`);
+      if (effectOn(b, 'grave', T.id)) return fail(`${T.name} can't regain Hit Points right now (${effectOn(b, 'grave', T.id).what || 'Chill Touch'}).`);
       const amount = Math.min(pool.uses, need, intent.amount > 0 ? intent.amount | 0 : need);
       t.bonus = 0;
       pool.uses -= amount;

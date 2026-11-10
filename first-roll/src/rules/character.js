@@ -1178,6 +1178,8 @@ const MONSTER_TRAITS = {
   abduct: { name: 'Abduct', rule: 'grappled', text: "Doesn't spend extra movement to move a creature it is grappling." },
   authority: { name: 'Aura of Authority', rule: 'aura-of-authority', text: "While it isn't Incapacitated, it and its allies within 10 feet have Advantage on attack rolls and saving throws." },
   amphibious: { name: 'Amphibious', rule: null, text: 'Breathes air and water.' },
+  magicRes: { name: 'Magic Resistance', rule: 'magic-resistance', text: 'Advantage on saving throws against spells and other magical effects.' },
+  evasion: { name: 'Evasion', rule: 'evasion', text: 'When a Dexterity save would halve damage, it takes none on a success and half on a failure.' },
   stench: { name: 'Stench', rule: 'stench', text: 'A creature that starts its turn within 5 feet of it makes a DC 10 Constitution save or is Poisoned until the start of its next turn. On a success it is immune to this Stench for 24 hours.' },
 };
 
@@ -1202,7 +1204,11 @@ export function buildMonster(def, { id, label, x, y, ai = 'melee' }) {
   for (const t of Object.keys(traits)) if (traits[t] && MONSTER_TRAITS[t]) features.push(MONSTER_TRAITS[t]);
   if (def.redirect) features.push({ name: 'Redirect Attack', rule: 'redirect-attack', text: 'Reaction: when a creature makes an attack roll against the boss, a goblin ally within 5 feet swaps places with it and becomes the target.' });
   if (def.web) features.push({ name: `Web (Recharge ${def.web.recharge}-6)`, rule: 'restrained', text: `Dexterity save DC ${def.web.dc}, one creature within ${def.web.range} feet: on a failure it is Restrained until the web is destroyed (AC ${def.web.webAc}, ${def.web.webHp} HP, Fire does double).` });
-  if (def.parry) features.push({ name: 'Parry', rule: 'parry', text: `Reaction: when hit by a melee attack roll while holding a weapon, it adds ${def.parry} to its AC against that attack, possibly causing a miss.` });
+  if (def.parry && !def.parryAny) features.push({ name: 'Parry', rule: 'parry', text: `Reaction: when hit by a melee attack roll while holding a weapon, it adds ${def.parry} to its AC against that attack, possibly causing a miss.` });
+  if (def.parry && def.parryAny) features.push({ name: def.parryName, rule: 'parry', text: `Reaction: when hit by an attack roll, it adds ${def.parry} to its AC against that attack, possibly causing a miss. (It also slips away in a swirl of sand; that part isn't played here.)` });
+  if (def.glare) features.push({ name: def.glare.name, rule: 'paralyzed', text: `Part of its Multiattack: ${ABILITY_NAMES[def.glare.ability]} save DC ${def.glare.dc}, one creature it can see within ${def.glare.range} feet: on a failure ${def.glare.dice} + ${def.glare.flat} ${def.glare.type} damage, and Paralyzed until the end of its next turn.` });
+  if (def.legRes) features.push({ name: `Legendary Resistance (${def.legRes}/Day)`, rule: 'legendary-resistance', text: 'If it fails a saving throw, it can choose to succeed instead.' });
+  if (def.legendary) features.push({ name: `Legendary Actions (${def.legendary.uses})`, rule: 'legendary-actions', text: `Right after another creature's turn, it can take one of these, and it gets them all back at the start of its turn. ${def.legendary.options.map((o) => `${o.name}: ${o.text}`).join(' ')}` });
   if (def.regen) features.push({ name: 'Regeneration', rule: 'regeneration', text: `Regains ${def.regen} Hit Points at the start of each of its turns. If it takes Acid or Fire damage, this doesn't work on its next turn. It dies only if it starts its turn with 0 Hit Points and doesn't regenerate.` });
   if (def.mbreath) features.push({ name: `${def.mbreath.name} (Recharge ${def.mbreath.recharge}${def.mbreath.recharge < 6 ? '-6' : ''})`, rule: 'recharge', text: `Dexterity save DC ${def.mbreath.dc}, each creature in a ${def.mbreath.size}-foot ${def.mbreath.shape === 'line' ? 'Line 5 feet wide' : 'Cone'}: ${def.mbreath.dice} ${def.mbreath.type} damage on a failure, half on a success. It takes the whole action.` });
   if (def.vuln?.length) features.push({ name: 'Vulnerable', rule: 'vulnerability', text: `Takes double ${def.vuln.join(', ')} damage.` });
@@ -1241,6 +1247,10 @@ export function buildMonster(def, { id, label, x, y, ai = 'melee' }) {
     stench: def.stench ? { ...def.stench } : null, drain: def.drain ? { ...def.drain } : null,
     parry: def.parry || 0, authority: !!traits.authority, regen: def.regen ? { hp: def.regen, blocked: false } : null,
     mbreath: def.mbreath ? { ...def.mbreath, ready: true } : null,
+    parryName: def.parryName || null, parryAny: !!def.parryAny, glare: def.glare ? { ...def.glare } : null,
+    magicRes: !!traits.magicRes, evasion: !!traits.evasion,
+    legRes: def.legRes ? { uses: def.legRes, max: def.legRes } : null,
+    legendary: def.legendary ? { uses: def.legendary.uses, max: def.legendary.uses, options: def.legendary.options.map((o) => ({ ...o })), spent: [] } : null,
     conds: [], exhaustion: 0,
     reaction: true, dead: false, x, y, ai, xp: def.xp, cr: def.cr || null,
   };

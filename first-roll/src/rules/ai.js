@@ -16,7 +16,7 @@ import { cheb, incap, down, hasCond, condOf, reachMap, canEndAt, pathFrom, key, 
 import {
   attackOptions, enemiesOf, alliesOf, previewMove, canCast, canAttack, spellAttack, spellDC,
   attackFactors, hitChance, hitBonus, saveChance, spellMod, scaled, areaTargets, pointError, offhandFor, canTarget,
-  provokers, speedOf, seenBy, preservePlan, damageMult, acAgainst, reachOf, BREATH_AREAS, spellAim, smitePay, spellDCParts, landsAidDice, metaError,
+  provokers, speedOf, seenBy, preservePlan, damageMult, acAgainst, reachOf, BREATH_AREAS, spellAim, smitePay, spellDCParts, landsAidDice, metaError, glareTargets,
 } from './combat.js';
 import { inBounds } from './grid.js';
 import { SPELLS } from './data.js';
@@ -420,6 +420,14 @@ export function specialOptions(b, me, { light = false } = {}) {
       if (!fs.length || hit.some((c) => c.side === me.side)) continue;
       const exp = fs.reduce((acc, c) => acc + avgDice(br.dice) * damageMult(c, br.type) * (1 - saveChance(b, c, 'dex', br.dc) / 2), 0);
       add({ a: 'mbreath', x: T.x, y: T.y }, exp - (me.multiattack || 1) * 4, { foes: fs });
+    }
+  }
+  // Dreadful Glare (Mummy Lord): part of its Multiattack, so it always comes first.
+  if (me.glare && !t.glared && (t.action > 0 || t.attacksLeft > 0)) {
+    for (const T of glareTargets(b, me)) {
+      if (hasCond(T, 'paralyzed')) continue;
+      const pFail = 1 - saveChance(b, T, me.glare.ability, me.glare.dc);
+      add({ a: 'glare', target: T.id }, 40 + pFail * (avgDice(me.glare.dice) + me.glare.flat + 15), { T, pFail });
     }
   }
   if (me.web?.ready && t.action) {

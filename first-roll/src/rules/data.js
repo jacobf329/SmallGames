@@ -1268,6 +1268,108 @@ export const YOUNG_BLACK_DRAGON = {
   multiattack: 3, xp: 2900, cr: '7',
 };
 
+// Levels 11 to 15 (SRD 5.2.1, CR 8 to 15).
+export const ASSASSIN = {
+  kind: 'assassin', name: 'Assassin', emoji: '🗡️', type: 'Medium Humanoid', size: 'medium', creature: 'humanoid',
+  ac: 16, hp: 97, hpFormula: '15d8+30', speed: 30,
+  abilities: { str: 11, dex: 18, con: 14, int: 16, wis: 11, cha: 10 }, saves: { dex: 7, int: 6 }, skills: { acrobatics: 7, perception: 6, stealth: 10 },
+  resist: ['Poison'], traits: { evasion: true, nimble: true },
+  attacks: [
+    { id: 'shortsword', name: 'Shortsword', kind: 'melee', bonus: 7, dice: '1d6', flat: 4, type: 'Piercing', extra: [{ dice: '5d6', type: 'Poison' }], rider: { poison: true } },
+    { id: 'crossbow', name: 'Light Crossbow', kind: 'ranged', bonus: 7, dice: '1d8', flat: 4, type: 'Piercing', range: [80, 320], extra: [{ dice: '6d6', type: 'Poison' }] },
+  ],
+  multiattack: 3, xp: 3900, cr: '8',
+};
+export const FROST_GIANT = {
+  kind: 'frost-giant', name: 'Frost Giant', emoji: '🧊', type: 'Huge Giant', size: 'huge', creature: 'giant',
+  ac: 15, hp: 149, hpFormula: '13d12+65', speed: 40,
+  abilities: { str: 23, dex: 9, con: 21, int: 9, wis: 10, cha: 12 }, saves: { con: 8, wis: 3, cha: 4 }, skills: { athletics: 9, perception: 3 },
+  immune: ['Cold'],
+  attacks: [
+    { id: 'axe', name: 'Frost Axe', kind: 'melee', bonus: 9, dice: '2d12', flat: 6, type: 'Slashing', reach: 10, extra: [{ dice: '2d8', type: 'Cold' }] },
+    { id: 'bow', name: 'Great Bow', kind: 'ranged', bonus: 9, dice: '2d10', flat: 6, type: 'Piercing', range: [150, 600], extra: [{ dice: '2d6', type: 'Cold' }], rider: 'chill' },
+  ],
+  multiattack: 2, xp: 3900, cr: '8',
+};
+export const FIRE_GIANT = {
+  kind: 'fire-giant', name: 'Fire Giant', emoji: '🔥', type: 'Huge Giant', size: 'huge', creature: 'giant',
+  ac: 18, hp: 162, hpFormula: '13d12+78', speed: 30,
+  abilities: { str: 25, dex: 9, con: 23, int: 10, wis: 14, cha: 13 }, saves: { dex: 3, con: 10, cha: 5 }, skills: { athletics: 11, perception: 6 },
+  immune: ['Fire'],
+  attacks: [
+    { id: 'sword', name: 'Flame Sword', kind: 'melee', bonus: 11, dice: '4d6', flat: 7, type: 'Slashing', reach: 10, extra: [{ dice: '3d6', type: 'Fire' }] },
+    { id: 'hammer', name: 'Hammer Throw', kind: 'ranged', bonus: 11, dice: '3d10', flat: 7, type: 'Bludgeoning', range: [60, 240], extra: [{ dice: '1d8', type: 'Fire' }], rider: { push: 15, shaken: 'Hammer Throw' } },
+  ],
+  multiattack: 2, xp: 5000, cr: '9',
+};
+export const BONE_DEVIL = {
+  kind: 'bone-devil', name: 'Bone Devil', emoji: '🦂', type: 'Large Fiend (Devil)', size: 'large', creature: 'fiend',
+  ac: 16, hp: 161, hpFormula: '17d10+68', speed: 40,
+  abilities: { str: 18, dex: 16, con: 18, int: 13, wis: 14, cha: 16 }, saves: { str: 8, int: 5, wis: 6, cha: 7 }, skills: { deception: 7, insight: 6 },
+  resist: ['Cold'], immune: ['Fire', 'Poison'], condImmune: ['poisoned'], traits: { magicRes: true },
+  attacks: [
+    { id: 'claw', name: 'Claw', kind: 'melee', bonus: 8, dice: '2d8', flat: 4, type: 'Slashing', reach: 10 },
+    { id: 'sting', name: 'Infernal Sting', kind: 'melee', bonus: 8, dice: '2d10', flat: 4, type: 'Piercing', reach: 10, extra: [{ dice: '4d8', type: 'Poison' }], rider: { poison: true, noHeal: true } },
+  ],
+  multiattack: 3, multiName: 'two Claw attacks and one Infernal Sting', xp: 5000, cr: '9',
+};
+export const STONE_GOLEM = {
+  kind: 'stone-golem', name: 'Stone Golem', emoji: '🗿', type: 'Large Construct', size: 'large', creature: 'construct',
+  ac: 18, hp: 220, hpFormula: '21d10+105', speed: 30,
+  abilities: { str: 22, dex: 9, con: 20, int: 3, wis: 11, cha: 1 },
+  immune: ['Poison', 'Psychic'], condImmune: ['charmed', 'frightened', 'paralyzed', 'petrified', 'poisoned'], traits: { magicRes: true },
+  attacks: [
+    { id: 'slam', name: 'Slam', kind: 'melee', bonus: 10, dice: '2d8', flat: 6, type: 'Bludgeoning', extra: [{ dice: '2d8', type: 'Force' }] },
+    { id: 'bolt', name: 'Force Bolt', kind: 'ranged', bonus: 9, dice: '4d10', flat: 0, type: 'Force', range: [120, 120] },
+  ],
+  multiattack: 2, xp: 5900, cr: '10',
+};
+export const ARCHMAGE = {
+  kind: 'archmage', name: 'Archmage', emoji: '🧙', type: 'Medium Humanoid (Wizard)', size: 'medium', creature: 'humanoid',
+  ac: 17, hp: 170, hpFormula: '31d8+31', speed: 30,
+  abilities: { str: 10, dex: 14, con: 12, int: 20, wis: 15, cha: 16 }, saves: { int: 9, wis: 6 }, skills: { arcana: 13, history: 9, perception: 6 },
+  traits: { magicRes: true },
+  attacks: [
+    { id: 'burst-ranged', name: 'Arcane Burst', kind: 'ranged', bonus: 9, dice: '4d10', flat: 5, type: 'Force', range: [150, 150] },
+    { id: 'burst', name: 'Arcane Burst (melee)', kind: 'melee', bonus: 9, dice: '4d10', flat: 5, type: 'Force' },
+  ],
+  casting: { ability: 'int', dc: 17, attack: 9, spells: { 'lightning-bolt': { n: 2, level: 7 }, 'cone-of-cold': { n: 1, level: 9 }, 'misty-step': 3, shield: 3 } },
+  multiattack: 4, xp: 8000, cr: '12',
+};
+export const ADULT_BLACK_DRAGON = {
+  kind: 'adult-dragon', name: 'Adult Black Dragon', emoji: '🐉', type: 'Huge Dragon (Chromatic)', size: 'huge', creature: 'dragon',
+  ac: 19, hp: 195, hpFormula: '17d12+85', speed: 40,
+  abilities: { str: 23, dex: 14, con: 21, int: 14, wis: 13, cha: 19 }, saves: { dex: 7, wis: 6 }, skills: { perception: 11, stealth: 7 },
+  immune: ['Acid'], traits: { amphibious: true },
+  attacks: [{ id: 'rend', name: 'Rend', kind: 'melee', bonus: 11, dice: '2d6', flat: 6, type: 'Slashing', reach: 10, extra: [{ dice: '1d8', type: 'Acid' }] }],
+  mbreath: { name: 'Acid Breath', recharge: 5, dc: 18, dice: '12d8', type: 'Acid', shape: 'line', size: 60 },
+  legRes: 3,
+  legendary: { uses: 3, options: [
+    { id: 'insects', name: 'Cloud of Insects', kind: 'save', ability: 'dex', dc: 17, dice: '4d10', type: 'Poison', range: 120, once: true,
+      text: 'Dexterity save DC 17, one creature within 120 feet: 4d10 Poison damage on a failure. Not again until the start of its next turn.' },
+    { id: 'pounce', name: 'Pounce', kind: 'strike', move: true, text: 'It moves up to half its Speed and makes one Rend attack.' },
+  ] },
+  multiattack: 3, xp: 11500, cr: '14',
+};
+export const MUMMY_LORD = {
+  kind: 'mummy-lord', name: 'Mummy Lord', emoji: '🧟', type: 'Medium Undead (Cleric)', size: 'medium', creature: 'undead',
+  ac: 17, hp: 187, hpFormula: '25d8+75', speed: 30,
+  abilities: { str: 18, dex: 10, con: 17, int: 11, wis: 19, cha: 16 }, saves: { int: 5, wis: 9 }, skills: { history: 5, perception: 9, religion: 5 },
+  vuln: ['Fire'], immune: ['Necrotic', 'Poison'], condImmune: ['charmed', 'frightened', 'paralyzed', 'poisoned'], traits: { magicRes: true },
+  attacks: [
+    { id: 'fist', name: 'Rotting Fist', kind: 'melee', bonus: 9, dice: '2d10', flat: 4, type: 'Bludgeoning', extra: [{ dice: '3d6', type: 'Necrotic' }], rider: { noHeal: 'curse' } },
+    { id: 'channel', name: 'Channel Negative Energy', kind: 'ranged', bonus: 9, dice: '6d6', flat: 4, type: 'Necrotic', range: [60, 60] },
+  ],
+  glare: { name: 'Dreadful Glare', ability: 'wis', dc: 17, dice: '6d6', flat: 4, type: 'Psychic', range: 60 },
+  parry: 2, parryName: 'Whirlwind of Sand', parryAny: true,
+  legRes: 3,
+  legendary: { uses: 3, options: [
+    { id: 'glare', name: 'Glare', kind: 'glare', once: true, text: 'It uses Dreadful Glare. Not again until the start of its next turn.' },
+    { id: 'strike', name: 'Necrotic Strike', kind: 'strike', text: 'It makes one Rotting Fist or Channel Negative Energy attack.' },
+  ] },
+  multiattack: 1, multiName: 'one Rotting Fist or Channel Negative Energy attack, and uses Dreadful Glare', xp: 13000, cr: '15',
+};
+
 // Phase 0's one-off skirmish, kept for the quick-fight mode and the tests.
 export const SKIRMISH = {
   walls: ['1,5', '2,5', '5,4', '6,4', '6,5', '3,1'],
