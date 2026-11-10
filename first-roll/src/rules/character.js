@@ -16,7 +16,8 @@
 //   spellbook), prepared, scholar (wizard 2+), invocations and pactWeapon
 //   (warlock), metamagic (sorcerer 2+), land (druid 3), prey (ranger 3),
 //   discoveries (bard 6), affinity (sorcerer 6), strikes (cleric and druid 7),
-//   style2 (fighter 7), tactics (ranger 7), resilience (warlock 10)
+//   style2 (fighter 7), tactics (ranger 7), resilience (warlock 10),
+//   arcanum (warlock 11+: { 6: spell, 7: spell, 8: spell })
 // }
 // validateSpec fills any missing choice with a sensible default and drops
 // choices the rules don't allow, so older saved heroes still load.
@@ -29,7 +30,7 @@ import {
   DEFAULT_LINEAGE, ORIGIN_FEATS, MI_DEFAULT_ABILITY, SLOT_TABLES, ALWAYS_PREPARED, LAND_SPELLS, landSpells, DRUID_ORDERS,
   HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, METAMAGIC, STYLE_LEVEL, stylesFor, LIST_NAMES, isMonkWeapon, PACT_WEAPONS,
   ASI_FEATS, STYLE_FEATS, asiLevels, PROGRESSION as P, masteryCount, attacksPerAction, SLOT_COST, SLOT_MIN_LEVEL,
-  STRIKES, DEFENSIVE_TACTICS, RESILIENCE_TYPES,
+  STRIKES, DEFENSIVE_TACTICS, RESILIENCE_TYPES, arcanumLevels,
 } from './data.js';
 import { die } from './rng.js';
 
@@ -92,6 +93,8 @@ export function discoveryOptions(level) {
   return uniq(['cleric', 'druid', 'wizard'].flatMap((l) => Object.entries(SPELL_LISTS[l]).filter(([lv]) => +lv <= top).flatMap(([, xs]) => xs)))
     .filter((x) => !bard.has(x)).sort((p, q) => SPELLS[p].level - SPELLS[q].level);
 }
+// Mystic Arcanum choices: Warlock spells of that level, the ones that work in a fight first.
+export const arcanumOptions = (sl) => [...(SPELL_LISTS.warlock[sl] || [])].sort((p, q) => (SPELLS[p].kind === 'utility') - (SPELLS[q].kind === 'utility'));
 export const DISCOVERY_DEFAULTS = ['spirit-guardians', 'fireball', 'guiding-bolt', 'magic-missile'];
 export const AFFINITY_TYPES = ['Fire', 'Cold', 'Lightning', 'Acid', 'Poison'];
 
@@ -113,6 +116,7 @@ export function levelChoices(cls, level) {
   if (cls === 'fighter' && level === 7) out.push('style2');
   if (cls === 'ranger' && level === 7) out.push('tactics');
   if (cls === 'warlock' && level === 10) out.push('resilience');
+  if (cls === 'warlock' && arcanumLevels(level).length > arcanumLevels(level - 1).length) out.push('arcanum');
   return out;
 }
 // How many earlier picks in a list can be swapped out at a level-up ('level')
@@ -135,7 +139,7 @@ export function droppedPicks(cls, level, land, was = [], now = []) {
 }
 // The fields a level-up or Long Rest screen can change.
 export const PICK_FIELDS = ['cantrips', 'book', 'prepared', 'scholar', 'skills', 'expertise', 'style', 'warriorCantrips', 'land', 'prey', 'invocations', 'pactWeapon', 'metamagic', 'feats',
-  'discoveries', 'affinity', 'strikes', 'style2', 'tactics', 'resilience'];
+  'discoveries', 'affinity', 'strikes', 'style2', 'tactics', 'resilience', 'arcanum'];
 
 // Pick n from `want` (in order) that pass ok(), then fill from `fill`.
 function pickN(n, want, fill, ok) {
@@ -355,13 +359,19 @@ export function validateSpec(spec, { level = 1 } = {}) {
     ? (stylesFor(cls).includes(spec.style2) && !featStyles.has(spec.style2) ? spec.style2 : ['defense', 'great-weapon', 'archery', ...stylesFor(cls)].find((x) => stylesFor(cls).includes(x) && !featStyles.has(x))) : null;
   const tactics = cls === 'ranger' && level >= 7 ? (DEFENSIVE_TACTICS[spec.tactics] ? spec.tactics : 'multi') : null;
   const resilience = cls === 'warlock' && level >= 10 ? (RESILIENCE_TYPES.includes(spec.resilience) ? spec.resilience : 'Slashing') : null;
+  // Mystic Arcanum (Warlock 11+): one Warlock spell of level 6, 7, 8 (and 9), each cast once per Long Rest.
+  const arcanum = {};
+  if (cls === 'warlock') for (const sl of arcanumLevels(level)) {
+    const opts = arcanumOptions(sl);
+    arcanum[sl] = opts.includes(spec.arcanum?.[sl]) ? spec.arcanum[sl] : opts[0];
+  }
 
   return {
     cls, species, background, method, scores, ...(rolls ? { rolls } : {}), plus, ancestry, name,
     lineage, speciesAbility, speciesSkill, bgFeat, versatile,
     skills, expertise, style, warriorCantrips, kit, masteries, order, cantrips, book, prepared, scholar,
     invocations, pactWeapon, metamagic, land, prey, feats,
-    discoveries, affinity, strikes, style2, tactics, resilience,
+    discoveries, affinity, strikes, style2, tactics, resilience, arcanum,
   };
 }
 
@@ -537,7 +547,9 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
 
   // Saving throws
   const saves = {};
-  for (const a of ABILITIES) saves[a] = m[a] + (C.saves.includes(a) ? pb : 0);
+  // Disciplined Survivor (Monk 14): every save. Slippery Mind (Rogue 15): Wisdom and Charisma too.
+  const saveProfs = uniq([...C.saves, ...(cls === 'monk' && L(14) ? ABILITIES : []), ...(cls === 'rogue' && L(15) ? ['wis', 'cha'] : [])]);
+  for (const a of ABILITIES) saves[a] = m[a] + (saveProfs.includes(a) ? pb : 0);
 
   // Weapons: each carried weapon, and a thrown version of the throwable ones.
   // A Monk's weapons use DEX if it's better, and at least the Martial Arts
@@ -624,6 +636,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     const st = FIGHTING_STYLES[spec.style];
     for (const s of spec.warriorCantrips) learn(s, st.ability, st.name);
   }
+  for (const sid of Object.values(spec.arcanum || {})) learn(sid, 'cha', 'Mystic Arcanum', { free: 1, perDay: true });
   if (inv('fiendish-vigor')) { learn('false-life', 'cha', 'Fiendish Vigor'); known['false-life'].atWill = 'Fiendish Vigor'; known['false-life'].maxed = true; }
   if (inv('pact-of-the-chain')) learn('find-familiar', 'cha', 'Pact of the Chain');
   const featFeature = [];
@@ -686,6 +699,9 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(9, 'Indomitable', 'indomitable', `When you fail a saving throw, you can reroll it with a bonus of +${level} (your Fighter level), and you must use the new roll. Once per Long Rest. (Used for you automatically.)`);
     F(9, 'Tactical Master', 'tactical-master', 'When you attack with a weapon whose mastery property you can use, you can swap that property for Push, Sap or Slow for that attack. (Not offered in fights here yet.)');
     F(10, 'Champion: Heroic Warrior', 'heroic-inspiration', 'During a fight, you gain Heroic Inspiration at the start of your turn if you don\'t already have it.');
+    F(11, 'Two Extra Attacks', 'extra-attack', 'You attack three times, instead of once, whenever you take the Attack action on your turn.');
+    F(13, 'Studied Attacks', 'studied-attacks', 'When you make an attack roll against a creature and miss, you have Advantage on your next attack roll against it before the end of your next turn.');
+    F(15, 'Champion: Superior Critical', 'improved-critical', 'Your weapon attack rolls score a Critical Hit on a roll of 18, 19 or 20.');
   } else if (spec.cls === 'rogue') {
     F(1, 'Sneak Attack', 'sneak-attack', `Once per turn, +${P.sneakDice(level)}d6 damage with a Finesse or Ranged weapon if you have Advantage, or an ally is next to the target.`);
     F(1, 'Expertise', 'expertise', `Double Proficiency Bonus in ${spec.expertise.map((x) => SKILL_NAMES[x]).join(' and ')}.`);
@@ -700,6 +716,10 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(7, 'Evasion', 'evasion', "When an effect lets you make a Dexterity save to take only half damage, you take no damage on a success and half on a failure. Not while you're Incapacitated.");
     F(7, 'Reliable Talent', 'reliable-talent', 'When you make an ability check with a skill or tool you are proficient in, a d20 roll of 9 or lower counts as a 10.');
     F(9, 'Thief: Supreme Sneak', null, "A new Cunning Strike, Stealth Attack (1d6): if you're Hidden, this attack doesn't end it as long as you end the turn behind Three-Quarters or Total Cover. (The board here has only Half Cover, so it isn't offered.)");
+    F(11, 'Improved Cunning Strike', 'cunning-strike', 'You can use up to two Cunning Strike effects when you deal Sneak Attack damage, paying the die cost of each. (Here: Trip and Daze together when you can pay for both.)');
+    F(13, 'Thief: Use Magic Device', null, 'You can attune to four magic items, may not spend a charge when you use one, and can use any Spell Scroll. (The heroes here carry no magic items yet.)');
+    F(14, 'Devious Strikes', 'devious-strikes', `New Cunning Strike effects. Daze (2d6): the target makes a Constitution save or, on its next turn, can only move or take an action or a Bonus Action. Knock Out (6d6): Constitution save or Unconscious for 1 minute, or until it takes damage (a save at the end of each of its turns ends it). Obscure (3d6): Dexterity save or Blinded until the end of its next turn. (Here: Knock Out is used for you on a foe that would stay standing, Daze otherwise.)`);
+    F(15, 'Slippery Mind', 'proficiency', 'Proficiency in Wisdom and Charisma saving throws.');
   } else if (spec.cls === 'cleric') {
     F(1, 'Spellcasting', 'spellcasting', `Cantrips at will; prepared spells use spell slots. Wisdom is your spellcasting ability. You prepare ${PREPARED_BY_LEVEL.cleric[level]} spells from the Cleric list and can change them after a Long Rest.`);
     if (spec.order === 'thaumaturge') F(1, 'Divine Order: Thaumaturge', 'divine-order', `One extra cantrip, and +${Math.max(1, m.wis)} (your Wisdom modifier, at least 1) to Intelligence (Arcana and Religion) checks.`);
@@ -713,6 +733,8 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     if (spec.strikes) F(7, `Blessed Strikes: ${STRIKES.cleric[spec.strikes].name}`, STRIKES.cleric[spec.strikes].rule, STRIKES.cleric[spec.strikes].text);
     F(7, 'Divine Spark 2d8', 'channel-divinity', 'Divine Spark now rolls 2d8 instead of 1d8.');
     F(10, 'Divine Intervention', 'divine-intervention', 'Once per Long Rest, as a Magic action, cast any Cleric spell of level 5 or lower that doesn\'t take a Reaction, without a spell slot. (Here: any Cleric spell you have prepared.)');
+    F(13, 'Divine Spark 3d8', 'channel-divinity', 'Divine Spark now rolls 3d8.');
+    if (spec.strikes) F(14, 'Improved Blessed Strikes', spec.strikes === 'divine' ? 'divine-strike' : 'potent-spellcasting', spec.strikes === 'divine' ? 'Divine Strike deals 2d8 instead of 1d8.' : `When a Cleric cantrip of yours deals damage, you or a creature within 60 feet gains ${2 * Math.max(1, m.wis)} Temporary Hit Points (twice your Wisdom modifier). (Here: the ally who needs them most.)`);
   } else if (spec.cls === 'wizard') {
     F(1, 'Spellcasting', 'spellcasting', `Cantrips at will; prepared spells use spell slots. Intelligence is your spellcasting ability. Your spellbook holds ${spec.book.length} spells; you prepare ${PREPARED_BY_LEVEL.wizard[level]} of them and can change them after a Long Rest.`);
     F(1, 'Ritual Adept', 'rituals', 'Cast Ritual spells from your spellbook without preparing them.');
@@ -723,6 +745,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(5, 'Memorize Spell', null, 'When you finish a Short Rest, you can swap one prepared spell for another in your spellbook. (Useful outside of fights.)');
     F(6, 'Evoker: Sculpt Spells', 'sculpt-spells', 'When you cast an Evocation spell that makes others save, up to 1 + the spell\'s level of your allies in it succeed automatically and take no damage from it. (Used for you automatically.)');
     F(10, 'Evoker: Empowered Evocation', 'empowered-evocation', `Add your Intelligence modifier (+${m.int}) to one damage roll of any Wizard Evocation spell you cast.`);
+    F(14, 'Evoker: Overchannel', 'overchannel', 'When you cast a Wizard spell of level 1 to 5 that deals damage, you can deal the most damage it could. The first time is free; each later time before a Long Rest you take 2d12 Necrotic damage per spell level (1d12 more each time after that), which ignores Resistance and Immunity.');
   }
   const names = (xs) => xs.map((x) => SPELLS[x].name).join(', ');
   const prepText = (ab, how) => `Cantrips at will; prepared spells use spell slots. ${ab} is your spellcasting ability. You prepare ${PREPARED_BY_LEVEL[cls][level]} ${C.name} spells${how}`;
@@ -747,6 +770,10 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(7, 'Instinctive Pounce', 'instinctive-pounce', 'As part of the Bonus Action you take to enter a Rage, you can move up to half your Speed.');
     F(9, 'Brutal Strike', 'brutal-strike', "When you use Reckless Attack, you can give up the Advantage on one Strength attack on your turn. If it hits, it deals an extra 1d10 damage and one of: Forceful Blow (the target is pushed 15 feet straight away from you) or Hamstring Blow (its Speed drops by 15 feet until the start of your next turn). (Here: used on your first Reckless attack each turn when you'd still be likely to hit. It's Hamstring Blow while you have attacks left, so the target stays in reach, and Forceful Blow on your last attack, or Hamstring when there's no room to push.)");
     F(10, 'Berserker: Retaliation', 'retaliation', 'Reaction when a creature within 5 feet of you damages you: make one melee attack against it. (Used for you automatically.)');
+    F(11, 'Relentless Rage', 'relentless-rage', `If you drop to 0 Hit Points while raging and don't die outright, make a DC 10 Constitution save. On a success your Hit Points become ${2 * level} instead (twice your Barbarian level). Each use adds 5 to the DC; it goes back to 10 after a Short or Long Rest.`);
+    F(13, 'Improved Brutal Strike', 'brutal-strike', 'Brutal Strike gains two more effects. Staggering Blow: the target has Disadvantage on its next saving throw and can\'t make Opportunity Attacks until the start of your next turn. Sundering Blow: the next attack roll by another creature against the target, before the start of your next turn, gets +5. (Here: Sundering Blow when an ally is next to the target.)');
+    F(14, 'Berserker: Intimidating Presence', 'intimidating-presence', `Bonus Action: each creature you choose in a 30-foot Emanation makes a Wisdom save (DC ${8 + m.str + pb}, 8 + STR + Proficiency Bonus) or is Frightened of you for 1 minute, saving again at the end of each of its turns. Once per Long Rest, or spend a use of Rage to use it again.`);
+    F(15, 'Persistent Rage', 'persistent-rage', 'Once per Long Rest, when you roll Initiative, you regain all your uses of Rage. Your Rage lasts 10 minutes without needing to be kept up, and ends early only if you fall Unconscious or put on Heavy armor.');
   } else if (cls === 'bard') {
     F(1, 'Bardic Inspiration', 'bardic-inspiration', `Bonus Action: give a creature within 60 feet a d${P.bardicDie(level)}. Once in the next hour, when it fails a D20 Test, it can roll the die and add it, maybe turning the failure into a success (here: used for it automatically when that would work). ${Math.max(1, m.cha)} uses (your Charisma modifier, at least 1); all back on a ${L(5) ? 'Short or ' : ''}Long Rest.`);
     F(1, 'Spellcasting', 'spellcasting', `${prepText('Charisma', '. When you gain a Bard level you can swap one of them for another, and one cantrip.')}`);
@@ -758,6 +785,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     if (spec.discoveries?.length) F(6, `College of Lore: Magical Discoveries`, 'spellcasting', `Always prepared, not counted: ${names(spec.discoveries)} (from the Cleric, Druid and Wizard lists). You can swap one when you gain a Bard level.`);
     F(7, 'Countercharm', 'countercharm', 'Reaction when you or a creature within 30 feet fails a save against being Charmed or Frightened: it rerolls the save with Advantage. (Used for you automatically.)');
     F(10, 'Magical Secrets', 'magical-secrets', 'The spells you prepare can come from the Bard, Cleric, Druid and Wizard lists, and they count as Bard spells for you.');
+    F(14, 'College of Lore: Peerless Skill', 'peerless-skill', 'When you make an ability check or attack roll and fail, you can spend a Bardic Inspiration, roll it and add it, maybe turning the failure into a success. If it still fails, the use isn\'t spent. (Used for you automatically when it would work.)');
   } else if (cls === 'druid') {
     F(1, 'Spellcasting', 'spellcasting', `${prepText('Wisdom', ' and can change them after a Long Rest.')}`);
     F(1, 'Druidic', null, 'You know Druidic, the secret language of druids.');
@@ -770,6 +798,8 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(6, 'Circle of the Land: Natural Recovery', 'natural-recovery', 'Once per Long Rest, cast one of your Circle spells of level 1 or higher without a spell slot. (Here: the highest-level one has that free cast.) Once per Long Rest on a Short Rest, regain slots adding up to half your Druid level (useful outside of fights).');
     if (spec.strikes) F(7, `Elemental Fury: ${STRIKES.druid[spec.strikes].name}`, STRIKES.druid[spec.strikes].rule, STRIKES.druid[spec.strikes].text);
     if (spec.land) F(10, "Circle of the Land: Nature's Ward", 'natures-ward', `You can't be Poisoned, and you have Resistance to ${LAND_SPELLS[spec.land].ward} damage (from your land).`);
+    if (spec.land) F(14, "Circle of the Land: Nature's Sanctuary", 'natures-sanctuary', `Magic action, one use of Wild Shape: spectral trees fill a 15-foot Cube within 120 feet for 1 minute. You and your allies in it have Half Cover, and your allies in it gain your Resistance to ${LAND_SPELLS[spec.land].ward} damage. (Here: the Cube stays where you put it.)`);
+    if (spec.strikes) F(15, 'Improved Elemental Fury', spec.strikes === 'primal' ? 'primal-strike' : 'potent-spellcasting', spec.strikes === 'primal' ? 'Primal Strike deals 2d8 instead of 1d8.' : 'Your Druid cantrips with a range of 10 feet or more reach 300 feet farther.');
   } else if (cls === 'monk') {
     F(1, 'Martial Arts', 'martial-arts', 'With no armor and no Shield: your Unarmed Strikes and Monk weapons (Simple melee weapons, and Martial melee weapons with the Light property) deal at least ${martialDie}, your Martial Arts die, and can use Dexterity. Bonus Action: one Unarmed Strike.');
     F(1, 'Unarmored Defense', 'unarmored-defense', 'Without armor or a Shield, your AC is 10 + DEX + WIS.');
@@ -787,6 +817,10 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(9, 'Acrobatic Movement', null, 'Without armor or a Shield, you can move along vertical surfaces and across liquids on your turn. (The board here is flat.)');
     F(10, 'Heightened Focus', 'heightened-focus', 'Flurry of Blows makes three Unarmed Strikes instead of two. Patient Defense with a Focus Point also gives you Temporary Hit Points equal to two rolls of your Martial Arts die.');
     F(10, 'Self-Restoration', 'self-restoration', 'At the end of each of your turns, you can end one of these conditions on yourself: Charmed, Frightened or Poisoned.');
+    F(11, 'Open Hand: Fleet Step', 'fleet-step', 'When you take a Bonus Action other than Step of the Wind, you can also use Step of the Wind right after it. (Here: after Flurry of Blows, you can spend 1 Focus Point to Disengage and Dash.)');
+    F(13, 'Deflect Energy', 'deflect-attacks', 'Deflect Attacks now works against attacks of any damage type, not only Bludgeoning, Piercing and Slashing.');
+    F(14, 'Disciplined Survivor', 'disciplined-survivor', 'Proficiency in every saving throw. When you fail a save, you can spend 1 Focus Point to reroll it, and you must use the new roll. (Used for you automatically.)');
+    F(15, 'Perfect Focus', 'perfect-focus', 'When you roll Initiative and don\'t use Uncanny Metabolism, you regain Focus Points until you have 4, if you have 3 or fewer.');
   } else if (cls === 'paladin') {
     F(1, 'Lay on Hands', 'lay-on-hands', `A pool of ${5 * level} Hit Points (5 × Paladin level), refilled on a Long Rest. Bonus Action: touch a creature and restore Hit Points from the pool, or spend 5 to end the Poisoned condition on it.`);
     F(1, 'Spellcasting', 'spellcasting', `${prepText('Charisma', '. After a Long Rest you can swap one of them for another.')}`);
@@ -802,6 +836,9 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(7, 'Oath of Devotion: Aura of Devotion', 'aura-of-devotion', "You and your allies in your Aura of Protection can't be Charmed.");
     F(9, 'Abjure Foes', 'abjure-foes', `Magic action, one Channel Divinity: up to ${Math.max(1, m.cha)} creatures you can see within 60 feet make a Wisdom save or are Frightened of you for 1 minute or until they take damage. While Frightened this way, each can move, take an action or take a Bonus Action on its turn, only one of them.`);
     F(10, 'Aura of Courage', 'aura-of-courage', "You and your allies in your Aura of Protection can't be Frightened.");
+    F(11, 'Radiant Strikes', 'radiant-strikes', 'When you hit a target with a melee weapon or an Unarmed Strike, it takes an extra 1d8 Radiant damage.');
+    F(14, 'Restoring Touch', 'lay-on-hands', 'When you use Lay on Hands, you can also spend 5 points from the pool per condition to end Blinded, Charmed, Frightened, Paralyzed or Stunned on the creature (Deafened too).');
+    F(15, 'Oath of Devotion: Smite of Protection', 'smite-of-protection', 'When you cast Divine Smite, you and your allies in your Aura of Protection have Half Cover until the start of your next turn.');
   } else if (cls === 'ranger') {
     F(1, 'Spellcasting', 'spellcasting', `${prepText('Wisdom', '. After a Long Rest you can swap one of them for another.')}`);
     F(1, 'Favored Enemy', 'favored-enemy', `Hunter's Mark is always prepared, and you can cast it ${P.favoredEnemy(level)} times per Long Rest without a spell slot.`);
@@ -814,6 +851,10 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(6, 'Roving', 'roving', '+10 feet of Speed while you aren\'t wearing Heavy armor, and a Climb Speed and Swim Speed equal to your Speed.');
     if (spec.tactics) F(7, `Hunter: ${DEFENSIVE_TACTICS[spec.tactics].name}`, DEFENSIVE_TACTICS[spec.tactics].rule, `${DEFENSIVE_TACTICS[spec.tactics].text} You can switch Defensive Tactics after a Short or Long Rest.`);
     F(10, 'Tireless', 'tireless', `Magic action: gain 1d8 + ${Math.max(1, m.wis)} Temporary Hit Points (WIS modifier). ${Math.max(1, m.wis)} uses, all back on a Long Rest. Each Short Rest also lowers your Exhaustion by 1.`);
+    F(11, "Hunter: Superior Hunter's Prey", 'superior-hunters-prey', "Once per turn, when you deal Hunter's Mark damage to a creature, you also deal that damage to another creature you can see within 30 feet of it. (Used for you automatically.)");
+    F(13, 'Relentless Hunter', 'relentless-hunter', "Taking damage can't break your Concentration on Hunter's Mark.");
+    F(14, "Nature's Veil", 'natures-veil', `Bonus Action: you are Invisible until the end of your next turn. ${Math.max(1, m.wis)} uses (your Wisdom modifier, at least 1), all back on a Long Rest.`);
+    F(15, "Hunter: Superior Hunter's Defense", 'superior-hunters-defense', 'Reaction when you take damage: you have Resistance to that damage, and more of the same type, until the end of the turn. (Used for you automatically on a big hit.)');
   } else if (cls === 'sorcerer') {
     F(1, 'Spellcasting', 'spellcasting', `${prepText('Charisma', '. When you gain a Sorcerer level you can swap one of them for another, and one cantrip.')}`);
     F(1, 'Innate Sorcery', 'innate-sorcery', 'Bonus Action, twice per Long Rest: for 1 minute, your Sorcerer spells get +1 to their save DC, and you have Advantage on their attack rolls.');
@@ -824,6 +865,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(5, 'Sorcerous Restoration', 'sorcerous-restoration', `Once per Long Rest, when you finish a Short Rest, regain up to ${Math.floor(level / 2)} spent Sorcery Points (half your Sorcerer level).`);
     if (spec.affinity) F(6, `Draconic Sorcery: Elemental Affinity (${spec.affinity})`, 'elemental-affinity', `Resistance to ${spec.affinity} damage, and when you cast a spell that deals ${spec.affinity} damage, add your Charisma modifier (+${m.cha}) to one damage roll of it.`);
     F(7, 'Sorcery Incarnate', 'sorcery-incarnate', 'With no Innate Sorcery uses left, you can spend 2 Sorcery Points to use it anyway. While it is active, you can use up to two Metamagic options on each spell. (Here: one at a time.)');
+    F(14, 'Draconic Sorcery: Dragon Wings', null, 'Bonus Action: dragon wings give you a Fly Speed of 60 feet for 1 hour, once per Long Rest (or for 3 Sorcery Points). (The board here is flat, so it is used outside of fights.)');
   } else if (cls === 'warlock') {
     const sl = Object.entries(slotTable(cls)[level])[0];
     F(1, 'Pact Magic', 'pact-magic', `${sl[1]} spell slot${sl[1] > 1 ? 's' : ''} of level ${sl[0]}, all back on a Short or Long Rest. Charisma is your spellcasting ability. You prepare ${PREPARED_BY_LEVEL.warlock[level]} Warlock spells and can swap one, and one cantrip, when you gain a level.`);
@@ -834,6 +876,8 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     F(6, "Fiend Patron: Dark One's Own Luck", 'dark-ones-own-luck', `When you make an ability check or a saving throw, you can add 1d10 to it after seeing the roll. ${Math.max(1, m.cha)} uses (your Charisma modifier, at least 1), all back on a Long Rest. (Used for you automatically when it could turn a failed save into a success.)`);
     F(9, 'Contact Patron', null, 'Contact Other Plane is always prepared, and once per Long Rest you can cast it without a slot and succeed on its save. (Useful outside of fights.)');
     if (spec.resilience) F(10, `Fiend Patron: Fiendish Resilience (${spec.resilience})`, 'fiendish-resilience', `Resistance to ${spec.resilience} damage. After a Short or Long Rest you can pick another type (not Force).`);
+    for (const [sl, sid] of Object.entries(spec.arcanum || {})) F({ 6: 11, 7: 13, 8: 15, 9: 17 }[sl], `Mystic Arcanum: ${SPELLS[sid].name}`, 'mystic-arcanum', `Once per Long Rest, cast ${SPELLS[sid].name} (a level ${sl} Warlock spell) without a spell slot.`);
+    F(14, 'Fiend Patron: Hurl Through Hell', 'hurl-through-hell', `Once per turn, when you hit a creature with an attack roll, you can make it a Charisma save against your spell save DC. On a failure it vanishes through the lower planes until the end of your next turn, then comes back: it takes 8d10 Psychic damage (unless it is a Fiend) and is Incapacitated until then. Once per Long Rest, or spend a Pact Magic slot to use it again. (Used for you automatically on a tough foe.)`);
   }
   features.push({ name: `Equipment: ${kit.name}`, rule: null, text: kit.text, source: C.name });
 
@@ -851,7 +895,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     name: (name || spec.name || C.name).slice(0, 20), level, pb, spec,
     species: lin && spec.species !== 'goliath' ? `${lin.name}${spec.species === 'tiefling' ? ' Tiefling' : ''}` : S.name, speciesId: spec.species, lineage: spec.lineage,
     background: B.name, size: spec.species === 'halfling' || spec.species === 'gnome' ? 'small' : 'medium',
-    scores, mods: m, saves, saveProfs: [...C.saves],
+    scores, mods: m, saves, saveProfs,
     armorId, hasShield: kit.shield, style: spec.style, styles, mageArmor: false, unarmored, shadows,
     ac: sumParts(acParts), acParts, hp: hpMax, hpMax, hpParts, tempHp: 0,
     hitDice: { die: C.hitDie, max: level, left: level },
@@ -871,7 +915,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     secondWind: spec.cls === 'fighter' ? { uses: P.secondWind(level), max: P.secondWind(level) } : null,
     tacticalShift: spec.cls === 'fighter' && L(5),
     actionSurge: spec.cls === 'fighter' && L(2) ? { uses: 1, max: 1 } : null,
-    critOn: spec.cls === 'fighter' && L(3) ? 19 : 20,
+    critOn: spec.cls === 'fighter' && L(15) ? 18 : spec.cls === 'fighter' && L(3) ? 19 : 20,
     initAdv: (spec.cls === 'fighter' && L(3)) || (cls === 'barbarian' && L(7)),
     cunning: spec.cls === 'rogue' && L(2),
     steadyAim: spec.cls === 'rogue' && L(3),
@@ -891,7 +935,7 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     } : null,
     inspiration: false, exhaustion: 0, aid: 0,
     creature: 'humanoid', conds: [], autoInspire: true,
-    multiattack: attacksPerAction(cls, level) > 1 ? attacksPerAction(cls, level) : inv('thirsting-blade') ? 2 : 1,
+    multiattack: attacksPerAction(cls, level) > 1 ? attacksPerAction(cls, level) : inv('devouring-blade') ? 3 : inv('thirsting-blade') ? 2 : 1,
     extraAttackPact: attacksPerAction(cls, level) === 1 && inv('thirsting-blade'),
     reaction: true, deathSaves: { s: 0, f: 0 }, stable: false, dead: false,
     // The other classes (see combat.js for how each works in a fight).
@@ -937,6 +981,21 @@ export function buildHero(rawSpec, { id = 'hero', name, level = 1 } = {}) {
     ownLuck: cls === 'warlock' && L(6) ? { uses: Math.max(1, m.cha), max: Math.max(1, m.cha) } : null,
     sculpt: cls === 'wizard' && L(6), empEvocation: cls === 'wizard' && L(10) ? m.int : 0,
     lifedrinker: inv('lifedrinker'),
+    // Levels 11 to 15 (see combat.js).
+    studied: cls === 'fighter' && L(13),
+    relentlessRage: cls === 'barbarian' && L(11) ? { dc: 10 } : null, improvedBrutal: cls === 'barbarian' && L(13),
+    intimidating: cls === 'barbarian' && L(14) ? { uses: 1, max: 1 } : null, persistent: cls === 'barbarian' && L(15) ? { uses: 1, max: 1 } : null,
+    peerless: cls === 'bard' && L(14),
+    improvedStrikes: (cls === 'cleric' && L(14)) || (cls === 'druid' && L(15)), potentTemp: cls === 'cleric' && L(14) && spec.strikes === 'potent' ? 2 * Math.max(1, m.wis) : 0,
+    sanctuary: cls === 'druid' && L(14) && spec.land ? LAND_SPELLS[spec.land].ward : null,
+    fleetStep: cls === 'monk' && L(11), deflectEnergy: cls === 'monk' && L(13), survivor: cls === 'monk' && L(14), perfectFocus: cls === 'monk' && L(15),
+    radiantStrikes: cls === 'paladin' && L(11), restoringTouch: cls === 'paladin' && L(14), smiteProtection: cls === 'paladin' && L(15),
+    superiorPrey: cls === 'ranger' && L(11), relentlessHunter: cls === 'ranger' && L(13), superiorDefense: cls === 'ranger' && L(15),
+    veil: cls === 'ranger' && L(14) ? { uses: Math.max(1, m.wis), max: Math.max(1, m.wis) } : null,
+    improvedCunning: cls === 'rogue' && L(11), devious: cls === 'rogue' && L(14),
+    overchannel: cls === 'wizard' && L(14) ? { uses: 1, max: 1, extra: 0 } : null,
+    hurl: cls === 'warlock' && L(14) ? { uses: 1, max: 1 } : null,
+    witchSight: inv('witch-sight'),
     x: 0, y: 0, ai: cls === 'fighter' ? (kit.weapons.includes('longbow') ? 'archer' : 'melee') : AI_ROLE[cls],
   };
 }
@@ -957,7 +1016,7 @@ export function setMageArmor(h, on) {
 // difference to what's left.
 
 const USES = ['secondWind', 'actionSurge', 'channel', 'giant', 'adrenaline', 'breath', 'rage', 'bardic', 'wildShape', 'focus', 'layOnHands', 'innate', 'sorcery', 'metabolism',
-  'intervention', 'indomitable', 'wholeness', 'tireless', 'ownLuck'];
+  'intervention', 'indomitable', 'wholeness', 'tireless', 'ownLuck', 'intimidating', 'persistent', 'veil', 'overchannel', 'hurl'];
 
 export function heroState(h) {
   const st = {
@@ -966,6 +1025,7 @@ export function heroState(h) {
     relentless: !!h.relentless?.used, arcane: !!h.arcaneRecovery?.used, sorcRestore: !!h.sorcRestore?.used,
     exhaustion: h.exhaustion || 0, poisoned: !!h.conds?.some((c) => c.id === 'poisoned' && c.lasting), inspiration: !!h.inspiration,
     tempHp: h.tempHp || 0, mageArmor: !!h.mageArmor, drained: h.drained || 0,
+    rageDc: h.relentlessRage?.dc || 10, overExtra: h.overchannel?.extra || 0,
   };
   for (const [lv, s] of Object.entries(h.casting?.slots || {})) st.slots[lv] = { ...s };
   for (const [sid, k] of Object.entries(h.casting?.known || {})) if (k.freeMax) st.free[sid] = k.free;
@@ -996,6 +1056,8 @@ export function applyState(h, st) {
     if (h[u] && o) h[u].uses = carry(o.uses, o.max, h[u].max);
   }
   if (h.relentless) h.relentless.used = !!st.relentless;
+  if (h.relentlessRage) h.relentlessRage.dc = st.rageDc || 10;
+  if (h.overchannel) h.overchannel.extra = st.overExtra || 0;
   if (h.arcaneRecovery) h.arcaneRecovery.used = !!st.arcane;
   if (h.sorcRestore) h.sorcRestore.used = !!st.sorcRestore;
   h.exhaustion = st.exhaustion || 0;
@@ -1048,6 +1110,8 @@ export function finishShortRest(h) {
   if (h.adrenaline && h.adrenaline.uses < h.adrenaline.max) { h.adrenaline.uses = h.adrenaline.max; got.push('Adrenaline Rush'); }
   // Tireless (Ranger 10): each Short Rest lowers Exhaustion by 1.
   if (h.tireless && h.exhaustion > 0) { h.exhaustion--; got.push('one level of Exhaustion gone (Tireless)'); }
+  // Relentless Rage (Barbarian 11): its DC goes back to 10.
+  if (h.relentlessRage && h.relentlessRage.dc > 10) { h.relentlessRage.dc = 10; got.push('Relentless Rage back to DC 10'); }
   if (h.arcaneRecovery && !h.arcaneRecovery.used && h.casting?.slots) {
     let budget = Math.ceil(h.level / 2);
     const back = [];
@@ -1080,6 +1144,8 @@ export function longRest(h) {
   for (const [sid, k] of Object.entries(h.casting?.known || {})) k.free = fresh.casting.known[sid]?.free ?? k.free;
   for (const u of USES) if (h[u]) h[u].uses = h[u].max;
   if (h.relentless) h.relentless.used = false;
+  if (h.relentlessRage) h.relentlessRage.dc = 10;
+  if (h.overchannel) h.overchannel.extra = 0;
   if (h.arcaneRecovery) h.arcaneRecovery.used = false;
   if (h.sorcRestore) h.sorcRestore.used = false;
   if (h.exhaustion > 0) { h.exhaustion--; got.push('one level of Exhaustion gone'); }

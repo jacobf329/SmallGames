@@ -413,6 +413,72 @@ export const SPELLS = {
     text: 'Concentration, up to 1 minute. Step into one living tree and out of another within 500 feet. (Useful outside of fights.)' },
   'wall-of-stone': { name: 'Wall of Stone', level: 5, time: 'action', range: 120, kind: 'utility', conc: true,
     text: 'Concentration, up to 10 minutes. A wall of stone springs up: ten 10-by-10-foot panels, or a bridge, ramp or shelter. (Not used in fights here yet.)' },
+  // ---- level 4 (Oath of Devotion 13)
+  'guardian-of-faith': { name: 'Guardian of Faith', level: 4, time: 'action', range: 30, kind: 'zone', zone: 'guardian', save: 'dex', flat: 20, type: 'Radiant', half: true, area: { shape: 'sphere', size: 10, from: 'point' },
+    text: "For 8 hours, no Concentration. A Large spectral guardian stands in a space within 30 feet. Any enemy that moves to a space within 10 feet of it for the first time on a turn, or starts its turn there, makes a Dexterity save: 20 Radiant damage on a failure, half as much on a success. The guardian vanishes once it has dealt 60 damage in all." },
+  // ---- level 6
+  'chain-lightning': { name: 'Chain Lightning', level: 6, time: 'action', range: 150, kind: 'save', save: 'dex', dice: '10d8', type: 'Lightning', half: true, targets: 4, up: { targets: 1 },
+    text: 'A bolt of lightning leaps to a creature within 150 feet, then to up to three others within 30 feet of it (here: up to four creatures you can see in range). Each makes a Dexterity save: 10d8 Lightning damage on a failure, half as much on a success. Higher slot: one more bolt per level.' },
+  'heal': { name: 'Heal', level: 6, time: 'action', range: 60, kind: 'heal', amount: 70, up: { amount: 10 }, cures: ['blinded', 'poisoned'],
+    text: 'A creature you can see within 60 feet regains 70 Hit Points, and the Blinded, Deafened and Poisoned conditions end on it. No dice to roll. Higher slot: +10 Hit Points per level.' },
+  'harm': { name: 'Harm', level: 6, time: 'action', range: 60, kind: 'save', save: 'con', dice: '14d6', type: 'Necrotic', half: true, drain: true,
+    text: "A creature you can see within 60 feet makes a Constitution save: 14d6 Necrotic damage on a failure, half as much on a success. Its Hit Point maximum drops by the Necrotic damage it took, until it finishes a Long Rest." },
+  'disintegrate': { name: 'Disintegrate', level: 6, time: 'action', range: 60, kind: 'save', save: 'dex', dice: '10d6', flat: 40, type: 'Force', dust: true, up: { dice: '3d6' },
+    text: 'A thin green ray at a creature you can see within 60 feet. It makes a Dexterity save: 10d6 + 40 Force damage on a failure, nothing on a success. A creature it drops to 0 Hit Points is turned to dust (a hero included: only a Wish brings them back). Higher slot: +3d6 per level.' },
+  'circle-of-death': { name: 'Circle of Death', level: 6, time: 'action', range: 150, kind: 'area', area: { shape: 'sphere', size: 60, from: 'point' }, save: 'con', dice: '8d8', type: 'Necrotic', half: true, up: { dice: '2d8' },
+    text: 'Negative energy in a 60-foot-radius Sphere at a point within 150 feet. Each creature in it makes a Constitution save: 8d8 Necrotic damage on a failure, half as much on a success. Careful: on this board it reaches nearly everyone, allies too. Higher slot: +2d8 per level.' },
+  'sunbeam': { name: 'Sunbeam', level: 6, time: 'action', kind: 'area', area: { shape: 'line', size: 60, from: 'self' }, save: 'con', dice: '6d8', type: 'Radiant', half: true, rider: 'blind',
+    text: "A beam of sunlight in a 60-foot-long, 5-foot-wide Line from you. Each creature in it makes a Constitution save: 6d8 Radiant damage and Blinded until the start of your next turn on a failure, half the damage on a success. (It is a Concentration spell that lets you make a new line on later turns; here it is one line, with no Concentration.)" },
+  'freezing-sphere': { name: 'Freezing Sphere', level: 6, time: 'action', range: 300, kind: 'area', area: { shape: 'sphere', size: 60, from: 'point' }, save: 'con', dice: '10d6', type: 'Cold', half: true, up: { dice: '1d6' },
+    text: 'A frigid globe bursts in a 60-foot-radius Sphere at a point within 300 feet. Each creature in it makes a Constitution save: 10d6 Cold damage on a failure, half as much on a success. Careful: on this board it reaches nearly everyone. Higher slot: +1d6 per level.' },
+  'blade-barrier': { name: 'Blade Barrier', level: 6, time: 'action', range: 90, kind: 'utility', conc: true,
+    text: 'Concentration, up to 10 minutes. A wall of whirling blades: 6d10 Force damage to creatures that enter it or end their turns in it (Dexterity save for half). (Not used in fights here yet: the board has no way to draw a wall.)' },
+  'eyebite': { name: 'Eyebite', level: 6, time: 'action', range: 60, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. Each turn, one creature within 60 feet makes a Wisdom save or falls Asleep, panics (Frightened) or sickens (Poisoned). (Not used in fights here yet.)' },
+  'flesh-to-stone': { name: 'Flesh to Stone', level: 6, time: 'action', range: 60, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. A creature makes a Constitution save or is Restrained, and slowly turns to stone over three failed saves. (Not used in fights here yet.)' },
+  'irresistible-dance': { name: 'Irresistible Dance', level: 6, time: 'action', range: 30, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. A creature makes a Wisdom save or dances helplessly: attack rolls against it have Advantage. (Not used in fights here yet.)' },
+  'globe-of-invulnerability': { name: 'Globe of Invulnerability', level: 6, time: 'action', kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. Spells of level 5 or lower cast from outside a 10-foot Emanation around you can\'t affect anything inside it. (Not used in fights here yet.)' },
+  // ---- level 7
+  'finger-of-death': { name: 'Finger of Death', level: 7, time: 'action', range: 60, kind: 'save', save: 'con', dice: '7d8', flat: 30, type: 'Necrotic', half: true,
+    text: 'Negative energy at a creature you can see within 60 feet. It makes a Constitution save: 7d8 + 30 Necrotic damage on a failure, half as much on a success. (A Humanoid it kills rises as your Zombie; that part is left out here.)' },
+  'fire-storm': { name: 'Fire Storm', level: 7, time: 'action', range: 150, kind: 'area', area: { shape: 'cube', size: 30, from: 'point' }, save: 'dex', dice: '7d10', type: 'Fire', half: true,
+    text: 'A storm of flame in up to ten 10-foot Cubes within 150 feet (here: one 30-foot block of them). Each creature in it makes a Dexterity save: 7d10 Fire damage on a failure, half as much on a success.' },
+  'delayed-blast-fireball': { name: 'Delayed Blast Fireball', level: 7, time: 'action', range: 150, kind: 'area', area: { shape: 'sphere', size: 20, from: 'point' }, save: 'dex', dice: '12d6', type: 'Fire', half: true, up: { dice: '1d6' },
+    text: 'A bead of fire bursts in a 20-foot-radius Sphere at a point within 150 feet. Each creature in it makes a Dexterity save: 12d6 Fire damage on a failure, half as much on a success. (You can hold the bead with Concentration so it grows by 1d6 a turn; here it goes off at once.) Higher slot: +1d6 per level.' },
+  'prismatic-spray': { name: 'Prismatic Spray', level: 7, time: 'action', kind: 'area', area: { shape: 'cone', size: 60, from: 'self' }, save: 'dex', dice: '12d6', type: 'Fire', half: true, prismatic: ['Fire', 'Acid', 'Lightning', 'Poison', 'Cold'],
+    text: 'Rays of light flash in a 60-foot Cone from you. Each creature in it is struck by one ray, picked at random, and makes a Dexterity save: 12d6 damage of the ray\'s type on a failure, half as much on a success. (Here the ray is rolled from the five damage rays: Fire, Acid, Lightning, Poison or Cold. The rarer rays that petrify or banish are left out.)' },
+  'divine-word': { name: 'Divine Word', level: 7, time: 'bonus', range: 30, kind: 'word', save: 'cha', targets: 6,
+    text: 'You speak a word of power. Any creatures you choose within 30 feet (here: up to six you can see) make a Charisma save. On a failure, what happens depends on its Hit Points right now: 0 to 20, it dies; 21 to 30, Blinded, Deafened and Stunned for 1 hour; 31 to 40, Blinded and Deafened for 10 minutes; 41 to 50, Deafened for 1 minute. (Deafened changes nothing on this board.)' },
+  'regenerate': { name: 'Regenerate', level: 7, time: 'action', range: 5, touch: true, kind: 'utility',
+    text: 'Takes 1 minute to cast. A creature you touch regains 4d8 + 15 Hit Points, then 1 Hit Point at the start of each of its turns for an hour, and regrows lost limbs. (Useful outside of fights.)' },
+  'conjure-celestial': { name: 'Conjure Celestial', level: 7, time: 'action', range: 90, kind: 'utility', conc: true,
+    text: 'Concentration, up to 10 minutes. A column of celestial light that heals your allies in it or burns your enemies. (Not used in fights here yet.)' },
+  'reverse-gravity': { name: 'Reverse Gravity', level: 7, time: 'action', range: 100, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. Gravity flips in a 50-foot-radius Cylinder, and everything in it falls upward. (Not used in fights here yet: the board is flat.)' },
+  'forcecage': { name: 'Forcecage', level: 7, time: 'action', range: 100, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 hour. An invisible cage of force traps creatures inside it. (Not used in fights here yet.)' },
+  'arcane-sword': { name: 'Arcane Sword', level: 7, time: 'action', range: 90, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. A spectral sword hovers and strikes for 4d12 + your spellcasting modifier Force damage each turn. (Not used in fights here yet.)' },
+  // ---- level 8
+  'sunburst': { name: 'Sunburst', level: 8, time: 'action', range: 150, kind: 'area', area: { shape: 'sphere', size: 60, from: 'point' }, save: 'con', dice: '12d6', type: 'Radiant', half: true, rider: 'sunblind',
+    text: 'Brilliant sunlight in a 60-foot-radius Sphere at a point within 150 feet. Each creature in it makes a Constitution save: 12d6 Radiant damage and Blinded for 1 minute on a failure (a new save at the end of each of its turns ends it), half the damage on a success. Careful: on this board it reaches nearly everyone.' },
+  'power-word-stun': { name: 'Power Word Stun', level: 8, time: 'action', range: 60, kind: 'pwstun',
+    text: "A word of power at a creature you can see within 60 feet. With 150 Hit Points or fewer, it is Stunned, with no save to stop it; at the end of each of its turns it makes a Constitution save, and a success ends it. With more than 150, its Speed is 0 until the start of your next turn." },
+  'incendiary-cloud': { name: 'Incendiary Cloud', level: 8, time: 'action', range: 150, kind: 'zone', zone: 'incendiary', save: 'dex', dice: '10d8', type: 'Fire', half: true, conc: true, area: { shape: 'sphere', size: 20, from: 'point' },
+    text: "Concentration, up to 1 minute. A 20-foot-radius Sphere of burning smoke at a point within 150 feet. Each creature in it when it appears, that enters it for the first time on a turn or ends its turn there makes a Dexterity save: 10d8 Fire damage on a failure, half as much on a success. (The smoke also blocks sight and drifts 10 feet a turn; those parts are left out here.)" },
+  'befuddlement': { name: 'Befuddlement', level: 8, time: 'action', range: 150, kind: 'save', save: 'int', dice: '10d12', type: 'Psychic', half: true, rider: 'befuddle',
+    text: "A creature you can see within 150 feet makes an Intelligence save: 10d12 Psychic damage on a failure, half as much on a success. On a failure it also can't cast spells or take the Magic action (here: for the rest of the fight)." },
+  'holy-aura': { name: 'Holy Aura', level: 8, time: 'action', range: 30, kind: 'buff', buff: 'holyaura', targets: 6, conc: true,
+    text: 'Concentration, up to 1 minute. Divine light around you and creatures you choose within 30 feet (here: up to six). They have Advantage on saving throws, and attack rolls against them have Disadvantage. A Fiend or Undead that hits one of them with a melee attack makes a Constitution save or is Blinded until the spell ends.' },
+  'dominate-monster': { name: 'Dominate Monster', level: 8, time: 'action', range: 60, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 hour. A creature makes a Wisdom save or is Charmed and follows your commands. (Not used in fights here yet.)' },
+  'earthquake': { name: 'Earthquake', level: 8, time: 'action', range: 500, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. The ground shakes in a 100-foot-radius circle, knocking creatures Prone and opening fissures. (Not used in fights here yet.)' },
+  'maze': { name: 'Maze', level: 8, time: 'action', range: 60, kind: 'utility', conc: true,
+    text: 'Concentration, up to 10 minutes. A creature is banished into a labyrinth on another plane until it finds its way out. (Not used in fights here yet.)' },
 };
 
 // Each class's spell list (the spells of the SRD this game has).
@@ -422,8 +488,11 @@ export const SPELL_LISTS = {
     1: ['bless', 'command', 'cure-wounds', 'detect-magic', 'guiding-bolt', 'healing-word', 'inflict-wounds', 'shield-of-faith', 'bane', 'protection-from-evil-and-good'],
     2: ['aid', 'hold-person', 'lesser-restoration', 'spiritual-weapon'],
     3: ['spirit-guardians', 'mass-healing-word', 'revivify', 'dispel-magic', 'beacon-of-hope'],
-    4: ['death-ward', 'aura-of-life', 'freedom-of-movement'],
+    4: ['death-ward', 'aura-of-life', 'freedom-of-movement', 'guardian-of-faith'],
     5: ['flame-strike', 'mass-cure-wounds', 'greater-restoration', 'insect-plague', 'legend-lore', 'geas'],
+    6: ['heal', 'harm', 'sunbeam', 'blade-barrier'],
+    7: ['fire-storm', 'divine-word', 'regenerate', 'conjure-celestial'],
+    8: ['sunburst', 'holy-aura', 'earthquake'],
   },
   wizard: {
     0: ['fire-bolt', 'ray-of-frost', 'chill-touch', 'shocking-grasp', 'poison-spray', 'acid-splash', 'mage-hand', 'light', 'mending', 'dancing-lights', 'minor-illusion', 'prestidigitation'],
@@ -432,6 +501,9 @@ export const SPELL_LISTS = {
     3: ['fireball', 'lightning-bolt', 'haste', 'slow', 'hypnotic-pattern', 'fear', 'vampiric-touch', 'stinking-cloud', 'sleet-storm', 'counterspell', 'dispel-magic', 'fly'],
     4: ['ice-storm', 'blight', 'greater-invisibility', 'stoneskin', 'fire-shield', 'dimension-door', 'polymorph', 'arcane-eye'],
     5: ['cone-of-cold', 'hold-monster', 'cloudkill', 'legend-lore', 'wall-of-stone', 'geas'],
+    6: ['chain-lightning', 'disintegrate', 'circle-of-death', 'sunbeam', 'freezing-sphere', 'eyebite', 'flesh-to-stone', 'irresistible-dance', 'globe-of-invulnerability'],
+    7: ['finger-of-death', 'delayed-blast-fireball', 'prismatic-spray', 'reverse-gravity', 'forcecage', 'arcane-sword'],
+    8: ['sunburst', 'power-word-stun', 'incendiary-cloud', 'befuddlement', 'dominate-monster', 'maze'],
   },
   bard: {
     0: ['vicious-mockery', 'starry-wisp', 'dancing-lights', 'light', 'mage-hand', 'mending', 'minor-illusion', 'prestidigitation'],
@@ -440,6 +512,9 @@ export const SPELL_LISTS = {
     3: ['mass-healing-word', 'hypnotic-pattern', 'fear', 'slow', 'stinking-cloud', 'dispel-magic'],
     4: ['greater-invisibility', 'polymorph', 'dimension-door', 'freedom-of-movement', 'charm-monster'],
     5: ['mass-cure-wounds', 'hold-monster', 'greater-restoration', 'legend-lore', 'geas'],
+    6: ['eyebite', 'irresistible-dance'],
+    7: ['prismatic-spray', 'regenerate', 'forcecage', 'arcane-sword'],
+    8: ['power-word-stun', 'befuddlement', 'dominate-monster'],
   },
   druid: {
     0: ['produce-flame', 'thorn-whip', 'starry-wisp', 'poison-spray', 'guidance', 'spare-the-dying', 'resistance-cantrip', 'druidcraft', 'mending'],
@@ -448,16 +523,21 @@ export const SPELL_LISTS = {
     3: ['call-lightning', 'sleet-storm', 'revivify', 'dispel-magic'],
     4: ['ice-storm', 'blight', 'stoneskin', 'fire-shield', 'polymorph', 'freedom-of-movement', 'charm-monster'],
     5: ['cone-of-cold', 'mass-cure-wounds', 'greater-restoration', 'insect-plague', 'tree-stride', 'wall-of-stone', 'geas'],
+    6: ['heal', 'sunbeam', 'flesh-to-stone'],
+    7: ['fire-storm', 'regenerate', 'reverse-gravity'],
+    8: ['sunburst', 'incendiary-cloud', 'befuddlement', 'earthquake'],
   },
   paladin: {
     1: ['divine-favor', 'bless', 'cure-wounds', 'heroism', 'shield-of-faith', 'command', 'protection-from-evil-and-good', 'divine-smite', 'detect-magic'],
     2: ['aid', 'lesser-restoration', 'magic-weapon', 'prayer-of-healing', 'zone-of-truth', 'find-steed'],
     3: ['revivify', 'dispel-magic'],
+    4: ['death-ward', 'aura-of-life', 'freedom-of-movement'],
   },
   ranger: {
     1: ['hunters-mark', 'cure-wounds', 'entangle', 'longstrider', 'fog-cloud', 'alarm', 'detect-magic', 'speak-with-animals'],
     2: ['aid', 'barkskin', 'lesser-restoration', 'magic-weapon', 'pass-without-trace'],
     3: ['revivify', 'dispel-magic'],
+    4: ['freedom-of-movement', 'stoneskin'],
   },
   sorcerer: {
     0: ['fire-bolt', 'sorcerous-burst', 'ray-of-frost', 'shocking-grasp', 'chill-touch', 'acid-splash', 'poison-spray', 'dancing-lights', 'light', 'mage-hand', 'mending', 'minor-illusion', 'prestidigitation'],
@@ -466,6 +546,9 @@ export const SPELL_LISTS = {
     3: ['fireball', 'lightning-bolt', 'haste', 'slow', 'hypnotic-pattern', 'fear', 'vampiric-touch', 'stinking-cloud', 'sleet-storm', 'counterspell', 'dispel-magic', 'fly'],
     4: ['ice-storm', 'blight', 'greater-invisibility', 'stoneskin', 'fire-shield', 'dimension-door', 'polymorph', 'charm-monster'],
     5: ['cone-of-cold', 'hold-monster', 'cloudkill', 'insect-plague', 'wall-of-stone'],
+    6: ['chain-lightning', 'disintegrate', 'circle-of-death', 'sunbeam', 'freezing-sphere', 'eyebite', 'flesh-to-stone', 'globe-of-invulnerability'],
+    7: ['finger-of-death', 'fire-storm', 'delayed-blast-fireball', 'prismatic-spray', 'reverse-gravity'],
+    8: ['sunburst', 'power-word-stun', 'incendiary-cloud', 'dominate-monster', 'earthquake'],
   },
   warlock: {
     0: ['eldritch-blast', 'chill-touch', 'poison-spray', 'mage-hand', 'minor-illusion', 'prestidigitation'],
@@ -474,6 +557,9 @@ export const SPELL_LISTS = {
     3: ['hypnotic-pattern', 'fear', 'vampiric-touch', 'counterspell', 'dispel-magic', 'fly'],
     4: ['blight', 'dimension-door', 'charm-monster'],
     5: ['hold-monster'],
+    6: ['circle-of-death', 'eyebite'],
+    7: ['finger-of-death', 'forcecage'],
+    8: ['power-word-stun', 'befuddlement', 'dominate-monster'],
   },
 };
 // Cantrips known, and spells you can prepare, by class level (2024 tables).
@@ -679,7 +765,7 @@ export const SUBCLASSES = {
 };
 // Spells a subclass or class feature always has prepared (they don't count).
 export const ALWAYS_PREPARED = {
-  paladin: { 2: ['divine-smite'], 3: ['protection-from-evil-and-good', 'shield-of-faith'], 5: ['aid', 'zone-of-truth', 'find-steed'], 9: ['beacon-of-hope', 'dispel-magic'] },
+  paladin: { 2: ['divine-smite'], 3: ['protection-from-evil-and-good', 'shield-of-faith'], 5: ['aid', 'zone-of-truth', 'find-steed'], 9: ['beacon-of-hope', 'dispel-magic'], 13: ['freedom-of-movement', 'guardian-of-faith'] },
   ranger: { 1: ['hunters-mark'] },
   sorcerer: { 3: ['alter-self', 'chromatic-orb', 'command', 'dragons-breath'], 5: ['fear', 'fly'], 7: ['arcane-eye', 'charm-monster'], 9: ['legend-lore', 'summon-dragon'] },
   warlock: { 3: ['burning-hands', 'command', 'scorching-ray', 'suggestion'], 5: ['fireball', 'stinking-cloud'], 7: ['fire-shield', 'wall-of-fire'], 9: ['geas', 'insect-plague'] },
@@ -724,6 +810,8 @@ export const INVOCATIONS = {
   'gift-of-the-depths': { name: 'Gift of the Depths', min: 5, text: 'Breathe underwater and swim at your Speed, and cast Water Breathing once per Long Rest without a slot. (Useful outside of fights.)' },
   'one-with-shadows': { name: 'One with Shadows', min: 5, text: 'In Dim Light or Darkness, cast Invisibility on yourself without a spell slot. (Every fight here is lit, so it is used outside of fights.)' },
   'lifedrinker': { name: 'Lifedrinker', min: 9, needs: 'pact-of-the-blade', text: 'Once per turn, when you hit with your pact weapon, it deals an extra 1d6 Necrotic damage. (You can also spend a Hit Point Die to heal; that part is left out here.)' },
+  'devouring-blade': { name: 'Devouring Blade', min: 12, needs: 'thirsting-blade', text: 'Your Thirsting Blade grows hungrier: you attack three times with your pact weapon, instead of twice, whenever you take the Attack action on your turn.' },
+  'witch-sight': { name: 'Witch Sight', min: 15, text: 'Truesight out to 30 feet: you see invisible creatures and through illusions. (Here: Invisible creatures within 30 feet get no Advantage or Disadvantage against you.)' },
 };
 export const INVOCATIONS_KNOWN = byLevel([1, 3, 3, 3, 5, 5, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10]);
 // A Sorcerer's Metamagic (two at level 2). cost: Sorcery Points.
@@ -759,12 +847,15 @@ export const RESILIENCE_TYPES = ['Slashing', 'Piercing', 'Bludgeoning', 'Necroti
 // Wizard spells of the Evocation school (Sculpt Spells, Empowered Evocation).
 export const EVOCATION = ['fire-bolt', 'ray-of-frost', 'shocking-grasp', 'light', 'dancing-lights', 'magic-missile', 'burning-hands', 'thunderwave', 'chromatic-orb',
   'scorching-ray', 'shatter', 'fireball', 'lightning-bolt', 'ice-storm', 'fire-shield', 'cone-of-cold', 'wall-of-stone', 'flame-strike'];
+// Mystic Arcanum (Warlock 11, 13, 15, 17): one Warlock spell of each of these levels, cast once per Long Rest without a slot.
+export const ARCANUM_LEVELS = { 11: 6, 13: 7, 15: 8, 17: 9 };
+export const arcanumLevels = (level) => Object.entries(ARCANUM_LEVELS).filter(([l]) => level >= +l).map(([, sl]) => sl);
 // Font of Magic: Sorcery Points it costs to make a spell slot of each level.
 export const SLOT_COST = { 1: 2, 2: 3, 3: 5, 4: 6, 5: 7 };
 // Font of Magic can make a slot of a level up to this, by Sorcerer level.
 export const SLOT_MIN_LEVEL = { 1: 2, 2: 3, 3: 5, 4: 7, 5: 9 };
 // The highest level the campaign reaches so far (the tables above run to 20).
-export const MAX_LEVEL = 10;
+export const MAX_LEVEL = 15;
 // Class tables (SRD 5.2.1): a value that changes at set levels.
 const stepAt = (lv, steps) => { let v = steps[0][1]; for (const [l, x] of steps) if (lv >= l) v = x; return v; };
 export const PROGRESSION = {

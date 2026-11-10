@@ -858,6 +858,8 @@ function aimCard(b, me, a) {
       : sp.cond === 'fear' ? `${R0('frightened', 'Frightened')} on a failure: it flees`
       : sp.zone === 'stink' ? `a cloud that stays: anyone starting a turn inside saves or is ${R0('poisoned', 'Poisoned')} and loses that turn's action`
       : sp.zone === 'sleet' ? 'a storm that stays: Difficult Terrain, and anyone entering or starting a turn inside saves or falls Prone'
+      : sp.zone === 'guardian' ? 'a guardian that stays: an enemy coming near it or starting a turn there saves or takes 20 Radiant (half on a save), up to 60 in all'
+      : sp.prismatic ? `${scaled(a.spell, a.slot, me.level).dice} of a random type for each creature (${sp.prismatic.join(', ')}), half on a save`
       : sp.cond ? `${R0('restrained', 'Restrained')} on a failure` : sp.effect ? 'outlined in light: attacks against it have Advantage' : `${scaled(a.spell, a.slot, me.level).dice} ${sp.type || 'damage'}${sp.half ? ', half on a save' : ''}${sp.push ? `, pushed ${sp.push} ft on a failure` : ''}`;
     body += `<div class="why">${hit.length ? `Catches ${hit.map((c) => esc(c.name)).join(', ')}` : 'Catches nobody there yet'}${pals.length ? ` <b class="bad">(including ${pals.map((c) => (c === me ? 'you' : esc(c.name))).join(' and ')}!)</b>` : ''} · DC ${dc} ${ab.toUpperCase()} save, ${dmg}</div>`;
   }
