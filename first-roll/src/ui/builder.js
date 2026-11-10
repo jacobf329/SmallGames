@@ -13,13 +13,13 @@ import {
   CLASSES, BACKGROUNDS, SPECIES, FEATS, ORIGIN_FEATS, SKILLS, SKILL_NAMES, ABILITIES, ABILITY_NAMES, STANDARD_ARRAY,
   DRAGON_ANCESTRY, KITS, FIGHTING_STYLES, WEAPONS, MASTERIES, SPELLS, SPELL_LISTS, POINT_COST, POINT_BUDGET,
   DRUID_ORDERS, LAND_SPELLS, landSpells, HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, PACT_WEAPONS, METAMAGIC, stylesFor,
-  abilityMod, signed, MAX_LEVEL, ASI_FEATS, STYLE_FEATS, asiLevels, STRIKES, DEFENSIVE_TACTICS, RESILIENCE_TYPES,
+  abilityMod, signed, MAX_LEVEL, ASI_FEATS, STYLE_FEATS, asiLevels, STRIKES, DEFENSIVE_TACTICS, RESILIENCE_TYPES, arcanumLevels,
 } from '../rules/data.js';
 import {
   buildHero, defaultSpec, suggestPlus, validateSpec, DEFAULT_BACKGROUND, classSpellCounts, domainSpells,
   maxSpellLevel, miCantrips, miSpells, pointCost, rollTotal, speciesCantrips, bookLimit, SCHOLAR_SKILLS,
   extraSkills, expertiseCount, styleAt, metamagicCount, levelChoices, swapLimit, droppedPicks, alwaysPrepared, alwaysCantrips, finalScores,
-  classSpellList, discoveryOptions, AFFINITY_TYPES,
+  classSpellList, discoveryOptions, AFFINITY_TYPES, arcanumOptions,
 } from '../rules/character.js';
 import { GLOSSARY } from '../rules/glossary.js';
 import { $, show } from './dom.js';
@@ -191,7 +191,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
   }
   function setClass(cls) {
     d.cls = cls;
-    for (const k of ['skills', 'expertise', 'masteries', 'kit', 'style', 'warriorCantrips', 'order', 'cantrips', 'book', 'prepared', 'scholar', 'invocations', 'pactWeapon', 'metamagic', 'land', 'prey', 'discoveries', 'affinity', 'strikes', 'style2', 'tactics', 'resilience']) delete d[k];
+    for (const k of ['skills', 'expertise', 'masteries', 'kit', 'style', 'warriorCantrips', 'order', 'cantrips', 'book', 'prepared', 'scholar', 'invocations', 'pactWeapon', 'metamagic', 'land', 'prey', 'discoveries', 'affinity', 'strikes', 'style2', 'tactics', 'resilience', 'arcanum']) delete d[k];
     if (!touched.background) { d.background = DEFAULT_BACKGROUND[cls]; delete d.bgFeat; }
     if (!touched.scores) { d.method = 'array'; d.scores = { ...CLASSES[cls].suggested }; }
     if (!touched.plus) d.plus = suggestPlus(cls, d.background, d.scores);
@@ -600,6 +600,14 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
     if (has('resilience') && d.cls === 'warlock' && level >= 10) {
       h += `<div class="ph sep"><b>${R('fiendish-resilience', 'Fiendish Resilience')}</b></div><p class="note">Resistance to one damage type. You can pick again after a rest.</p>
         <div class="togs">${RESILIENCE_TYPES.map((ty) => `<button class="tog ${d.resilience === ty ? 'on' : ''}" data-set="resilience=${ty}">${esc(ty)}</button>`).join('')}</div>`;
+    }
+    if (has('arcanum') && d.cls === 'warlock') {
+      const fresh = arcanumLevels(level).filter((sl) => !arcanumLevels(level - 1).includes(sl));
+      for (const sl of arcanumLevels(level)) {
+        if (only && !fresh.includes(sl)) continue;
+        h += `<div class="ph sep"><b>${R('mystic-arcanum', `Mystic Arcanum: level ${sl}`)}</b></div><p class="note">One level ${sl} Warlock spell you can cast once per Long Rest without a spell slot.</p>
+          ${arcanumOptions(sl).map((sid) => card({ on: d.arcanum?.[sl] === sid, title: SPELLS[sid].name, body: `<span>${esc(SPELLS[sid].text || '')}</span>${SPELLS[sid].kind === 'utility' ? '<span class="dim">Not used in fights here.</span>' : ''}`, attr: `data-set="arcanum.${sl}=${sid}"` })).join('')}`;
+      }
     }
     if (has('feat')) for (const lv of asiLevels(d.cls, level)) if (!only || lv === level) h += featBlock(lv);
     if (!only) {

@@ -638,6 +638,13 @@ function classButtons(b, me, extra, btn) {
     }
   }
   if (b.effects.some((e) => e.type === 'dbreath' && e.target === me.id)) aimBtn("Dragon's Breath: exhale", { kind: 'exhale' }, t.action && !t.magicUsed, "Dragon's Breath");
+  if (me.intimidating) {
+    const rage = me.intimidating.uses < 1;
+    extra.push(btn(rage ? 'Intimidating Presence (1 Rage)' : `Intimidating Presence (${me.intimidating.uses})`, { a: 'intimidate' }, t.bonus && (!rage || me.rage?.uses > 0), 'intimidating-presence'));
+  }
+  if (me.veil) extra.push(btn(`Nature's Veil (${me.veil.uses})`, { a: 'veil' }, t.bonus && me.veil.uses > 0, 'natures-veil'));
+  if (me.sanctuary) aimBtn(`Nature's Sanctuary (${me.wildShape?.uses || 0})`, { kind: 'sanctuary' }, t.action && !t.magicUsed && me.wildShape?.uses > 0, "Nature's Sanctuary");
+  if (me.fleetStep && t.flurried && !t.fleeted) extra.push(btn('Fleet Step (1 Focus)', { a: 'fleet' }, me.focus?.uses > 0, 'fleet-step'));
 }
 
 // ------------------------------------------------------------ aiming ----
@@ -648,9 +655,10 @@ function aimOf(a) {
   if (a.kind === 'jaunt') return { mode: 'point', range: 30 };
   if (a.kind === 'landsaid') return { mode: 'area', shape: 'sphere', size: 10, from: 'point', range: 60 };
   if (a.kind === 'exhale') return { mode: 'area', shape: 'cone', size: 15, from: 'self', range: 0 };
+  if (a.kind === 'sanctuary') return { mode: 'area', shape: 'cube', size: 15, from: 'point', range: 120 };
   return spellAim(a.spell, a.slot, a.meta || null, myLevel());
 }
-const OTHER_AIMS = { landsaid: { name: "Land's Aid", rule: 'lands-aid', go: 'Use' }, exhale: { name: "Dragon's Breath", rule: 'dragons-breath', go: 'Exhale' } };
+const OTHER_AIMS = { landsaid: { name: "Land's Aid", rule: 'lands-aid', go: 'Use' }, exhale: { name: "Dragon's Breath", rule: 'dragons-breath', go: 'Exhale' }, sanctuary: { name: "Nature's Sanctuary", rule: 'natures-sanctuary', go: 'Grow' } };
 const aimName = (me, a) => (a.kind === 'breath' ? `Breath Weapon (${a.shape === 'line' ? '30-ft Line' : '15-ft Cone'})` : a.kind === 'jaunt' ? "Cloud's Jaunt" : OTHER_AIMS[a.kind]?.name || SPELLS[a.spell].name);
 
 function startAim(b, me, a) {
@@ -815,6 +823,10 @@ function aimCard(b, me, a) {
       mm += `<button class="btn small up ${a.meta === m ? 'on' : ''}" data-aimmeta="${m}" ${e ? 'disabled' : ''} title="${esc(e || METAMAGIC[m].text)}">${esc(METAMAGIC[m].name)} (${METAMAGIC[m].cost})</button>`;
     }
     if (mm) slotBtns += `<div class="opt slots"><a class="rl" data-rule="metamagic">Metamagic</a> ${mm}</div>`;
+    if (me.overchannel) {
+      const e = metaError(b, me, a.spell, 'overchannel');
+      if (!e) slotBtns += `<div class="opt slots"><button class="btn small up ${a.meta === 'overchannel' ? 'on' : ''}" data-aimmeta="overchannel" title="Every damage die counts as its highest number. ${me.overchannel.uses > 0 ? 'The first time since a Long Rest is free.' : 'Again since a Long Rest, it costs you Necrotic damage.'}">Overchannel${me.overchannel.uses > 0 ? ' (free)' : ` (${(2 + me.overchannel.extra) * Math.max(sp.level, a.slot || 0)}d12 Necrotic to you)`}</button> <a class="rl" data-rule="overchannel">?</a></div>`;
+    }
     if (sp.level && sp.level <= 5 && me.intervention?.uses > 0 && me.cls === 'cleric') {
       slotBtns += `<div class="opt slots"><button class="btn small up ${a.meta === 'intervene' ? 'on' : ''}" data-aimmeta="intervene" title="Cast it with no spell slot, once per Long Rest">Divine Intervention (no slot)</button></div>`;
     }

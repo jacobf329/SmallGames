@@ -110,6 +110,11 @@ export function createBoard(svg, onTap) {
       if (n > 1) over.append(el('text', { x: c.x + 0.86, y: c.y + 0.95, class: 'feet' }, `×${n}`));
     }
     for (const e of b.effects) {
+      if (e.type === 'sanctuary') {
+        over.append(el('rect', { x: e.x - 1 + 0.04, y: e.y - 1 + 0.04, width: 2.92, height: 2.92, rx: 0.2, class: 'cone' }));
+        over.append(el('text', { x: e.x + 0.5, y: e.y + 0.66, class: 'spirit' }, '🌳'));
+        continue;
+      }
       if (e.type !== 'spiritual') continue;
       over.append(el('text', { x: e.x + 0.5, y: e.y + 0.66, class: 'spirit' }, '🗡️'));
     }
