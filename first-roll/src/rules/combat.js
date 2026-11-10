@@ -2804,7 +2804,7 @@ export const glareTargets = (b, A) => enemiesOf(b, A).filter((T) => !T.dead && T
 // an attack on whoever is in reach, else Pounce over to someone.
 function legendaryAfter(b, who) {
   for (const L of living(b, 'foe')) {
-    if (b.over) return;
+    if (b.over || b.pending) return;
     const lg = L.legendary;
     if (!lg || lg.uses < 1 || L.id === who || L.hp <= 0 || incap(L) || !onBoard(L)) continue;
     const foes = enemiesOf(b, L).filter((T) => !T.dead && T.hp > 0 && onBoard(T));
@@ -2874,9 +2874,16 @@ function legendaryAfter(b, who) {
   }
 }
 
-function nextTurn(b) {
+// `resumed`: carrying on after a hero answered a prompt (Shield, Hellish
+// Rebuke) that a Legendary Action's attack raised between two turns.
+function nextTurn(b, resumed = false) {
   for (let guard = 0; guard < 80 && !b.over; guard++) {
-    if (b.turn) { const was = b.turn.who; endTurn(b, was); if (!b.over) legendaryAfter(b, was); }
+    if (b.turn) {
+      const was = b.turn.who;
+      if (!resumed) { endTurn(b, was); if (!b.over) legendaryAfter(b, was); }
+      resumed = false;
+      if (b.pending) { b.pending.thenNext = true; return; }
+    }
     if (b.over) return;
     b.idx = (b.idx + 1) % b.order.length;
     if (b.idx === 0) { if (b.begun) b.round++; b.begun = true; }
@@ -3115,6 +3122,10 @@ export function resolveReaction(b, accept, opts = {}) {
     const M = C(b, b.moveCtx.who);
     if (incap(M) || speedOf(b, M) === 0) { flushMove(b); b.moveCtx = null; }
     else continueMove(b);
+  }
+  if (p.thenNext && !b.over) {
+    if (b.pending) b.pending.thenNext = true;
+    else { flushPost(b); checkOver(b); if (!b.over) nextTurn(b, true); }
   }
   return b.log.filter((r) => r.seq > before);
 }

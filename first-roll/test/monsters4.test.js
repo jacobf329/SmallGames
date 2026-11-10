@@ -129,3 +129,20 @@ test('chapters 17 to 21: every fight sits between Low and High for its level and
   assert.equal(buildEncounter('undercroft', 3).foes[0].name, 'Abbot Godric');
   assert.ok(!buildEncounter('abbey', 4, { circle: true }).foes.some((f) => f.name === 'Bone Devil'));
 });
+
+test('a Legendary Action attack between turns waits for the hero\'s Shield, then play goes on', async () => {
+  const { resolveReaction } = await import('../src/rules/combat.js');
+  const w = hero('wizard', 14, { x: 3, y: 4, hp: 90 }, { species: 'elf' });
+  const d = mon(ADULT_BLACK_DRAGON, 'd', 3, 2);
+  const b = fight([w], [d, spare()]);
+  assert.ok(b.creatures.wizard.casting.known.shield, 'the default wizard has Shield');
+  b.creatures.d.legendary.spent.push('insects');   // Cloud of Insects already used this round
+  dice(b, 4);                       // 4 + 11 = 15: a hit, unless Shield adds 5
+  end(b);
+  assert.equal(b.pending?.kind, 'shield');
+  assert.equal(b.turn.who, 'wizard', 'the next turn waits for the answer');
+  resolveReaction(b, true);
+  assert.ok(!b.pending);
+  assert.equal(b.turn.who, 'd');
+  assert.equal(last(b, 'attack').outcome, 'miss');
+});
