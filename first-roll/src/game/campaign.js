@@ -1,4 +1,4 @@
-// The campaign: scenes for chapters 2 to 16 (chapter 0, the dice lesson, and
+// The campaign: scenes for chapters 2 to 21 (chapter 0, the dice lesson, and
 // chapter 1, making your hero, happen in the lobby). Scene kinds:
 //   story  text + choices the party votes on. A choice can need a flag
 //          (`requires`) and can set flags (`flags`).
@@ -29,6 +29,11 @@ export const CHAPTERS = {
   14: { title: 'Gallow Causeway', teaches: ['regeneration', 'surprise', 'reach', 'ability-score-improvement'] },
   15: { title: "The Giant's Yard", teaches: ['reach', 'prone', 'poisoned', 'group-check'] },
   16: { title: 'The Black Water', teaches: ['recharge', 'immunity', 'divine-intervention', 'areas'] },
+  17: { title: 'Haverton Gaol', teaches: ['evasion', 'poisoned', 'mystic-arcanum', 'cunning-strike'] },
+  18: { title: 'Kell Pass', teaches: ['reach', 'cover', 'ability-score-improvement', 'long-rest'] },
+  19: { title: "Shepherd's Level", teaches: ['immunity', 'resistance', 'studied-attacks', 'group-check'] },
+  20: { title: "Saint Botolph's", teaches: ['magic-resistance', 'overchannel', 'natures-veil', 'monster-spells'] },
+  21: { title: 'The Undercroft', teaches: ['legendary-resistance', 'legendary-actions', 'paralyzed', 'vulnerability'] },
 };
 
 // AI companions fill empty seats. Each has a fixed build.
@@ -805,12 +810,289 @@ export const SCENES = {
     lesson: `The last fight. Skellmaw and its wyrmlings are immune to Acid. Spread out so the breath can only catch one or two of you, and after it breathes, press in: it rolls a d6 at the start of each turn and only gets the breath back on a 5 or 6.`,
   },
   'c16-end': {
-    chapter: 16, kind: 'end', title: "Hester's Silver",
+    chapter: 16, kind: 'story', title: "Hester's Silver",
     text: [
       `Skellmaw dies half in and half out of the water, and the wave it makes going under slaps the boat against the gallery. When the water settles you can see down to the floor of the church: the pews, the font, and a carpet of coins and bones.`,
       `It takes two days and the Rudds' second boat to bring the silver back to Coldharbour. Hester Marr counts it with you. Most of it is the Baron's, from the tolls, and some of it came from the Rudds and the other fen farms, who paid her a share every month. She asks you to see that they get theirs back first, and you do.`,
       `Ursula Dent is waiting at Brede keep when you bring the chests down the river, with Walter Gisby, six of the Baron's soldiers and a fresh ledger. Davey Tullock got the best price in years at Haverton, and he has left you a cheese. The clerk pays you your hundred and fifty silver and writes for the rest of the afternoon, and when she's finished she asks whether you'll be free in the spring.`,
     ],
-    lesson: `That's the campaign so far: from your first d20 to level 10. Levels 11 to 20 are on the way. Thanks for playtesting First Roll.`,
+    choices: [{ id: 'spring', label: 'Tell her you will be.', next: 'c17-rest' }],
+    lesson: `Chapter 16 done: level 10, Recharge, Immunity and a young dragon. Next: level 11, in the spring.`,
+  },
+  // ---------------------------------------------- chapter 17: Haverton Gaol
+  'c17-rest': {
+    chapter: 17, kind: 'rest', rest: 'long', title: 'The Woolpack', next: 'c17-level',
+    text: [
+      `Davey Tullock brings the message over from Haverton at the end of March, when the roads are just about dry. The spring assizes sit there next week, and Hester Marr is to be tried at them for the tolls she took at Brede. Ursula Dent wants you in Haverton before the judge arrives, and she has paid for your rooms.`,
+      `The Woolpack stands on the market square, across from the gaol, and this week it's full of lawyers. One of them snores through the wall all night. Ursula has the room on his other side, and around two in the morning you hear her get up and bang on it with her shoe.`,
+    ],
+    lesson: `A Long Rest gives back all your Hit Points, all your spell slots and most of your features' uses. It stops if you roll Initiative, cast a spell other than a cantrip, take damage, or spend an hour walking or working hard.`,
+  },
+  'c17-level': {
+    chapter: 17, kind: 'level', level: 11, title: 'Level 11', next: 'c17-gaol',
+    text: [`Winter went by. Everyone in the party reaches level 11.`],
+    lesson: `Level 11: full casters learn a level 6 spell such as Chain Lightning, Disintegrate, Harm or Heal. A Fighter makes three attacks with the Attack action. A Rogue gets Improved Cunning Strike and can use two Cunning Strike effects on one Sneak Attack. A Paladin's weapon hits do an extra 1d8 Radiant damage, and a Warlock gets Mystic Arcanum, one level 6 spell a day without a slot. Damage cantrips get stronger again. Tap your hero to see what's new.`,
+  },
+  'c17-gaol': {
+    chapter: 17, kind: 'story', title: 'Haverton Gaol',
+    text: [
+      `Haverton gaol is a stone yard behind the market hall, with cells round three sides of it and a high wall at the back that runs along Tanners' Lane. The gaoler, Ned Coyle, lets you in on Ursula's word and tells you that the prisoners are fed on Tuesdays and Fridays, as if you'd come to check.`,
+      `Hester Marr has the end cell. She's thinner than she was at Coldharbour, and she has kept her boots polished. She asked for you, not for the clerk, and Ursula folds her arms and lets her talk.`,
+      `"I never stole the Baron's seal," Hester says. "I bought it from Roger Askew, the Baron's steward, and I paid him a third of every toll I took at Brede. I wrote to the Baron four times about the state of that keep. Askew opened every letter and kept them." Askew left the castle a fortnight ago with the seal ring and the strongbox from the steward's room, and nobody has seen him since.`,
+      `"He'll want me dead before the judge gets here," she says. "Nobody else can tell him any of this." Behind you, Ned Coyle has left the yard gate open. He always does, he says, until he goes to bed.`,
+    ],
+    choices: [
+      { id: 'gate', label: "Talk Ned Coyle into barring the gate and the lane door tonight. (One hero makes a Persuasion check.)", next: 'c17-gate' },
+      { id: 'watch', label: 'Leave the gaol as it is and keep watch in the yard.', next: 'c17-fight' },
+    ],
+    lesson: `An Assassin attacks three times a turn, and its blade adds Poison damage and can leave you Poisoned. It also has Evasion: when it makes a Dexterity save against something that does half damage on a success, it takes no damage if it succeeds and only half if it fails.`,
+  },
+  'c17-gate': {
+    chapter: 17, kind: 'check', title: 'The Yard Gate',
+    text: [`Ned Coyle likes doing things the way he has always done them. He also likes his job, and the judge arrives on Monday.`],
+    check: { skill: 'persuasion', dc: 15, mode: 'single', prompt: 'Who talks to Ned? That hero rolls Persuasion.' },
+    success: {
+      text: `Ned grumbles, and then does it properly. He drops the bar on the yard gate, chains the door to Tanners' Lane and sits up in the gatehouse with a cudgel across his knees. Close to midnight someone outside lifts the latch on the lane door, finds the chain and lets the latch down again very gently. A few minutes later the first of them comes over the wall instead.`,
+      next: 'c17-fight', flags: { barred: true },
+    },
+    fail: {
+      text: `Ned hears you out and tells you the gate has stood open for eleven years without any trouble. He goes to bed at ten. At midnight the door from Tanners' Lane swings open on hinges somebody has oiled, and they come in through it.`,
+      next: 'c17-fight', flags: {},
+    },
+    lesson: `One hero makes this check for the party, DC 15, and you choose who. Bar the gaol and one of the hired swords is shut outside.`,
+  },
+  'c17-fight': {
+    chapter: 17, kind: 'fight', title: 'Midnight in the Yard', encounter: 'gaol', next: 'c17-after',
+    lesson: `Poisoned gives Disadvantage on attack rolls and ability checks; Lay on Hands and Lesser Restoration can end it. Area spells with a Dexterity save do very little to an Assassin because of Evasion. Spell attacks, and spells with other saves, work better.`,
+  },
+  'c17-after': {
+    chapter: 17, kind: 'story', title: "Ursula's News",
+    text: [
+      `Hester knows one of the dead men. He used to carry Askew's messages to Coldharbour, and one Christmas he brought her a hamper. Ned Coyle sits on the gatehouse step for a long time afterwards and says he's going to give up the job.`,
+      `Ursula comes over from the Woolpack in a borrowed coat with a lamp, and goes from body to body writing in her ledger. In the morning she has news of her own. A drover came down to Haverton market yesterday with his whole flock still on him, because he couldn't get them over Kell Pass: there are giants sitting in it, turning everyone back. The week before, he saw a man ride up the pass ahead of them with three of the Baron's mules.`,
+      `"Askew," Ursula says. "The judge can try Hester without him, but I want that seal back, and I want Askew standing in front of the court." She has a warrant with the Baron's own signature on it and two hundred silver for each of you if you bring Askew down from the north.`,
+    ],
+    choices: [{ id: 'north', label: 'Take the warrant and ride north for Kell Pass.', next: 'c18-rest' }],
+    lesson: `Chapter 17 done: level 11, Assassins, Evasion and Poisoned. Next: level 12, and the high pass.`,
+  },
+
+  // ---------------------------------------------- chapter 18: Kell Pass
+  'c18-rest': {
+    chapter: 18, kind: 'rest', rest: 'long', title: 'Kell End', next: 'c18-level',
+    text: [
+      `Kell End is the last farm before the pass, two days' ride north of Haverton, where the road turns into a stony track and climbs into the cloud. Peg Alsop farms it with her two sons and a sheepdog that won't let anybody through the gate until it has had a good look at them. She gives you the barn to sleep in. Her sons give you their opinion of the giants, which is that somebody ought to do something about them, and that they would do it themselves if their mother would let them.`,
+    ],
+    lesson: `You can only get the benefits of one Long Rest in 24 hours, and you need at least 1 Hit Point to start one.`,
+  },
+  'c18-level': {
+    chapter: 18, kind: 'level', level: 12, title: 'Level 12', next: 'c18-pass',
+    text: [`You kept Hester Marr alive for her trial. Everyone in the party reaches level 12.`],
+    lesson: `Level 12: every class gets an Ability Score Improvement or a feat, and that's the main thing this level brings. A Barbarian also gets a fifth Rage. Tap your hero to choose.`,
+  },
+  'c18-pass': {
+    chapter: 18, kind: 'story', title: 'Kell Pass',
+    text: [
+      `The pass is a notch between two fells: a mile of boulders and old snow, with a cairn at the top where drovers leave a stone for luck. You can see the giants from a long way below. They have piled up a wall of rocks across the narrowest part, waist high to them, and one sits on top of it with an axe across her knees and a fur hood pulled up against the wind.`,
+      `Peg Alsop came up with you as far as the last sheepfold. She calls that one Grimma, because that's the name the giant gave the day she took four of Peg's ewes and left a silver mark on the gatepost to pay for them. "Askew's silver, I'd say," Peg says.`,
+      `She knows another way up. The old drove road runs round the back of the cairn under the crags, and comes out behind the wall. Nobody has used it since her father's time, and there'll be drifts.`,
+    ],
+    choices: [
+      { id: 'track', label: 'Take the old drove road round the back. (Everyone makes a Survival check.)', next: 'c18-track' },
+      { id: 'wall', label: 'Go straight up the track to the wall.', next: 'c18-fight' },
+    ],
+    lesson: `Frost Giants are Huge, with 149 Hit Points. Their axes reach 10 feet and add Cold damage, and the arrows from their Great Bows add Cold damage too. Cold can't hurt them at all.`,
+  },
+  'c18-track': {
+    chapter: 18, kind: 'check', title: 'The Old Drove Road',
+    text: [`The drove road is a ledge under the crags, half buried in last winter's snow, with a long drop on the open side.`],
+    check: { skill: 'survival', dc: 15, mode: 'group', prompt: 'Everyone rolls Survival.' },
+    success: {
+      text: `You keep to the line of it by the old marker stones, each one with a notch cut in the top, and come down off the crags behind the wall. The giant with the bow is up on the cairn, watching the main track a long bowshot off, and by the time she hears the shouting and turns round, you're already in among the others.`,
+      next: 'c18-fight', flags: { track: true },
+    },
+    fail: {
+      text: `You lose the road in a drift and have to climb back down to the main track in full view. The giant on the cairn sees you first. She shouts, and the ones at the wall stand up and reach for their axes.`,
+      next: 'c18-fight', flags: {},
+    },
+    lesson: `A group Survival check, DC 15, for finding your way. Succeed and the giant with the bow stays up on the cairn.`,
+  },
+  'c18-fight': {
+    chapter: 18, kind: 'fight', title: 'The Wall Across the Pass', encounter: 'pass', next: 'c18-after',
+    lesson: `A giant's axe reaches 10 feet, so it can hit you before you're next to it. Boulders give Half Cover (+2 AC) against its arrows. Don't waste Cold damage on a Frost Giant.`,
+  },
+  'c18-after': {
+    chapter: 18, kind: 'story', title: 'Over the Top',
+    text: [
+      `When Grimma goes down she falls across her own wall and takes half of it with her. Behind it is the giants' camp: a fire pit, the bones of several sheep and a leather sack with what's left of their pay in it, a few hundred silver marks with the Baron's head on them. Peg Alsop takes out the price of four ewes and hands you the rest for Ursula.`,
+      `From the top of the pass you can see down into the next dale. Halfway down the far side, on a shelf of the fell, is a huddle of old mine buildings, and smoke is coming out of the tall chimney of the smelt mill: thick black smoke, the kind you get from coal, in a dale with no coal in it. Fresh mule tracks go down the far side toward it.`,
+      `"That's Shepherd's Level," Peg says. "The lead mine. It's been shut since before I was married."`,
+    ],
+    choices: [{ id: 'down', label: 'Follow the mule tracks down to the mine.', next: 'c19-rest' }],
+    lesson: `Chapter 18 done: level 12, Frost Giants, Reach and Cover. Next: level 13, and fire.`,
+  },
+
+  // ---------------------------------------------- chapter 19: Shepherd's Level
+  'c19-rest': {
+    chapter: 19, kind: 'rest', rest: 'long', title: 'The Bothy', next: 'c19-level',
+    text: [
+      `At the head of the dale there's an empty bothy by the beck, a stone hut with half a roof, where the miners used to dry their clothes at the end of a shift. You sleep there with a fire you keep small. All night there's a red glow on the fellside above you, and a hammering that stops now and then for a few minutes and then starts again.`,
+    ],
+    lesson: `After a Long Rest, Clerics, Druids, Paladins and Wizards can change which spells they have prepared. Fire Giants can't be hurt by Fire, so think about what you'll want before you go up.`,
+  },
+  'c19-level': {
+    chapter: 19, kind: 'level', level: 13, title: 'Level 13', next: 'c19-mine',
+    text: [`You got over Kell Pass. Everyone in the party reaches level 13.`],
+    lesson: `Level 13: your Proficiency Bonus rises to +5. Full casters learn a level 7 spell such as Finger of Death, Fire Storm, Divine Word or Delayed Blast Fireball. A Fighter gets Studied Attacks: if you miss a creature, your next attack against it has Advantage. A Warlock gets a level 7 Mystic Arcanum. Tap your hero to see what's new.`,
+  },
+  'c19-mine': {
+    chapter: 19, kind: 'story', title: "Shepherd's Level",
+    text: [
+      `The mine is a row of stone buildings on a shelf above the beck: the smelt mill with its chimney, the ore sheds, and the mouth of the level, a tunnel into the fell wide enough to take a cart. Someone has pulled the roof off the smelt mill and built its walls up higher with new stone, rough work, by somebody who didn't need a ladder.`,
+      `A boy is coming down the track with an empty cart and a pony. He's Kit Lowther, from the woods at the foot of the dale, and he brings the giants their charcoal. They pay him in lead. There are two of them, he says, and the big one is called Burr. They work at the forge all night and sleep in the ore sheds all day, and the ogres they brought with them work the bellows down in the pit.`,
+      `Kit tells you about the sluice, too. The old miners drained the lower workings through a gate at the end of the level, and it has been shut for years. The water behind it has been rising all that time. Open the gate and it'll come straight down the level and into the bellows pit.`,
+    ],
+    choices: [
+      { id: 'sluice', label: 'Go into the level and open the sluice. (One hero makes an Athletics check.)', next: 'c19-sluice' },
+      { id: 'forge', label: 'Walk into the smelt mill.', next: 'c19-fight' },
+    ],
+    lesson: `Fire Giants are Huge, with AC 18 and 162 Hit Points, and they're immune to Fire. They swing their Flame Swords twice a turn at 10 feet, and Hammer Throw can knock you 15 feet back and give you Disadvantage on your next attack roll.`,
+  },
+  'c19-sluice': {
+    chapter: 19, kind: 'check', title: 'The Sluice',
+    text: [`The sluice is an iron gate in a stone wall, a long way into the dark, with a big wheel beside it to wind it up.`],
+    check: { skill: 'athletics', dc: 16, mode: 'single', prompt: 'Who turns the wheel? That hero rolls Athletics.' },
+    success: {
+      text: `The wheel won't move, and then all at once it does. Black water comes through the gap with a roar you can feel in your teeth and runs away down the level toward the mill. By the time you get back out into the daylight, the bellows pit is full to the brim and the ogres are climbing out of it on the far side and running off down the beck, and the giants are bellowing at each other over a forge buried in steam.`,
+      next: 'c19-fight', flags: { sluice: true },
+    },
+    fail: {
+      text: `The wheel is rusted solid. You hang off it and kick it, and when it finally gives, the axle snaps and the gate drops back down with a clang that runs all the way along the level and out of the other end. Up in the mill, the hammering stops.`,
+      next: 'c19-fight', flags: {},
+    },
+    lesson: `One hero makes this check for the party, DC 16. Open the sluice and the ogres leave the fight.`,
+  },
+  'c19-fight': {
+    chapter: 19, kind: 'fight', title: 'The Forge', encounter: 'mine', next: 'c19-after',
+    lesson: `A Flame Sword does Slashing and Fire damage, and Fire Resistance halves only the Fire part. Hammer Throw shoves you back, so close the distance again. Fire spells do nothing to a Fire Giant; save them for the ogres.`,
+  },
+  'c19-after': {
+    chapter: 19, kind: 'story', title: 'The Empty Mould',
+    text: [
+      `In the floor of the smelt mill, beside the forge, the giants have dug a long pit and lined it with clay. It's a mould for something cast in one piece, the shape of a man lying on his back, twice as tall as a real one. The iron has been poured, and cooled, and taken out.`,
+      `Kit Lowther comes back up the track when the smoke clears, because the giants still owe him a week's charcoal. He saw it go. It filled a wagon drawn by eight oxen, with a giant walking beside it to keep it steady, and it went down the dale nearly a fortnight ago with a man in a good coat riding in front. That fits Askew.`,
+      `"The other one's the one who pays," Kit says. "He came twice. Grey gown. He said the iron had to be poured all in one go, at night, and he stood there and watched them do it." The wagon went down to Saint Botolph's, the old abbey at the bottom of the dale.`,
+    ],
+    choices: [{ id: 'abbey', label: 'Follow the wagon to Saint Botolph\'s.', next: 'c20-rest' }],
+    lesson: `Chapter 19 done: level 13, Fire Giants, Immunity and being knocked back. Next: level 14, and magic.`,
+  },
+
+  // ---------------------------------------------- chapter 20: Saint Botolph's
+  'c20-rest': {
+    chapter: 20, kind: 'rest', rest: 'long', title: 'Botolph Bridge', next: 'c20-level',
+    text: [
+      `There's a village at the foot of the dale, Botolph Bridge, with a pub that's mostly a kitchen. Mary Tennant, who runs it, feeds you and doesn't ask about the soot.`,
+      `Everyone in the village knows about the man at the abbey. His name is Simon Pettifer. He came last autumn with a paper from the Baron's steward that said the ruins were his, and he pays well for digging. But the men he hired have stopped coming home at night, and for three days now their wives have been going up to the abbey gate to ask why, and coming back without an answer.`,
+    ],
+    lesson: `A Long Rest gets back the uses that recharge "per Long Rest", such as Mystic Arcanum and Overchannel's free use. Pettifer's guards have Magic Resistance, so prepare spells that don't depend on a save.`,
+  },
+  'c20-level': {
+    chapter: 20, kind: 'level', level: 14, title: 'Level 14', next: 'c20-abbey',
+    text: [`You put out the forge at Shepherd's Level. Everyone in the party reaches level 14.`],
+    lesson: `Level 14: an Evoker Wizard gets Overchannel, which makes every damage die of a level 1 to 5 spell roll its highest number (free the first time, and it hurts after that). A Ranger gets Nature's Veil and can turn Invisible until the end of their next turn. A Berserker gets Intimidating Presence, a Paladin gets Restoring Touch, and a Rogue gets Devious Strikes. Tap your hero to see what's new.`,
+  },
+  'c20-abbey': {
+    chapter: 20, kind: 'story', title: "Saint Botolph's",
+    text: [
+      `The abbey stands in the water meadows below the village, roofless, with sheep grazing in the cloister. Only the church is whole, or nearly, because someone has been mending it: there's new timber in the roof and new glass in some of the windows. Askew's wagon stands in the yard with its shafts on the ground.`,
+      `Through the west door you can see the length of the nave. A man in a grey gown is reading at a desk by the altar steps. At the far end, beside a hole in the floor where the paving has been taken up, stands a statue of a monk carved from grey stone, a head taller than any man, and as you watch, it turns its head to follow a pigeon across the roof.`,
+      `In the middle of the floor someone has drawn a circle in chalk as wide as a cart, crowded with writing. Inside it crouches a tall grey devil, all bones under a tight hide, with a scorpion's tail curled round its feet. Roger Askew is there too, in a good coat gone shabby at the cuffs, carrying books from a crate to the desk.`,
+    ],
+    choices: [
+      { id: 'circle', label: 'Creep up to the chalk circle and break it. (One hero makes an Arcana check.)', next: 'c20-circle' },
+      { id: 'door', label: 'Walk in through the west door.', next: 'c20-fight' },
+    ],
+    lesson: `Simon Pettifer is an Archmage: AC 17, 170 Hit Points, spells such as Cone of Cold and Lightning Bolt, and Shield as a Reaction. He has Magic Resistance, Advantage on saving throws against spells, and so do the stone golem and the Bone Devil.`,
+  },
+  'c20-circle': {
+    chapter: 20, kind: 'check', title: 'The Chalk Circle',
+    text: [`The circle is behind a fallen pillar, out of sight of the desk. Whoever goes has to crawl to it and read the writing upside down, in bad light.`],
+    check: { skill: 'arcana', dc: 17, mode: 'single', prompt: 'Who reads the circle? That hero rolls Arcana.' },
+    success: {
+      text: `You find the line that holds it, a name written over and over round the inside edge, and wipe a stretch of it out with your sleeve. The devil stands up. It looks at Pettifer, and then at you, and then it's gone, and the chalk where it crouched is smoking. Pettifer is on his feet and shouting before the smoke has cleared.`,
+      next: 'c20-fight', flags: { circle: true },
+    },
+    fail: {
+      text: `You rub out a line, and it's the wrong one. The circle flares white, and the devil stays exactly where it was and turns its head toward you. At the desk, Pettifer closes his book and stands up.`,
+      next: 'c20-fight', flags: {},
+    },
+    lesson: `One hero makes this check for the party, DC 17. Break the circle and the Bone Devil goes home before the fight starts.`,
+  },
+  'c20-fight': {
+    chapter: 20, kind: 'fight', title: 'Simon Pettifer', encounter: 'abbey', next: 'c20-after',
+    lesson: `Magic Resistance gives Advantage on saves against spells, so spells with no save, like Magic Missile, and spells that make an attack roll do better here. The Bone Devil's Infernal Sting poisons you and stops you regaining Hit Points until its next turn.`,
+  },
+  'c20-after': {
+    chapter: 20, kind: 'story', title: 'Roger Askew',
+    text: [
+      `Simon Pettifer doesn't stay to the end. When the fight turns against him he speaks one word and is gone from where he stood, leaving a smell like a struck match. It's the Teleport spell, and he could be anywhere he has been before.`,
+      `Roger Askew is under the desk. He comes out when you tell him to and hands you the Baron's seal ring, which he's been wearing on a cord round his neck. Then he can't stop talking. Pettifer promised him half of what the brothers of Saint Botolph's buried under the abbey when it was closed: their plate, more silver than the Baron has ever seen. The iron figure from the mine is lying in the south aisle under sacking. It's meant to carry the silver out, Askew says, and it can't move yet, because it isn't finished.`,
+      `"The diggers broke into the undercroft three days ago," he says. "Some of them came back up. They wouldn't say what they'd seen, and they went home. The others didn't come back up at all." Every night since, he has sat at the top of the steps with a lamp and a poker.`,
+    ],
+    choices: [{ id: 'down', label: 'Rest, and go down into the undercroft in the morning.', next: 'c21-rest' }],
+    lesson: `Chapter 20 done: level 14, an Archmage, Magic Resistance and a bound devil. Next: level 15, and what's under the abbey.`,
+  },
+
+  // ---------------------------------------------- chapter 21: The Undercroft
+  'c21-rest': {
+    chapter: 21, kind: 'rest', rest: 'long', title: "Mary Tennant's Cellar", next: 'c21-level',
+    text: [
+      `You sleep at the pub, with Askew locked in Mary Tennant's cellar among the barrels. He complains about the damp. Mary's husband Dick sits up at the top of the cellar steps all night with his boots on, and in the morning he tells you Askew talked in his sleep but didn't say anything worth repeating.`,
+    ],
+    lesson: `A Long Rest also takes away one level of Exhaustion. It's your last rest before the undercroft, so go down with everything you have.`,
+  },
+  'c21-level': {
+    chapter: 21, kind: 'level', level: 15, title: 'Level 15', next: 'c21-undercroft',
+    text: [`You brought Roger Askew to book. Everyone in the party reaches level 15.`],
+    lesson: `Level 15: full casters learn a level 8 spell such as Power Word Stun, Sunburst or Holy Aura, and a Warlock gets a level 8 Mystic Arcanum. A Barbarian's Rage only ends early if they choose, a Monk gets Perfect Focus, and a Bard's Bardic Inspiration die becomes a d12. Tap your hero to see what's new.`,
+  },
+  'c21-undercroft': {
+    chapter: 21, kind: 'story', title: 'The Undercroft',
+    text: [
+      `The steps go down from the hole in the nave floor into the undercroft, a long vaulted cellar under the church. The brothers of Saint Botolph's are buried down here in rows, each in a stone box with his name cut into the lid. Most of the lids have been pushed off. At the foot of the steps, Pettifer's diggers left their picks and a barrow and a lamp that has burned out.`,
+      `Godric was the abbot when the abbey was closed, three hundred years ago. In Botolph Bridge they say he had himself shut in his tomb under the altar rather than hand over the keys. The tomb is at the far end of the rows, under a painted ceiling, and he's sitting on the edge of it, wrapped in linen gone brown, with a ring of keys in his lap. His head turns toward your light.`,
+      `To the left of the steps a low passage runs off into the charnel house, where the old bones were stacked when the boxes were needed again. Something in there is dragging its feet along the floor toward you. The diggers left a stack of bricks at the mouth of the passage.`,
+    ],
+    choices: [
+      { id: 'brick', label: 'Brick up the charnel passage before they reach it. (Everyone makes an Athletics check.)', next: 'c21-brick' },
+      { id: 'rows', label: 'Go straight down the rows toward the abbot.', next: 'c21-fight' },
+    ],
+    lesson: `Abbot Godric is a Mummy Lord: AC 17 and 187 Hit Points. Legendary Resistance lets him turn a failed save into a success three times a day, and Legendary Actions let him act again right after one of your turns. His Dreadful Glare does Psychic damage and can leave you Paralyzed. He's vulnerable to Fire.`,
+  },
+  'c21-brick': {
+    chapter: 21, kind: 'check', title: 'The Charnel Passage',
+    text: [`The bricks are heavy, the passage is narrow, and whatever is in the charnel house is getting closer.`],
+    check: { skill: 'athletics', dc: 14, mode: 'group', prompt: 'Everyone rolls Athletics.' },
+    success: {
+      text: `You pass the bricks along hand to hand and build the wall chest high, then head high. Fingers come over the top before it's done, and somebody hits them with a spade. When the last brick goes in, they push on it from the other side, and it holds. At the far end of the undercroft the abbot gets to his feet.`,
+      next: 'c21-fight', flags: { bricked: true },
+    },
+    fail: {
+      text: `The wall is only waist high when the first of them gets to it: a dead brother in a rotted habit, with eyes like coals. It climbs straight over, and the others come behind it. Down at the end of the rows, the abbot stands up and comes toward you.`,
+      next: 'c21-fight', flags: {},
+    },
+    lesson: `A group Athletics check, DC 14. Brick up the passage and two of the dead brothers stay on the other side.`,
+  },
+  'c21-fight': {
+    chapter: 21, kind: 'fight', title: 'Abbot Godric', encounter: 'undercroft', next: 'c21-end',
+    lesson: `Fire does double damage to the abbot. His Rotting Fist stops you regaining Hit Points until his next turn, so heal your friends before he hits them. Any hit from within 5 feet of a Paralyzed creature is a Critical Hit; Lesser Restoration or a Paladin's Restoring Touch can end Paralyzed.`,
+  },
+  'c21-end': {
+    chapter: 21, kind: 'end', title: "The Abbot's Keys",
+    text: [
+      `Abbot Godric falls across his own tomb, and the keys slide off his lap onto the floor. One of them opens a low door behind the altar that none of Pettifer's diggers found: a strongroom, dry and cold, with the abbey's plate on its shelves, chalices and candlesticks and a cross as tall as a child, each piece wrapped in wool.`,
+      `When you climb back up into the church, Ursula Dent is there, with Walter Gisby and six of the Baron's soldiers, who came round by the low road from Haverton. Walter is standing in the south aisle beside a heap of sacking, and the iron figure isn't under it any more. Something very heavy has walked out through the west door while you were below. It cracked the step, and it left a line of trampled grass across the meadow toward the north road.`,
+      `Askew, in irons in the yard, says that it can't have walked, because it isn't finished. Ursula says it plainly has. Walter wants to ride after it today with the soldiers he's got, and Ursula wants Askew in front of the judge at Haverton first, and the two of them are still arguing about it over the back of the wagon when Mary Tennant comes down from the village with a basket of pies and asks who's paying for her cellar door.`,
+    ],
+    lesson: `That's the campaign so far: from your first d20 to level 15. Levels 16 to 20, and whatever Pettifer has made, are on the way. Thanks for playtesting First Roll.`,
   },
 };

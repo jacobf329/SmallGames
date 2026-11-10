@@ -3,7 +3,7 @@
 *Working title. A light, co-op, turn-based RPG that teaches the 2024
 fifth-edition rules by playing them with friends.*
 
-Status: **Phase 2 built, levels 4 to 10 added** (see [README.md](README.md)): chapters 0 to 16, levels 1 to 10, co-op for 1–4 players. Next: levels 11 to 20, in chunks, with chapters to match. What Phase 2 left for Phase 3 is listed under section 8.
+Status: **Phase 2 built, levels 4 to 15 added** (see [README.md](README.md)): chapters 0 to 21, levels 1 to 15, co-op for 1–4 players. Next: levels 16 to 20, with chapters to match. What Phase 2 left for Phase 3 is listed under section 8.
 Builds here in `SmallGames/first-roll/` and ships to
 `jteef/public/play/first-roll/` the same way Skyline Hustle and Turbo Surfers do.
 
@@ -256,7 +256,7 @@ Co-op is built in from the first prototype rather than added on later.
 | **1. Vertical slice (early access)** | Lobby with hero builder (4 classes, 9 species, 4 backgrounds), chapters 0–3, reactions, Help, votes, pings, AI companions for empty or dropped seats, saves and rejoin. Firestore rule updated. Deployed to `/play/first-roll/` | 4–5 sessions |
 | **2. Full curriculum** | Chapters 4–8, spells, conditions, rests, death saves, level 2–3 and subclasses, shared glossary, per-player coaching levels, "use my own dice", turn timer | 4–6 sessions |
 | **3. Polish** | Sound, animation, accessibility pass (colour-blind-safe player colours, screen-reader log), credits and attribution, replayable **Skirmish** mode (random co-op encounters for an evening), LAN mode | 2–3 sessions |
-| **Later** | Levels 11–20 with spells up to level 9 and Epic Boons (levels 4–10 are done); TURN relay for strict networks; host migration; AI narrator for scene text | separate scope |
+| **Later** | Levels 16–20 with level 9 spells and Epic Boons (levels 4–15 are done); TURN relay for strict networks; host migration; AI narrator for scene text | separate scope |
 
 ### What Phase 2 built, and what moved to Phase 3
 

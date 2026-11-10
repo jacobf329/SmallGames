@@ -246,6 +246,7 @@ export function specialOptions(b, me, { light = false } = {}) {
       case 'heal': {
         for (const F of friends) {
           if (!sees(b, me, F, range) && F !== me) continue;
+          if (cantHeal(b, F)) continue;
           const need = F.hp <= 0 ? 20 : F.hp <= F.hpMax / 3 ? 9 : 0;
           const amt = sc.amount || avgDice(sc.dice) + spellMod(me, sid);
           // Heal (70 HP) is wasted on a scratch: only on someone who'd use most of it.
@@ -535,7 +536,7 @@ function classOptions(b, me, add, { friends, foes, light }) {
       const pool = me.layOnHands.uses;
       const bad = (F.conds || []).filter((c) => (me.restoringTouch ? ['poisoned', 'blinded', 'charmed', 'frightened', 'paralyzed', 'stunned'] : ['poisoned']).includes(c.id) && !c.pattern);
       if (bad.length && pool >= 5) add({ a: 'lay', target: F.id, cure: true }, bad.some((c) => c.id === 'paralyzed' || c.id === 'stunned') ? 14 : 4, { T: F, cure: true }, 'bonus');
-      if (pool < 1 || F.hp >= F.hpMax) continue;
+      if (pool < 1 || F.hp >= F.hpMax || cantHeal(b, F)) continue;
       if (F.hp <= 0) add({ a: 'lay', target: F.id, amount: Math.min(pool, Math.max(1, Math.ceil(F.hpMax / 2))) }, 20, { T: F }, 'bonus');
       else if (F.hp <= F.hpMax / 3) add({ a: 'lay', target: F.id, amount: Math.min(pool, F.hpMax - F.hp) }, 6, { T: F }, 'bonus');
     }
@@ -886,6 +887,9 @@ export function aiNext(b, id) {
 function canAttackSomeone(b, me) {
   return weaponOptions(b, me).length > 0;
 }
+
+// Chill Touch, Infernal Sting and the mummy's curse stop all healing for a while.
+function cantHeal(b, F) { return b.effects.some((e) => e.type === 'grave' && e.target === F.id); }
 
 // For a creature the AI plays: answer a pending prompt (Opportunity Attack or Shield).
 export function aiReact(b) {

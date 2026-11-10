@@ -114,3 +114,18 @@ test('Hammer Throw knocks a hero back and puts them off their next attack; Infer
   assert.ok(b2.effects.some((e) => e.type === 'grave' && e.target === 'cleric'));
   assert.ok(has(b2.creatures.cleric, 'poisoned') || b2.creatures.cleric.condImmune?.includes('poisoned'));
 });
+
+test('chapters 17 to 21: every fight sits between Low and High for its level and party size', async () => {
+  const { buildEncounter } = await import('../src/game/encounters.js');
+  const BUDGET = { 11: [1900, 4100], 12: [2200, 4700], 13: [2600, 5400], 14: [2900, 6200], 15: [3300, 7800] };
+  const FLAGS = { gaol: 'barred', pass: 'track', mine: 'sluice', abbey: 'circle', undercroft: 'bricked' };
+  for (const [id, flag] of Object.entries(FLAGS)) for (let n = 1; n <= 4; n++) for (const flags of [{}, { [flag]: true }]) {
+    const e = buildEncounter(id, n, flags);
+    const [low, high] = BUDGET[e.level];
+    assert.ok(e.xp >= low * n * 0.5 && e.xp <= high * n, `${id} for ${n} ${JSON.stringify(flags)}: ${e.xp} XP`);
+  }
+  // Each flag the story can set makes its fight smaller.
+  for (const [id, flag] of Object.entries(FLAGS)) assert.ok(buildEncounter(id, 4, { [flag]: true }).foes.length < buildEncounter(id, 4).foes.length, id);
+  assert.equal(buildEncounter('undercroft', 3).foes[0].name, 'Abbot Godric');
+  assert.ok(!buildEncounter('abbey', 4, { circle: true }).foes.some((f) => f.name === 'Bone Devil'));
+});

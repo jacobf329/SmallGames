@@ -184,7 +184,7 @@ test('the whole campaign plays through to the end (AI fights, rests, level-ups, 
   p.ana.say({ t: 'start' });
   const seen = new Set();
   let retries = 0;
-  for (let step = 0; step < 1200 && SCENES[p.room.story?.scene]?.kind !== 'end'; step++) {
+  for (let step = 0; step < 2000 && SCENES[p.room.story?.scene]?.kind !== 'end'; step++) {
     const r = p.room;
     if (r.phase === 'battle') {
       finishFight(p);
@@ -208,9 +208,9 @@ test('the whole campaign plays through to the end (AI fights, rests, level-ups, 
       p.ana.say({ t: 'continue' });
     } else p.ana.say({ t: 'continue' });
   }
-  assert.equal(p.room.story.scene, 'c16-end');
-  assert.deepEqual([...seen].sort((x, y) => x - y), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
-  assert.equal(p.ana.state().level, 10);
+  assert.equal(p.room.story.scene, 'c21-end');
+  assert.deepEqual([...seen].sort((x, y) => x - y), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+  assert.equal(p.ana.state().level, 15);
   assert.equal(p.room.aiForPlayers, 0, 'the AI never played for a connected player');
   assert.ok(retries < 60, `retries: ${retries}`);
 });
