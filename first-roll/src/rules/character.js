@@ -151,6 +151,20 @@ function pickN(n, want, fill, ok) {
   return out;
 }
 
+// The order the builder fills spell picks the player left open: the class's
+// suggested spells and then the rest of its list, taken a spell level at a
+// time from the highest down, so a high-level hero gets some of each level.
+// Spells used in fights come before the ones that aren't.
+function spreadFill(first, rest) {
+  const pool = [...first, ...rest.filter((s) => SPELLS[s]?.kind !== 'utility'), ...rest.filter((s) => SPELLS[s]?.kind === 'utility')];
+  const by = {};
+  for (const s of pool) if (SPELLS[s]) (by[SPELLS[s].level] ||= []).includes(s) || by[SPELLS[s].level].push(s);
+  const levels = Object.keys(by).map(Number).sort((p, q) => q - p);
+  const out = [];
+  for (let i = 0; levels.some((l) => by[l][i]); i++) for (const l of levels) if (by[l][i]) out.push(by[l][i]);
+  return out;
+}
+
 // Which spells a Magic Initiate list offers.
 export const miCantrips = (list) => SPELL_LISTS[list][0];
 export const miSpells = (list) => SPELL_LISTS[list][1];
@@ -286,14 +300,14 @@ export function validateSpec(spec, { level = 1 } = {}) {
       // Each spell level has its own room in the book (see bookLimit).
       book = [];
       const room = (s) => book.filter((x) => SPELLS[x].level === SPELLS[s].level).length < bookLimit(SPELLS[s].level, level);
-      for (const s of [...(Array.isArray(spec.book) ? spec.book : []), ...D.book, ...leveled]) {
+      for (const s of [...(Array.isArray(spec.book) ? spec.book : []), ...spreadFill(D.book, leveled)]) {
         if (book.length >= n.book) break;
         if (typeof s === 'string' && leveled.includes(s) && !book.includes(s) && room(s)) book.push(s);
       }
-      prepared = pickN(n.prepared, spec.prepared, [...D.prepared, ...book], (s) => book.includes(s));
+      prepared = pickN(n.prepared, spec.prepared, spreadFill(D.prepared, book), (s) => book.includes(s));
     } else {
       const dom = domainSpells(cls, level, land);
-      prepared = pickN(n.prepared, spec.prepared, [...D.prepared, ...leveled], (s) => leveled.includes(s) && !dom.includes(s));
+      prepared = pickN(n.prepared, spec.prepared, spreadFill(D.prepared, leveled), (s) => leveled.includes(s) && !dom.includes(s));
     }
   }
   // Blessed Warrior / Druidic Warrior: two cantrips from another list.
