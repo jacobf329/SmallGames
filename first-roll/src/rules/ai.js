@@ -16,7 +16,7 @@ import { cheb, incap, down, hasCond, condOf, reachMap, canEndAt, pathFrom, key, 
 import {
   attackOptions, enemiesOf, alliesOf, previewMove, canCast, canAttack, spellAttack, spellDC,
   attackFactors, hitChance, hitBonus, saveChance, spellMod, scaled, areaTargets, pointError, offhandFor, canTarget,
-  provokers, speedOf, seenBy, preservePlan, damageMult, acAgainst, reachOf, BREATH_AREAS, spellAim, smitePay, spellDCParts, landsAidDice,
+  provokers, speedOf, seenBy, preservePlan, damageMult, acAgainst, reachOf, BREATH_AREAS, spellAim, smitePay, spellDCParts, landsAidDice, metaError,
 } from './combat.js';
 import { inBounds } from './grid.js';
 import { SPELLS } from './data.js';
@@ -133,11 +133,32 @@ export function specialOptions(b, me, { light = false } = {}) {
         break;
       }
       case 'save': {
+        const scored = [];
         for (const T of foes) {
-          if (!sees(b, me, T, range) || immune(T)) continue;
+          if (!sees(b, me, T, range) || immune(T) || down(T)) continue;
           const pFail = 1 - saveChance(b, T, s.save, dc);
-          const avg = avgDice(sc.dice) * damageMult(T, s.type);
-          add({ a: 'cast', spell: sid, target: T.id }, (pFail + (s.half ? (1 - pFail) / 2 : 0)) * avg + finishing(T, avg) - cost + pFail * (s.rider === 'mocked' ? 1.5 : s.rider === 'flee' ? 1 : 0), { T, pFail, dc });
+          const avg = ((sc.dice ? avgDice(sc.dice) : 0) + (sc.flat || 0)) * damageMult(T, s.type);
+          const rider = s.rider === 'mocked' ? 1.5 : s.rider === 'flee' ? 1 : s.rider === 'befuddle' && T.casting ? 6 : s.rider === 'befuddle' ? 1 : 0;
+          scored.push({ T, pFail, v: (pFail + (s.half ? (1 - pFail) / 2 : 0)) * avg + finishing(T, avg) + pFail * rider });
+        }
+        if (sc.targets > 1) {
+          // Chain Lightning: the best few, one cast.
+          const pick = scored.sort((p, q) => q.v - p.v).slice(0, sc.targets);
+          if (pick.length) add({ a: 'cast', spell: sid, target: pick[0].T.id, targets: pick.map((x) => x.T.id) }, pick.reduce((acc, x) => acc + x.v, 0) - cost, { T: pick[0].T, pFail: pick[0].pFail, dc, ids: pick.map((x) => x.T.id) });
+        } else for (const x of scored) add({ a: 'cast', spell: sid, target: x.T.id }, x.v - cost, { T: x.T, pFail: x.pFail, dc });
+        break;
+      }
+      case 'word': {
+        // Divine Word: only worth it on creatures at 50 Hit Points or fewer, best of all at 20 or fewer.
+        const pick = foes.filter((T) => !down(T) && T.hp <= 40 && sees(b, me, T, range))
+          .map((T) => ({ T, v: (1 - saveChance(b, T, 'cha', dc)) * (T.hp <= 20 ? T.hp + 8 : 10) })).sort((p, q) => q.v - p.v).slice(0, sc.targets);
+        if (pick.length) add({ a: 'cast', spell: sid, target: pick[0].T.id, targets: pick.map((x) => x.T.id) }, pick.reduce((acc, x) => acc + x.v, 0) - cost, { T: pick[0].T, ids: pick.map((x) => x.T.id) }, 'bonus');
+        break;
+      }
+      case 'pwstun': {
+        for (const T of foes) {
+          if (down(T) || incap(T) || T.hp > 150 || (T.condImmune || []).includes('stunned') || !sees(b, me, T, range)) continue;
+          add({ a: 'cast', spell: sid, target: T.id }, 10 + 6 * (T.multiattack || 1) * Math.min(1, T.hp / 40) - cost, { T });
         }
         break;
       }
@@ -205,7 +226,9 @@ export function specialOptions(b, me, { light = false } = {}) {
             continue;
           }
           if (fs.length < 2 && !(near && aim.from === 'self')) continue;
-          const exp = fs.reduce((acc, c) => acc + avgDice(sc.dice) * damageMult(c, s.type) * (1 - saveChance(b, c, s.save, dc) / 2), 0);
+          const mult = (c) => (s.prismatic ? s.prismatic.reduce((acc, ty) => acc + damageMult(c, ty), 0) / s.prismatic.length : damageMult(c, s.type));
+          const rider = s.rider === 'blind' || s.rider === 'sunblind' ? 2 : 0;
+          const exp = fs.reduce((acc, c) => acc + (avgDice(sc.dice) * mult(c) + rider) * (1 - saveChance(b, c, s.save, dc) / 2), 0);
           add({ a: 'cast', spell: sid, x, y }, exp + (near && aim.from === 'self' ? 2 : 0) - cost, { foes: fs, pals });
         }
         break;
@@ -224,7 +247,10 @@ export function specialOptions(b, me, { light = false } = {}) {
         for (const F of friends) {
           if (!sees(b, me, F, range) && F !== me) continue;
           const need = F.hp <= 0 ? 20 : F.hp <= F.hpMax / 3 ? 9 : 0;
-          if (need) add({ a: 'cast', spell: sid, target: F.id }, need + (s.time === 'bonus' ? 2 : 0) - cost, { T: F, heal: avgDice(sc.dice) + spellMod(me, sid) }, s.time);
+          const amt = sc.amount || avgDice(sc.dice) + spellMod(me, sid);
+          // Heal (70 HP) is wasted on a scratch: only on someone who'd use most of it.
+          if (sc.amount && F.hpMax - F.hp < sc.amount * 0.6 && F.hp > 0) continue;
+          if (need) add({ a: 'cast', spell: sid, target: F.id }, need + (s.time === 'bonus' ? 2 : 0) + (sc.amount ? 4 : 0) - cost, { T: F, heal: amt }, s.time);
         }
         break;
       }
@@ -317,15 +343,17 @@ export function specialOptions(b, me, { light = false } = {}) {
           if (n) add({ a: 'cast', spell: sid }, n * avgDice(sc.dice) * 0.6 + 4 - cost, { foes: n });
           break;
         }
+        // Guardian of Faith: no Concentration, so it goes up next to the enemies already on someone.
+        if (s.zone === 'guardian' && b.effects.some((e) => e.type === 'zone' && e.spell === sid && e.by === me.id)) break;
         const aim = spellAim(sid, can.slot, null, me.level);
         for (const { x, y } of spotsNear(b, me, aim, foes)) {
           const hit = areaTargets(b, me, aim, x, y);
           if (hit.some((c) => c.side === me.side)) continue;
           const fs = hit.filter((c) => !down(c) && !c.dead);
-          if (fs.length < 2) continue;
+          if (fs.length < (s.zone === 'guardian' ? 1 : 2)) continue;
           const each = (c) => {
             const pFail = 1 - saveChance(b, c, s.save, dc);
-            if (s.dice) return (pFail + (s.half ? (1 - pFail) / 2 : 0)) * avgDice(sc.dice) * damageMult(c, s.type) * 1.4;
+            if (s.dice || sc.flat) return (pFail + (s.half ? (1 - pFail) / 2 : 0)) * ((s.dice ? avgDice(sc.dice) : 0) + (sc.flat || 0)) * damageMult(c, s.type) * 1.4;
             return pFail * (s.zone === 'stink' ? 5 : 3);
           };
           add({ a: 'cast', spell: sid, x, y }, fs.reduce((acc, c) => acc + each(c), 0) - cost, { foes: fs });
@@ -432,6 +460,13 @@ export function specialOptions(b, me, { light = false } = {}) {
     }
   }
   classOptions(b, me, add, { friends, foes, light });
+  // Overchannel (Evoker 14): the free use goes on a big damaging spell.
+  if (me.overchannel?.uses > 0) {
+    for (const o of [...out]) {
+      if (o.intent.a !== 'cast' || o.intent.meta || o.score < 12 || metaError(b, me, o.intent.spell, 'overchannel')) continue;
+      out.push({ ...o, intent: { ...o.intent, meta: 'overchannel' }, score: o.score * 1.5 });
+    }
+  }
   out.sort((p, q) => q.score - p.score);
   return out;
 }
@@ -490,7 +525,8 @@ function classOptions(b, me, add, { friends, foes, light }) {
     for (const F of friends) {
       if (F.dead || (F !== me && cheb(me, F) > 1)) continue;
       const pool = me.layOnHands.uses;
-      if (hasCond(F, 'poisoned') && pool >= 5) add({ a: 'lay', target: F.id, cure: true }, 4, { T: F, cure: true }, 'bonus');
+      const bad = (F.conds || []).filter((c) => (me.restoringTouch ? ['poisoned', 'blinded', 'charmed', 'frightened', 'paralyzed', 'stunned'] : ['poisoned']).includes(c.id) && !c.pattern);
+      if (bad.length && pool >= 5) add({ a: 'lay', target: F.id, cure: true }, bad.some((c) => c.id === 'paralyzed' || c.id === 'stunned') ? 14 : 4, { T: F, cure: true }, 'bonus');
       if (pool < 1 || F.hp >= F.hpMax) continue;
       if (F.hp <= 0) add({ a: 'lay', target: F.id, amount: Math.min(pool, Math.max(1, Math.ceil(F.hpMax / 2))) }, 20, { T: F }, 'bonus');
       else if (F.hp <= F.hpMax / 3) add({ a: 'lay', target: F.id, amount: Math.min(pool, F.hpMax - F.hp) }, 6, { T: F }, 'bonus');
@@ -519,6 +555,30 @@ function classOptions(b, me, add, { friends, foes, light }) {
     const exp = pick.reduce((acc, T) => acc + (1 - saveChance(b, T, 'wis', dc)) * (3 + 2 * (T.multiattack || 1)) * Math.min(1, T.hp / 20), 0);
     if (pick.length && exp > 3) add({ a: 'abjure', targets: pick.map((T) => T.id) }, exp, { ids: pick.map((T) => T.id) });
   }
+  // Intimidating Presence (Berserker 14): frighten what's close, once per Long Rest.
+  if (me.intimidating?.uses > 0 && t.bonus) {
+    const dc = 8 + me.mods.str + me.pb;
+    const near = up.filter((T) => feetBetween(me, T) <= 30 && !hasCond(T, 'frightened') && !(T.condImmune || []).includes('frightened'));
+    const exp = near.reduce((acc, T) => acc + (1 - saveChance(b, T, 'wis', dc)) * (1.5 + (T.multiattack || 1)) * Math.min(1, T.hp / 20), 0);
+    if (near.length >= 2 && exp > 3) add({ a: 'intimidate' }, exp + (me.raging ? 1 : -3), { foes: near }, 'bonus');
+  }
+  // Nature's Veil (Ranger 14): Invisible for the attacks to come.
+  if (me.veil?.uses > 0 && t.bonus && canAttack(t) && !b.effects.some((e) => e.type === 'veil' && e.target === me.id) && totalFoeHp(b, me) > 30) {
+    add({ a: 'veil' }, 3 + (me.multiattack || 1) * 1.2 + (threatened(b, me) ? 1.5 : 0), { T: me }, 'bonus');
+  }
+  // Nature's Sanctuary (Land Druid 14): cover for friends who are being hit.
+  if (me.sanctuary && me.wildShape?.uses > 0 && t.action && !t.magicUsed && !light && !me.shape && !b.effects.some((e) => e.type === 'sanctuary' && e.by === me.id)) {
+    let best = null;
+    for (const F of friends) {
+      if (down(F) || cheb(me, F) * 5 > 120) continue;
+      const inside = friends.filter((o) => !down(o) && cheb(o, F) <= 1);
+      const pressed = inside.filter((o) => awake(b, o).some((e) => cheb(e, o) * 5 <= reachOf(e) + 30)).length;
+      if (pressed >= 2 && (!best || pressed > best.n)) best = { F, n: pressed };
+    }
+    if (best && totalFoeHp(b, me) > 40) add({ a: 'sanctuary', x: best.F.x, y: best.F.y }, 2 + best.n * 2.5, { T: best.F });
+  }
+  // Fleet Step (Open Hand 11): out of a crowd after the Flurry.
+  if (me.fleetStep && t.flurried && !t.fleeted && me.focus?.uses > 1 && me.hp < me.hpMax / 2 && threatened(b, me)) add({ a: 'fleet' }, 6, { T: me }, 'bonus');
   // Dragon's Breath: exhale a 15-foot Cone.
   const db = b.effects.find((e) => e.type === 'dbreath' && e.target === me.id);
   if (db && t.action && !t.magicUsed && !light) {
@@ -864,7 +924,10 @@ export function coach(b, id) {
       else if (s.kind === 'area') text = `Cast ${s.name} on the marked square: it catches ${(o?.why.foes || []).map((c) => c.name).join(' and ')} and none of your allies (${lvl}).${conc}`;
       else if (s.kind === 'temp') text = `Cast ${s.name} for Temporary Hit Points (${lvl}).`;
       else if (s.kind === 'armor') text = `Cast ${s.name} while nobody is next to you: AC 13 + DEX until your next Long Rest (${lvl}).`;
+      else if (s.kind === 'save' && intent.targets?.length > 1) text = `Cast ${s.name} on ${intent.targets.map((x) => b.creatures[x]?.name).join(', ')}: each makes a DC ${o?.why.dc} ${s.save.toUpperCase()} save (${lvl}).`;
       else if (s.kind === 'save') text = `Cast ${s.name} on ${T.name}: it must beat DC ${o?.why.dc} on a ${s.save.toUpperCase()} save, so ${Math.round((o?.why.pFail || 0) * 100)}% it fails (${lvl}).`;
+      else if (s.kind === 'word') text = `Speak ${s.name} at ${(intent.targets || []).map((x) => b.creatures[x]?.name).join(', ')} (${lvl}, a Bonus Action): on a failed Charisma save, the weakest die and the rest are Blinded or Stunned.`;
+      else if (s.kind === 'pwstun') text = `Cast ${s.name} on ${T.name}: with ${T.hp} Hit Points it is Stunned, no save to stop it (${lvl}).`;
       else if (s.kind === 'missile') text = `Cast ${s.name} at ${T.name}: it never misses (${lvl}).`;
       else if (s.kind === 'buff') text = `Cast ${s.name} on your allies (${lvl}).${conc}`;
       else if (s.kind === 'cure' && intent.cond) text = `Cast ${s.name} to end ${T.name}'s ${intent.cond} condition (${lvl}).`;
@@ -916,7 +979,11 @@ export function coach(b, id) {
     case 'martial': text = `Make a Bonus Action Unarmed Strike at ${T.name} (Martial Arts).`; break;
     case 'flurry': text = `Spend 1 Focus Point on Flurry of Blows: ${me.level >= 10 ? 'three' : 'two'} Unarmed Strikes at ${T.name} as a Bonus Action.`; break;
     case 'patient': case 'stepwind': text = intent.a === 'patient' ? 'Use Patient Defense (Bonus Action).' : 'Use Step of the Wind (Bonus Action).'; break;
-    case 'lay': text = intent.cure ? `Use Lay on Hands to end ${T.name}'s Poisoned condition (5 from the pool).` : `${T.name} needs help: use Lay on Hands (Bonus Action) to restore ${intent.amount} Hit Points.`; break;
+    case 'intimidate': text = 'Use Intimidating Presence (Bonus Action): enemies within 30 feet make a Wisdom save or are Frightened of you.'; break;
+    case 'veil': text = "Use Nature's Veil (Bonus Action): Invisible until the end of your next turn, so your attacks have Advantage."; break;
+    case 'sanctuary': text = `Use Nature's Sanctuary (a Magic action and a use of Wild Shape) around ${T?.name || 'your friends'}: Half Cover for everyone of yours inside.`; break;
+    case 'fleet': text = 'Use Fleet Step (1 Focus Point): Disengage and Dash right after the Flurry, and get out of reach.'; break;
+    case 'lay': text = intent.cure ? `Use Lay on Hands to end ${T.name}'s condition (5 from the pool each).` : `${T.name} needs help: use Lay on Hands (Bonus Action) to restore ${intent.amount} Hit Points.`; break;
     case 'sacred': text = 'Use Channel Divinity: Sacred Weapon as you attack: your Charisma modifier is added to your melee attack rolls.'; break;
     case 'remark': text = `Your mark's creature is down: move it to ${T.name} (Bonus Action).`; break;
     case 'innate': text = 'Use Innate Sorcery (Bonus Action): +1 to your spell save DC and Advantage on your Sorcerer spell attacks for 1 minute.'; break;
