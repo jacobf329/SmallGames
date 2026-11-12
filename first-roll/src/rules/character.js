@@ -1347,7 +1347,7 @@ export function buildMonster(def, { id, label, x, y, ai = 'melee' }) {
     initParts: [{ label: 'DEX modifier', value: m.dex, rule: 'ability-modifier' }],
     attacks: def.attacks.map((a) => ({
       id: a.id, name: a.name, kind: a.kind, dice: a.dice, type: a.type, range: a.range || null, reach: a.reach || 5,
-      finesse: false, mastery: null, advDice: a.advDice, extra: a.extra || [], rider: a.rider || null, advIfGrappled: !!a.advIfGrappled, solo: !!a.solo,
+      finesse: false, mastery: null, advDice: a.advDice, extra: a.extra || [], rider: a.rider || null, advIfGrappled: !!a.advIfGrappled, solo: !!a.solo, perTurn: a.perTurn || 0,
       hit: [{ label: 'Stat block attack bonus', value: a.bonus, rule: 'stat-block' }],
       dmgFlat: [{ label: 'Stat block damage bonus', value: a.flat, rule: 'stat-block' }],
     })),

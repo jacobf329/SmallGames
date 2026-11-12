@@ -3643,7 +3643,10 @@ function performStep(b, id, intent) {
       if (t.hasteOnly && !t.attacksLeft && (atk.unarmed || atk.spell)) return fail("Haste's extra action allows one weapon attack, not an Unarmed Strike.");
       if (t.attacksLeft > 0 && A.extraAttackPact && atk.base !== 'pact') return fail("Thirsting Blade's second attack has to be with your pact weapon.");
       if (t.attacksLeft > 0 && atk.solo) return fail(`${atk.name} takes a whole action: it can't be one of the Multiattack's attacks.`);
+      // A Multiattack that names its attacks ("two Claws and one Sting") caps each one.
+      if (atk.perTurn && (t.usedAtk?.[atk.id] || 0) >= atk.perTurn) return fail(`${A.name}'s Multiattack allows ${atk.perTurn === 1 ? 'only one' : atk.perTurn} ${atk.name} attack${atk.perTurn === 1 ? '' : 's'} a turn.`);
       useAttack(t, A, atk);
+      if (atk.perTurn) t.usedAtk = { ...(t.usedAtk || {}), [atk.id]: (t.usedAtk?.[atk.id] || 0) + 1 };
       if (atk.light && !t.light) t.light = atk.base;
       attack(b, A, T, atk);
       break;

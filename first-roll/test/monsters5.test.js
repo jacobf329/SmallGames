@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildHero, defaultSpec, validateSpec, buildMonster, buildGoblin } from '../src/rules/character.js';
 import { createBattle, rollInitiative, perform } from '../src/rules/combat.js';
-import { VAMPIRE, IRON_GOLEM, BALOR, PIT_FIEND, LICH, ANCIENT_BLACK_DRAGON } from '../src/rules/data.js';
+import { VAMPIRE, IRON_GOLEM, BALOR, PIT_FIEND, LICH, ANCIENT_BLACK_DRAGON, BONE_DEVIL } from '../src/rules/data.js';
 import { aiNext } from '../src/rules/ai.js';
 import { setTurn, dice, last } from './helpers.js';
 
@@ -100,4 +100,34 @@ test("the Lich's Paralyzing Touch takes no save, and the computer plays every ne
       if (!r.ok) { perform(b2, 'm', { a: 'end' }); break; }
     }
   }
+});
+
+test('chapters 22 to 26: every fight sits between Low and High for its level and party size', async () => {
+  const { buildEncounter } = await import('../src/game/encounters.js');
+  const BUDGET = { 16: [3800, 9800], 17: [4500, 11700], 18: [5000, 14200], 19: [5500, 17200], 20: [6400, 22000] };
+  const FLAGS = { garside: 'coffin', cell: 'unseen', deep: 'words', dyke: 'reeds', oxlaw: 'jar' };
+  for (const [id, flag] of Object.entries(FLAGS)) for (let n = 1; n <= 4; n++) for (const flags of [{}, { [flag]: true }]) {
+    const e = buildEncounter(id, n, flags);
+    const [low, high] = BUDGET[e.level];
+    assert.ok(e.xp >= low * n * 0.5 && e.xp <= high * n, `${id} for ${n} ${JSON.stringify(flags)}: ${e.xp} XP`);
+  }
+  for (const [id, flag] of Object.entries(FLAGS)) assert.ok(buildEncounter(id, 4, { [flag]: true }).foes.length < buildEncounter(id, 4).foes.length, id);
+  assert.equal(buildEncounter('oxlaw', 4).foes[0].name, 'Simon Pettifer');
+  assert.equal(buildEncounter('dyke', 3).foes[0].name, 'Old Sedge');
+  assert.ok(buildEncounter('cell', 3).foes.some((f) => f.name === 'The Iron Figure'));
+});
+
+test('a Multiattack that names its attacks caps each one: one Infernal Sting a turn, and the AI keeps to it', () => {
+  const f = hero('fighter', 20, { x: 3, y: 5, hp: 400 }, { species: 'elf' });
+  const dv = mon(BONE_DEVIL, 'dv', 3, 4);
+  const b = fight([f], [dv, mon(BONE_DEVIL, 'spare', 7, 0)], 'dv');
+  f.heroicInspiration = false;
+  assert.ok(perform(b, 'dv', { a: 'attack', target: 'fighter', attack: 'sting' }).ok);
+  const again = perform(b, 'dv', { a: 'attack', target: 'fighter', attack: 'sting' });
+  assert.ok(!again.ok && /only one Infernal Sting/.test(again.error));
+  assert.ok(perform(b, 'dv', { a: 'attack', target: 'fighter', attack: 'claw' }).ok);
+  const b2 = fight([hero('fighter', 20, { x: 3, y: 5, hp: 400 }, { species: 'elf' })], [mon(BONE_DEVIL, 'dv', 3, 4), mon(BONE_DEVIL, 'spare', 7, 0)], 'dv');
+  let stings = 0;
+  for (let i = 0; i < 4; i++) { const it = aiNext(b2, 'dv'); if (!it || it.a !== 'attack') break; if (it.attack === 'sting') stings++; assert.ok(perform(b2, 'dv', it).ok); }
+  assert.ok(stings <= 1, `stings: ${stings}`);
 });

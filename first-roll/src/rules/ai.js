@@ -61,6 +61,7 @@ function weaponOptions(b, me, { kind = null } = {}) {
     for (const o of attackOptions(b, me, T)) {
       if (!o.ok || (kind && o.atk.kind !== kind)) continue;
       if (o.atk.solo && b.turn.attacksLeft > 0) continue;
+      if (o.atk.perTurn && (b.turn.usedAtk?.[o.atk.id] || 0) >= o.atk.perTurn) continue;
       // A Ghoul's or Ghast's Claw: worth it for the chance to Paralyze.
       const par = o.atk.rider?.paralyze;
       const bonus = par && T.creature !== 'undead' && !hasCond(T, 'paralyzed') && !(T.condImmune || []).includes('paralyzed') && !(par.notElf && T.speciesId === 'elf')

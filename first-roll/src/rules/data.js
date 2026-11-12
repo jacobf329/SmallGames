@@ -1389,7 +1389,7 @@ export const BONE_DEVIL = {
   resist: ['Cold'], immune: ['Fire', 'Poison'], condImmune: ['poisoned'], traits: { magicRes: true },
   attacks: [
     { id: 'claw', name: 'Claw', kind: 'melee', bonus: 8, dice: '2d8', flat: 4, type: 'Slashing', reach: 10 },
-    { id: 'sting', name: 'Infernal Sting', kind: 'melee', bonus: 8, dice: '2d10', flat: 4, type: 'Piercing', reach: 10, extra: [{ dice: '4d8', type: 'Poison' }], rider: { poison: true, noHeal: true } },
+    { id: 'sting', perTurn: 1, name: 'Infernal Sting', kind: 'melee', bonus: 8, dice: '2d10', flat: 4, type: 'Piercing', reach: 10, extra: [{ dice: '4d8', type: 'Poison' }], rider: { poison: true, noHeal: true } },
   ],
   multiattack: 3, multiName: 'two Claw attacks and one Infernal Sting', xp: 5000, cr: '9',
 };
@@ -1485,8 +1485,8 @@ export const BALOR = {
   resist: ['Cold', 'Lightning'], immune: ['Fire', 'Poison'], condImmune: ['charmed', 'frightened', 'poisoned'], traits: { magicRes: true },
   sight: 120,
   attacks: [
-    { id: 'whip', name: 'Flame Whip', kind: 'melee', bonus: 14, dice: '3d6', flat: 8, type: 'Force', reach: 30, extra: [{ dice: '5d6', type: 'Fire' }], rider: { pull: 25 } },
-    { id: 'blade', name: 'Lightning Blade', kind: 'melee', bonus: 14, dice: '3d8', flat: 8, type: 'Force', reach: 10, extra: [{ dice: '4d10', type: 'Lightning' }], rider: { noReact: true } },
+    { id: 'whip', perTurn: 1, name: 'Flame Whip', kind: 'melee', bonus: 14, dice: '3d6', flat: 8, type: 'Force', reach: 30, extra: [{ dice: '5d6', type: 'Fire' }], rider: { pull: 25 } },
+    { id: 'blade', perTurn: 1, name: 'Lightning Blade', kind: 'melee', bonus: 14, dice: '3d8', flat: 8, type: 'Force', reach: 10, extra: [{ dice: '4d10', type: 'Lightning' }], rider: { noReact: true } },
   ],
   aura: { name: 'Fire Aura', dice: '3d8', type: 'Fire' },
   throes: { dc: 20, size: 30, dice: '9d6', type: 'Fire', also: { dice: '9d6', type: 'Force' } },
@@ -1500,9 +1500,9 @@ export const PIT_FIEND = {
   resist: ['Cold'], immune: ['Fire', 'Poison'], condImmune: ['poisoned'], traits: { magicRes: true },
   sight: 120,
   attacks: [
-    { id: 'bite', name: 'Bite', kind: 'melee', bonus: 14, dice: '3d6', flat: 8, type: 'Piercing', reach: 10, rider: { poison: true, noHeal: true } },
-    { id: 'claw', name: 'Devilish Claw', kind: 'melee', bonus: 14, dice: '4d8', flat: 8, type: 'Necrotic', reach: 10 },
-    { id: 'mace', name: 'Fiery Mace', kind: 'melee', bonus: 14, dice: '4d6', flat: 8, type: 'Force', reach: 10, extra: [{ dice: '6d6', type: 'Fire' }] },
+    { id: 'bite', perTurn: 1, name: 'Bite', kind: 'melee', bonus: 14, dice: '3d6', flat: 8, type: 'Piercing', reach: 10, rider: { poison: true, noHeal: true } },
+    { id: 'claw', perTurn: 2, name: 'Devilish Claw', kind: 'melee', bonus: 14, dice: '4d8', flat: 8, type: 'Necrotic', reach: 10 },
+    { id: 'mace', perTurn: 1, name: 'Fiery Mace', kind: 'melee', bonus: 14, dice: '4d6', flat: 8, type: 'Force', reach: 10, extra: [{ dice: '6d6', type: 'Fire' }] },
   ],
   fearAura: { size: 20, dc: 21 },
   casting: { ability: 'cha', dc: 21, attack: 13, spells: { fireball: { n: 2, level: 5 } }, note: '(Here: its Hellfire Spellcasting is played as two Fireballs a day.)' },

@@ -1,4 +1,4 @@
-// The campaign: scenes for chapters 2 to 21 (chapter 0, the dice lesson, and
+// The campaign: scenes for chapters 2 to 26 (chapter 0, the dice lesson, and
 // chapter 1, making your hero, happen in the lobby). Scene kinds:
 //   story  text + choices the party votes on. A choice can need a flag
 //          (`requires`) and can set flags (`flags`).
@@ -34,6 +34,11 @@ export const CHAPTERS = {
   19: { title: "Shepherd's Level", teaches: ['immunity', 'resistance', 'studied-attacks', 'group-check'] },
   20: { title: "Saint Botolph's", teaches: ['magic-resistance', 'overchannel', 'natures-veil', 'monster-spells'] },
   21: { title: 'The Undercroft', teaches: ['legendary-resistance', 'legendary-actions', 'paralyzed', 'vulnerability'] },
+  22: { title: 'Garside Hall', teaches: ['life-drain', 'grappled', 'legendary-resistance', 'ability-score-improvement'] },
+  23: { title: "Saint Hild's Cell", teaches: ['immunity', 'magic-resistance', 'breath-weapon', 'thiefs-reflexes'] },
+  24: { title: 'The Pit', teaches: ['areas', 'evasion', 'spell-mastery', 'elusive'] },
+  25: { title: 'Old Sedge', teaches: ['legendary-actions', 'group-check', 'epic-boon', 'breath-weapon'] },
+  26: { title: 'Oxlaw', teaches: ['paralyzed', 'monster-spells', 'power-word-kill', 'holy-nimbus'] },
 };
 
 // AI companions fill empty seats. Each has a fixed build.
@@ -1087,12 +1092,288 @@ export const SCENES = {
     lesson: `Fire does double damage to the abbot. His Rotting Fist stops you regaining Hit Points until his next turn, so heal your friends before he hits them. Any hit from within 5 feet of a Paralyzed creature is a Critical Hit; Lesser Restoration or a Paladin's Restoring Touch can end Paralyzed.`,
   },
   'c21-end': {
-    chapter: 21, kind: 'end', title: "The Abbot's Keys",
+    chapter: 21, kind: 'story', title: "The Abbot's Keys",
     text: [
       `Abbot Godric falls across his own tomb, and the keys slide off his lap onto the floor. One of them opens a low door behind the altar that none of Pettifer's diggers found: a strongroom, dry and cold, with the abbey's plate on its shelves, chalices and candlesticks and a cross as tall as a child, each piece wrapped in wool.`,
       `When you climb back up into the church, Ursula Dent is there, with Walter Gisby and six of the Baron's soldiers, who came round by the low road from Haverton. Walter is standing in the south aisle beside a heap of sacking, and the iron figure isn't under it any more. Something very heavy has walked out through the west door while you were below. It cracked the step, and it left a line of trampled grass across the meadow toward the north road.`,
       `Askew, in irons in the yard, says that it can't have walked, because it isn't finished. Ursula says it plainly has. Walter wants to ride after it today with the soldiers he's got, and Ursula wants Askew in front of the judge at Haverton first, and the two of them are still arguing about it over the back of the wagon when Mary Tennant comes down from the village with a basket of pies and asks who's paying for her cellar door.`,
     ],
-    lesson: `That's the campaign so far: from your first d20 to level 15. Levels 16 to 20, and whatever Pettifer has made, are on the way. Thanks for playtesting First Roll.`,
+    choices: [{ id: 'north', label: 'Ride after the iron figure with Walter, and let Ursula take Askew to Haverton.', next: 'c22-rest' }],
+    lesson: `Chapter 21 done: level 15, a Mummy Lord, Legendary Resistance and Legendary Actions. Next: level 16, and the iron figure's trail.`,
+  },
+
+  // ---------------------------------------------- chapter 22: Garside Hall
+  'c22-rest': {
+    chapter: 22, kind: 'rest', rest: 'long', title: 'Low Ings', next: 'c22-level',
+    text: [
+      `The iron figure is easy to follow. It walks in a straight line, through hedges rather than round them, and where a dry-stone wall was in its way there's a gap, with the stones kicked out across the next field. Walter Gisby rides with you. Ursula has taken Askew down to Haverton in irons, and Walter has a borrowed sword that he keeps forgetting he's wearing until it hits the horse.`,
+      `The first night you stop at a farm called Low Ings, where the figure walked straight through the duck pond and out of the other side. The farmer has measured one of its footprints with a hay rake, and he shows you the measurement twice.`,
+    ],
+    lesson: `A Long Rest gives back all your Hit Points and spell slots. It also gives back a Hit Point maximum that something like a Wight's Life Drain has lowered.`,
+  },
+  'c22-level': {
+    chapter: 22, kind: 'level', level: 16, title: 'Level 16', next: 'c22-garside',
+    text: [`You brought Abbot Godric's keys up out of the dark. Everyone in the party reaches level 16.`],
+    lesson: `Level 16: every class gets an Ability Score Improvement or a feat, and for most classes that's all this level brings. Tap your hero to choose.`,
+  },
+  'c22-garside': {
+    chapter: 22, kind: 'story', title: 'Garside',
+    text: [
+      `On the third day the trail turns off the north road, through a pair of lodge gates and up an avenue of limes to a big stone house with every shutter closed. This is Garside Hall. The gravel of the drive is pressed flat in two lines of deep round prints, and they go round to the back of the house, past the stables, and out through a gate onto the moor.`,
+      `The steward comes out to meet you. He's Jordan Mosley, a tall, stooped man with a scarf wound round his neck in spite of the warm afternoon. Yes, he says, the thing came through two nights ago and didn't stop. Yes, Mr. Pettifer was a guest here all winter. Lady Garside has been unwell for a year and keeps to her rooms by day, but she'll be glad to see you at dinner, and he'll have beds made up. He says all of it to a point somewhere over Walter's left shoulder.`,
+      `Down in Garside village the woman who keeps the inn has a scarf round her neck too, and so does her son. Half the village has been poorly since the autumn, she says: tired all day, and they can't get warm. Walter asks her, quite seriously, whether anyone has seen her ladyship out of doors in daylight since Michaelmas. She has to think about it, and then she says no.`,
+    ],
+    choices: [
+      { id: 'chapel', label: 'Go up to the family chapel before sunset and find where she sleeps. (One hero makes an Investigation check.)', next: 'c22-chapel' },
+      { id: 'dinner', label: 'Go up to the hall for dinner.', next: 'c22-fight' },
+    ],
+    lesson: `Lady Garside is a Vampire: AC 16 and 195 Hit Points. She strikes three times a turn, and a Grave Strike can grab you. Once she has hold of you, she can Bite in place of a strike: Necrotic damage that heals her, and a Constitution save, DC 17. She has Legendary Resistance and a Legendary Action, Deathless Strike.`,
+  },
+  'c22-chapel': {
+    chapter: 22, kind: 'check', title: 'The Garside Vault',
+    text: [`The chapel stands in a wood behind the house, with the Garside vault under it. The door is locked, but the vestry window isn't, and the sun is already low over the moor.`],
+    check: { skill: 'investigation', dc: 18, mode: 'single', prompt: 'Who searches the vault? That hero rolls Investigation.' },
+    success: {
+      text: `Behind a coffin with a newer lid than the rest there's a second room, swept and dry, with a long box in it half full of earth. You're lifting the lid when the light in the vestry window goes from orange to grey. The earth moves, and Lady Garside sits up in it in a green dinner dress and asks whether nobody in the north knocks any more. Her knights are up at the house, laying the table.`,
+      next: 'c22-fight', flags: { coffin: true },
+    },
+    fail: {
+      text: `You open every coffin in the vault and find nothing but Garsides. When you climb back up into the chapel, the sun is down, and a woman in a green dinner dress is standing in the doorway with her household behind her, carrying lanterns.`,
+      next: 'c22-fight', flags: {},
+    },
+    lesson: `One hero makes this check for the party, DC 18. Find her before sunset and her knights stay up at the house.`,
+  },
+  'c22-fight': {
+    chapter: 22, kind: 'fight', title: 'Lady Cecily Garside', encounter: 'garside', next: 'c22-after',
+    lesson: `Don't stand next to her if you can help it: a grabbed hero gets Bitten. Escape a grapple with an Athletics or Acrobatics check as your action, or have a friend knock her down. Legendary Resistance turns three failed saves into successes, so make her spend them on your smaller spells.`,
+  },
+  'c22-after': {
+    chapter: 22, kind: 'story', title: 'Jordan Mosley',
+    text: [
+      `When Lady Garside goes down, all through the house people take their scarves off. Jordan Mosley sits on the stairs for a long time. He has been her steward for twenty years, and out of the last one he can't remember a single thing he decided for himself.`,
+      `He remembers Pettifer, though. Pettifer came every winter, and this last one the two of them sat up in the library every night with an old book from Saint Botolph's about the abbey's daughter house, Saint Hild's Cell, on the moor north of here. The brothers shut something in the ground under the cell, Mosley says, a very long time ago, and the abbot kept the keys. Pettifer said at dinner once that if he couldn't have the keys, he'd have a door that didn't need them.`,
+      `Walter takes Godric's ring of keys out of his saddlebag and turns it over. One key is bigger than the others, black iron with a cross cut through the bow, and it didn't fit any lock at Saint Botolph's. "Then that thing's gone to break the door in," he says, and goes out to look at the prints by the moor gate, and comes back to say they're two days old.`,
+    ],
+    choices: [{ id: 'moor', label: 'Follow the prints up onto the moor.', next: 'c23-rest' }],
+    lesson: `Chapter 22 done: level 16, a Vampire, grapples and Legendary Resistance. Next: level 17, level 9 spells, and the iron figure.`,
+  },
+
+  // ---------------------------------------------- chapter 23: Saint Hild's Cell
+  'c23-rest': {
+    chapter: 23, kind: 'rest', rest: 'long', title: 'The Sheepfold', next: 'c23-level',
+    text: [
+      `You camp on the moor in a ruined sheepfold, with the horses hobbled and no fire, because Walter says a fire up here can be seen from three dales off. In the night you can hear it, a long way ahead: a slow, heavy knocking, iron on wood, that keeps on until it's light.`,
+    ],
+    lesson: `Iron Golems can't be hurt by Fire, Poison or Psychic damage, and Fire actually heals them. Before you go up, think about which of your spells do something else: Cold, Lightning, Force, Radiant.`,
+  },
+  'c23-level': {
+    chapter: 23, kind: 'level', level: 17, title: 'Level 17', next: 'c23-cell',
+    text: [`You set Garside free of its lady. Everyone in the party reaches level 17.`],
+    lesson: `Level 17: full casters learn a level 9 spell, the most powerful there are: Meteor Swarm, Power Word Kill, Mass Heal, Weird and others. A Warlock gets a level 9 Mystic Arcanum. A Fighter can use Action Surge twice before a rest, a Life Cleric heals the most each die can roll, an Open Hand Monk gets Quivering Palm, and a Thief takes two turns in the first round of a fight. Tap your hero to see what's new.`,
+  },
+  'c23-cell': {
+    chapter: 23, kind: 'story', title: "Saint Hild's Cell",
+    text: [
+      `Saint Hild's Cell is a chapel the size of a barn on the highest ground of the moor, built of black stone with a stone roof, so there was nothing to burn. A ring of standing stones goes round it, far older than the chapel, and round the ring there's a bog cut up by peat hags taller than a man.`,
+      `The iron figure is at the chapel door, swinging its fists into the oak, one and then the other. The door is banded with iron and split from top to bottom, and it hasn't given yet. Two young men in good coats sit on a stone with a lantern between them, keeping count of the blows on a slate, and a few hired swords are keeping out of the wind behind the ring. The stone monk from Saint Botolph's stands among the standing stones, so still that at first you take it for one of them. Walter knows one of the young men. He's Piers Agar, a draper's son from Haverton who went to Pettifer to learn magic, and his mother tells everyone he's studying law.`,
+      `The track goes up to the ring along a causeway of flat stones. The peat hags come right up to the stones on the north side, if you don't mind getting wet to the waist.`,
+    ],
+    choices: [
+      { id: 'hags', label: 'Go up through the peat hags. (Everyone makes a Stealth check.)', next: 'c23-hags' },
+      { id: 'track', label: 'Walk up the causeway to the ring.', next: 'c23-fight' },
+    ],
+    lesson: `The iron figure is an Iron Golem: Large, AC 20, 252 Hit Points, and Magic Resistance. It swings twice a turn with its bladed arms, throws Fiery Bolts at range, and has Poison Breath, a 60-foot Cone that needs a DC 18 Constitution save and only recharges on a 6. Pettifer's pupils are Mages, and the stone monk is a Stone Golem.`,
+  },
+  'c23-hags': {
+    chapter: 23, kind: 'check', title: 'The Peat Hags',
+    text: [`The hags are black banks of peat with channels of brown water between them. The wind is in your faces, which helps, and the knocking covers a good deal of splashing.`],
+    check: { skill: 'stealth', dc: 16, mode: 'group', prompt: 'Everyone rolls Stealth.' },
+    success: {
+      text: `You come up out of the bog right behind the stones, soaked and black to the waist, while the hired swords are looking down the causeway. Piers Agar sees you first. He drops the slate and runs, down the far side of the moor in the direction of Haverton, and the hired swords take one look at you and go after him. The other pupil gets up and starts a spell.`,
+      next: 'c23-fight', flags: { unseen: true },
+    },
+    fail: {
+      text: `Somebody goes in up to the chest and has to be pulled out, swearing, and the hired swords hear it. They come round the stones with their swords out, and at the chapel door the knocking stops. The iron figure turns round.`,
+      next: 'c23-fight', flags: {},
+    },
+    lesson: `A group Stealth check, DC 16. Get there unseen and one of the pupils and the hired swords run off before the fight starts.`,
+  },
+  'c23-fight': {
+    chapter: 23, kind: 'fight', title: 'The Iron Figure', encounter: 'cell', next: 'c23-after',
+    lesson: `Fire heals the iron figure, so leave Fireball for the pupils. Magic Resistance gives it Advantage on saves against spells, so spell attacks and plain weapons do better. When it breathes, everyone in the Cone saves; stand apart so it can't catch you all.`,
+  },
+  'c23-after': {
+    chapter: 23, kind: 'story', title: 'The Slab',
+    text: [
+      `The iron figure goes over backwards into the bog and sinks to its chest, and steam comes off it where the water touches. The pupil who didn't run hands over his wand. He's Edwin Spark, a clerk's son from Haverton, and he came for the wages, which Pettifer hasn't paid. Pettifer is at his own house, he says, getting ready for something, and he stopped letting his pupils upstairs at Lady Day.`,
+      `Inside the chapel there's no altar, only a single great slab of stone for a floor, with an iron ring set in it and a keyhole beside the ring. Godric's black key fits. A warm draught comes up round the edges of the slab, smelling like a forge, and from far below there's the sound of chains being dragged over stone. Edwin says it has been getting louder all week, every day the knocking went on.`,
+      `Walter wants to leave the slab where it is and send for the bishop. Edwin says that's what the brothers did, three hundred years ago, and that the brothers are still down there. "It isn't held the way it was," he says. "If you don't go down while it's chained, it'll come up when it likes."`,
+    ],
+    choices: [{ id: 'down', label: 'Rest, and go down the stair under the slab.', next: 'c24-rest' }],
+    lesson: `Chapter 23 done: level 17, an Iron Golem, Magic Resistance and breath weapons. Next: level 18, and what the brothers kept under the moor.`,
+  },
+
+  // ---------------------------------------------- chapter 24: The Pit
+  'c24-rest': {
+    chapter: 24, kind: 'rest', rest: 'long', title: 'The Lee of the Chapel', next: 'c24-level',
+    text: [
+      `You sleep in the lee of the chapel with the slab locked again, taking turns to sit on it. In the morning Walter sends Edwin Spark down off the moor to Garside, to get a horse and ride for Ursula. Edwin goes without arguing. Walter watches him all the way to the bottom and says he'll make a clerk yet.`,
+    ],
+    lesson: `What's under the slab has a Fire Aura. Anyone who starts a turn next to it, or hits it with a melee attack from next to it, takes Fire damage. Resistance to Fire halves that, and reach weapons and ranged attacks keep you out of it.`,
+  },
+  'c24-level': {
+    chapter: 24, kind: 'level', level: 18, title: 'Level 18', next: 'c24-pit',
+    text: [`You stopped the iron figure at the chapel door. Everyone in the party reaches level 18.`],
+    lesson: `Level 18: a Wizard picks a level 1 and a level 2 spell to cast at will with Spell Mastery. A Rogue becomes Elusive, so no attack roll has Advantage against them. A Paladin's Aura of Protection reaches 30 feet, a Bard gets Bardic Inspiration back when a fight starts, and a Monk gets Superior Defense. Tap your hero to see what's new.`,
+  },
+  'c24-pit': {
+    chapter: 24, kind: 'story', title: 'The Pit',
+    text: [
+      `The stair goes down a long way, cut into the rock and worn hollow in the middle by the brothers' feet. At the bottom is a cave as big as the nave of Saint Botolph's, lit red from below and hot enough that the sweat dries on you before it can run.`,
+      `In the middle of the cave there's a pit, and in the pit, chained by the neck and both wrists to iron rings in the rock, is a demon twice the height of the iron figure. It has great wings folded down its back, a whip coiled in one fist and a sword of lightning in the other. The chains glow where they touch it. One of the rings has worked half out of the rock, and every time the demon pulls, it comes out a little further.`,
+      `Round the rim of the pit the brothers of Saint Hild's sit in a ring where they died, in their habits, with their hands in their laps. The nearest ones have turned their heads toward your light. On the wall behind them, the words of the binding are cut into the rock, line after line in old Latin, and the heat has flaked some of the lines away.`,
+    ],
+    choices: [
+      { id: 'words', label: "Read the brothers' words over them. (One hero makes a Religion check.)", next: 'c24-words' },
+      { id: 'pit', label: 'Go down into the pit before the last ring gives.', next: 'c24-fight' },
+    ],
+    lesson: `The demon is a Balor: Huge, AC 19, 287 Hit Points, Magic Resistance and Legendary Resistance. Its Flame Whip reaches 30 feet and pulls you in, and its Lightning Blade can stop you taking Reactions. When a Balor dies it explodes: everyone within 30 feet makes a DC 20 Dexterity save against Fire and Force damage.`,
+  },
+  'c24-words': {
+    chapter: 24, kind: 'check', title: "The Brothers' Words",
+    text: [`The words go all the way round the cave, and you have to read them in the right order, in the heat, with the dead brothers watching you.`],
+    check: { skill: 'religion', dc: 18, mode: 'single', prompt: 'Who reads the words? That hero rolls Religion.' },
+    success: {
+      text: `It's a short prayer, the same few lines over and over, and once you've found the beginning you can read it straight off the wall. The third time through, the brothers close their eyes. One after another they lean back against the rock and are still, and in the pit the Balor stops pulling and looks up at you.`,
+      next: 'c24-fight', flags: { words: true },
+    },
+    fail: {
+      text: `The lines you need are the ones the heat took, and you stumble over the gap and lose your place. All round the pit the brothers get to their feet at once. Down below, the Balor gives one long pull and the ring comes out of the rock in a shower of stone.`,
+      next: 'c24-fight', flags: {},
+    },
+    lesson: `One hero makes this check for the party, DC 18. Lay the brothers to rest and the Wights leave the fight.`,
+  },
+  'c24-fight': {
+    chapter: 24, kind: 'fight', title: 'The Balor', encounter: 'deep', next: 'c24-after',
+    lesson: `Hitting a Balor from next to it burns you, so let the heroes with reach, bows and spells do what they can. When it gets low, step back: a hero with Evasion takes nothing from Death Throes on a success, and half on a failure.`,
+  },
+  'c24-after': {
+    chapter: 24, kind: 'story', title: 'News from the Fen',
+    text: [
+      `The Balor's death leaves a scorched ring on the floor of the pit and nothing else: no body and no chains, only the iron rings in the rock, still red-hot. The brothers lie where they were. Walter says a prayer for them, from memory, and gets most of it right. Then you climb the stair into the daylight and lock the slab, and he puts the black key on a cord round his own neck.`,
+      `Ursula Dent is sitting on the wall of the ring in her travelling coat, with Edwin Spark beside her. She has ridden all night, and she hasn't come about Pettifer. Four days ago Nat Rudd rowed into Coldharbour with his hair burned short by acid. A dragon has come up out of Gallow Fen, a great deal bigger than Skellmaw, and every night it goes round the fen farms, tearing the roofs off, and asks the people inside the same thing: who killed its child.`,
+      `Nobody has told it yet, and the Rudds are the next farm along. Hester Marr sent word with Nat that a man in a grey gown came to Coldharbour a week before the dragon did, and asked her the way to the open water in the middle of the fen.`,
+    ],
+    choices: [{ id: 'south', label: 'Ride south for Gallow Fen, as fast as the horses will go.', next: 'c25-rest' }],
+    lesson: `Chapter 24 done: level 18, a Balor, Fire Aura and Death Throes. Next: level 19, Epic Boons, and an old dragon.`,
+  },
+
+  // ---------------------------------------------- chapter 25: Old Sedge
+  'c25-rest': {
+    chapter: 25, kind: 'rest', rest: 'long', title: "The Rudds' Hayloft", next: 'c25-level',
+    text: [
+      `The Rudds' farm still stands on its island of good ground at the edge of the fen, apart from the barn, which has no roof now. Martha Rudd has brought the cows into the house. You sleep in the loft over the kitchen with the cows shifting about underneath, and Nat sits up at the window all night with the duck gun across his knees.`,
+    ],
+    lesson: `The last rest before an old dragon. She's immune to Acid, and so are her young; anything else you've got will do.`,
+  },
+  'c25-level': {
+    chapter: 25, kind: 'level', level: 19, title: 'Level 19', next: 'c25-dyke',
+    text: [`You put an end to what the brothers kept under Saint Hild's Cell. Everyone in the party reaches level 19.`],
+    lesson: `Level 19: everyone gets an Epic Boon, a feat that also raises one ability score by 1, up to 30. Boon of Combat Prowess turns a miss into a hit once a turn, Boon of Fate adds or takes 2d4 from a roll, Boon of Irresistible Offense gets your weapons through Resistance, and there are others. Tap your hero to choose.`,
+  },
+  'c25-dyke': {
+    chapter: 25, kind: 'story', title: 'Old Sedge',
+    text: [
+      `The fen people call her Old Sedge. Martha's grandmother saw her once as a girl, asleep on the mudflats at low water, and nobody since. She comes up the long dyke from the open water every night at moonrise, Nat says, the same way each time, because it's the only water deep enough for her to swim so far in.`,
+      `Last night two smaller dragons came with her, keeping to the reeds, each about the size Skellmaw was. They stopped at the Pikes' farm across the dyke and took the roof off, and the Pikes told her that Skellmaw was killed by the heroes who were staying at the Rudds'. Nat doesn't blame them. He'd have told her too, he says, with her head in his kitchen.`,
+      `The reeds along the dyke are dry at the top after a fortnight without rain. Martha thinks they would burn, if everyone worked at it all afternoon and the wind held, but it would have to go up all at once at moonrise, or the dragons would see it coming.`,
+    ],
+    choices: [
+      { id: 'reeds', label: 'Lay a fire in the reed beds along the dyke. (Everyone makes a Survival check.)', next: 'c25-reeds' },
+      { id: 'wait', label: 'Wait for her on the dyke.', next: 'c25-fight' },
+    ],
+    lesson: `Old Sedge is an Adult Black Dragon: Huge, AC 19, 195 Hit Points, and immune to Acid. Her Rend reaches 10 feet and she makes three a turn. Her Acid Breath is a 60-foot Line, 12d8 Acid damage on a failed DC 18 Dexterity save, half on a success, Recharge 5-6. Between your turns she uses Legendary Actions: Pounce, or a Cloud of Insects.`,
+  },
+  'c25-reeds': {
+    chapter: 25, kind: 'check', title: 'The Reed Beds',
+    text: [`You cut armfuls of dry reed all afternoon and stack them along both banks, with the Rudds and the Pikes helping, and Nat goes up and down with a lantern.`],
+    check: { skill: 'survival', dc: 17, mode: 'group', prompt: 'Everyone rolls Survival.' },
+    success: {
+      text: `At moonrise the water stirs at the far end of the dyke. Martha lights the first bundle, and the fire runs down both banks from one end to the other faster than a horse could gallop. The two young dragons turn back into the dark of the fen. The old one comes on through the smoke, with the flames on either side of her.`,
+      next: 'c25-fight', flags: { reeds: true },
+    },
+    fail: {
+      text: `The wind drops at sunset, and the reeds smoulder instead of burning, so the dyke fills with smoke and there's hardly a flame in it. The young dragons come through it with their heads down, and behind them the whole width of the dyke rises out of the water.`,
+      next: 'c25-fight', flags: {},
+    },
+    lesson: `A group Survival check, DC 17. Get the reeds burning and her two young ones stay out of the fight.`,
+  },
+  'c25-fight': {
+    chapter: 25, kind: 'fight', title: 'Old Sedge', encounter: 'dyke', next: 'c25-after',
+    lesson: `Spread out across the dyke so her breath, a straight Line, can only catch one or two of you. She can turn four failed saves a day into successes, so start with spells that don't matter much, and save the big ones until she has run out.`,
+  },
+  'c25-after': {
+    chapter: 25, kind: 'story', title: 'Hester Marr',
+    text: [
+      `Old Sedge dies across the dyke, and the water backs up behind her and floods the Rudds' bottom field to the hedge. Martha says it's been wanting a flood for years.`,
+      `Hester Marr rows over from Coldharbour in the morning with a pistol in her lap. The grey man, she says, was Simon Pettifer. He came to the signal tower and asked her where the old dragon lay up, and she told him to go home. He went out onto the fen anyway in a hired punt, and came back two days later, without the punt and in a hurry. "He wanted you dead," Hester says, "and he wanted somebody else to do it."`,
+      `She knows his house. It's at Oxlaw, on the moor above Haverton, and he tried to buy Coldharbour from her once because he liked the view. She is coming with you. When Ursula says the Baron wants Pettifer in front of the judge, Hester says that if he has done what she thinks he has, there won't be enough of him left to stand in front of anybody.`,
+    ],
+    choices: [{ id: 'oxlaw', label: 'Ride for Oxlaw, with Hester.', next: 'c26-rest' }],
+    lesson: `Chapter 25 done: level 19, an Adult Black Dragon, Legendary Actions and Epic Boons. Next: level 20, and Simon Pettifer.`,
+  },
+
+  // ---------------------------------------------- chapter 26: Oxlaw
+  'c26-rest': {
+    chapter: 26, kind: 'rest', rest: 'long', title: 'The Woolpack', next: 'c26-level',
+    text: [
+      `You sleep at the Woolpack in Haverton, in the rooms you had in the spring. The landlord won't take any money, because Ursula has told half the town where you've been. In the morning a crowd turns out to watch you ride up the moor road, and Ned Coyle from the gaol walks beside your stirrup to the edge of town, telling you about the job he's got now, at the brewery.`,
+    ],
+    lesson: `The last Long Rest of the campaign. Go up to Oxlaw with every spell slot, every Hit Point Die and every use of every feature.`,
+  },
+  'c26-level': {
+    chapter: 26, kind: 'level', level: 20, title: 'Level 20', next: 'c26-oxlaw',
+    text: [`You killed Old Sedge, and the fen farms are safe. Everyone in the party reaches level 20, the highest level there is.`],
+    lesson: `Level 20: every class gets its capstone. A Fighter attacks four times, a Barbarian and a Monk add 4 to two ability scores, a Rogue gets Stroke of Luck, a Paladin gets Holy Nimbus, a Ranger's Hunter's Mark rolls a d10, a Bard gets Words of Creation, and a Sorcerer gets Arcane Apotheosis. A Wizard picks two Signature Spells, and a Cleric's Divine Intervention can be Wish. Tap your hero to see what's new.`,
+  },
+  'c26-oxlaw': {
+    chapter: 26, kind: 'story', title: 'Oxlaw',
+    text: [
+      `Oxlaw is a tall, narrow house on the top of the moor, four storeys of grey stone with no trees anywhere near it. Every window is shuttered except the top one, and there's a candle burning in that one in the middle of the day. It's cold on the step, much colder than the morning, and there's frost on the inside of the fanlight.`,
+      `Hester walks all the way round the house and comes back looking grim. "He's made himself a lich," she says. A lich, she explains, is a wizard who has put his soul in a jar and let the rest of him die. Destroy the body and the soul goes back into the jar and makes a new one in a few days, so the jar has to be broken too. He'll keep it close, she says. There's a cellar.`,
+      `Through the ground-floor shutters you can hear two voices. One is Pettifer's, dry and reasonable, the voice of a man going through a bill. The other is too deep to make out the words, and each time it speaks, the frost on the window panes grows. Hester says that's the devil who made him what he is, come to be paid. He promised it the Balor under Saint Hild's Cell, and you killed the Balor. "He's offering it you instead," she says.`,
+    ],
+    choices: [
+      { id: 'jar', label: 'Get into the cellar and find the jar first. (One hero makes an Arcana check.)', next: 'c26-jar' },
+      { id: 'door', label: 'Go in at the front door.', next: 'c26-fight' },
+    ],
+    lesson: `Simon Pettifer is a Lich: AC 20, 315 Hit Points, four uses of Legendary Resistance, and Legendary Actions. He casts Fireball whenever he likes, Chain Lightning and Finger of Death once each, and Shield as a Reaction, and his Paralyzing Touch needs no save. The Pit Fiend won't fight. It came to be paid, and it means to see who's left standing first.`,
+  },
+  'c26-jar': {
+    chapter: 26, kind: 'check', title: 'The Cellar',
+    text: [`The cellar door is round the back, under a grating. Down there, Hester says, the jar will be the thing that feels most like him.`],
+    check: { skill: 'arcana', dc: 19, mode: 'single', prompt: 'Who looks for the jar? That hero rolls Arcana.' },
+    success: {
+      text: `The cellar is full of Pettifer's old furniture and crates of books, and two Bone Devils are crouched at the back of it on either side of a locked trunk. The jar is in the trunk: a plain stoneware pot sealed with grey wax, cold as a stone from a stream. You get it out and smash it on the flags before the devils can stop you. They look at the pieces, and then at each other, and then they're gone. Two floors up, Pettifer stops talking in the middle of a sentence.`,
+      next: 'c26-fight', flags: { jar: true },
+    },
+    fail: {
+      text: `You go through every crate in the cellar and the jar isn't in any of them. You're still looking when the Bone Devils that were set to guard it come down the cellar steps behind you, and upstairs Pettifer stops talking in the middle of a sentence.`,
+      next: 'c26-fight', flags: {},
+    },
+    lesson: `One hero makes this check for the party, DC 19. Break the jar first and the Bone Devils guarding it go back where they came from.`,
+  },
+  'c26-fight': {
+    chapter: 26, kind: 'fight', title: 'Simon Pettifer', encounter: 'oxlaw', next: 'c26-end',
+    lesson: `The last fight. Power Word Kill only works on a creature with 100 Hit Points or fewer, so wear him down first. Paralyzing Touch wears off at the start of Pettifer's next turn, and Lesser Restoration or Restoring Touch ends it sooner. Holy Nimbus gives a Paladin Advantage on saves against Undead and Fiends.`,
+  },
+  'c26-end': {
+    chapter: 26, kind: 'end', title: 'The Summer Assizes',
+    text: [
+      `When Simon Pettifer falls, there's nothing left of him but a grey gown and some dust, and a hole burned through the floor of his study into the room below. The Pit Fiend has watched it all from the corner with its wings folded. It looks at you for a long moment, the way Ursula looks down a column of figures, and then it opens a door in the air and goes through, and the frost on the windows begins to run. Hester goes down to the cellar to make certain of the jar, and comes back up with a piece of it in her pocket. She means to keep it on her mantelpiece.`,
+      `The summer assizes sit at Haverton a fortnight later. Roger Askew gets seven years, and asks the judge to note that he was misled. Hester Marr pays a fine for the Brede tolls and is given the keeping of Coldharbour by the Baron's own order, on condition that she writes to him once a month. Walter Gisby goes home to Brede keep with a new razor and a bishop's letter thanking him for the key, and Agnes Pell sends a cart of flour up from Dunmarket for the feast, which gets there before the noon bell.`,
+      `The Baron comes to Haverton for the last day of the assizes, the first time in years he has left the castle. He's younger than anyone expected, and he asks you a great many questions about giants. Ursula Dent pays you out of a new ledger, and the Baron gives each of you a ring cut with his heron, looking back over its left shoulder, the right way round.`,
+    ],
+    lesson: `That's the whole campaign: from your first d20 to level 20. Thanks for playtesting First Roll.`,
   },
 };

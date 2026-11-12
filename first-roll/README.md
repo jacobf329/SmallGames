@@ -4,7 +4,7 @@ A co-op, turn-based RPG that teaches the 2024 fifth-edition rules by playing
 them. Every roll shows its math, and every number links to the rule behind it.
 Scope and roadmap: [SCOPE.md](SCOPE.md).
 
-**The campaign so far: chapters 0 to 21, from your first d20 to level 15.** After the first playtest: a full 2024 character builder, your own spells, and spells aimed at any square. Then levels 4 and 5 (feats, Extra Attack, level 3 spells), then levels 6 to 10 (level 4 and 5 spells, each class's features up to level 10) and five more chapters. Then levels 11 to 15 (level 6 to 8 spells, Mystic Arcanum, Overchannel, monsters with Legendary Actions) and chapters 17 to 21. Levels 16 to 20 come next.
+**The whole campaign: chapters 0 to 26, from your first d20 to level 20.** After the first playtest: a full 2024 character builder, your own spells, and spells aimed at any square. Then levels 4 and 5 (feats, Extra Attack, level 3 spells), then levels 6 to 10 (level 4 and 5 spells, each class's features up to level 10) and five more chapters. Then levels 11 to 15 (level 6 to 8 spells, Mystic Arcanum, Overchannel, monsters with Legendary Actions) and chapters 17 to 21. Then levels 16 to 20 (level 9 spells, Epic Boons, every class's capstone) and chapters 22 to 26.
 
 | Chapter | What you do | What it teaches |
 | --- | --- | --- |
@@ -30,6 +30,11 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
 | 19 · Shepherd's Level | Level 13, then fire giants at a forge in an old lead mine | Immunity and Resistance, Studied Attacks, being knocked back |
 | 20 · Saint Botolph's | Level 14, then the archmage Simon Pettifer, his stone golem and a bound Bone Devil | Magic Resistance, Overchannel, Nature's Veil, an Arcana check |
 | 21 · The Undercroft | Level 15, then Abbot Godric, a Mummy Lord | Legendary Resistance and Legendary Actions, Paralyzed, Vulnerability |
+| 22 · Garside Hall | Level 16 and a feat, then Lady Cecily Garside, a Vampire | Grapples and Bite, Life Drain, Legendary Resistance, an Investigation check |
+| 23 · Saint Hild's Cell | Level 17 and level 9 spells, then the iron figure, an Iron Golem, and Pettifer's pupils | Fire Absorption, Magic Resistance, Poison Breath, a group Stealth check |
+| 24 · The Pit | Level 18, then a Balor chained under the moor | Fire Aura, a whip that pulls, Death Throes, a Religion check |
+| 25 · Old Sedge | Level 19 and an Epic Boon, then an Adult Black Dragon on the long dyke | A 90-foot breath Line, Legendary Actions, a group Survival check |
+| 26 · Oxlaw | Level 20 and every capstone, then Simon Pettifer, now a Lich, with a Pit Fiend watching | Paralyzing Touch, Legendary Actions, Power Word Kill, an Arcana check |
 
 - **1–4 players**, each on their own phone, with **AI companions** filling the
   party (Auto keeps at least three heroes). Fights scale to the party's size
@@ -47,7 +52,7 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
   - the Wood Elf's 35 ft speed
   - Gnomish Cunning
   - every Elf, Gnome, Goliath and Tiefling lineage, with its spells
-- **Levels 1 to 15** with the 2024 features and one SRD subclass each. Features from level 4 on (the general feats, Extra Attack, Evasion, Indomitable, Aura of Protection, Divine Intervention, Magical Secrets, Sorcery Incarnate and the rest) are in the Rules book. The levels 1 to 3 core:
+- **Levels 1 to 20** with the 2024 features and one SRD subclass each. Features from level 4 on (the general feats, Extra Attack, Evasion, Indomitable, Aura of Protection, Divine Intervention, Magical Secrets, Sorcery Incarnate, the Epic Boons, the level 20 capstones and the rest) are in the Rules book. The levels 1 to 3 core:
   - Barbarian: Rage, Unarmored Defense, Danger Sense, Reckless Attack, Berserker (Frenzy)
   - Bard: Bardic Inspiration, Jack of All Trades, Expertise, College of Lore (Cutting Words)
   - Cleric: Channel Divinity (Divine Spark, Turn Undead), Life Domain (Disciple of Life, Preserve Life)
@@ -71,7 +76,7 @@ Scope and roadmap: [SCOPE.md](SCOPE.md).
   cantrip, one invocation or Metamagic option, and one spell for a Bard,
   Sorcerer or Warlock. After a Long Rest a Cleric, Druid or Wizard can change
   every prepared spell, and a Paladin or Ranger one.
-- **Spells:** about 150 from the SRD, up to level 8, across all eight casters' lists (fight
+- **Spells:** about 170 from the SRD, up to level 9, across all eight casters' lists (fight
   spells and the ones for outside of fights), Concentration, casting with a
   higher slot, Magic Initiate's free casts, and the 2024 one-spell-slot-per-turn
   rule.

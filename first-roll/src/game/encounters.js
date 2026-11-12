@@ -15,13 +15,19 @@
 //   level 13: Low 2600, Moderate 4200, High 5400
 //   level 14: Low 2900, Moderate 4900, High 6200
 //   level 15: Low 3300, Moderate 5400, High 7800
+//   level 16: Low 3800, Moderate 6100, High 9800
+//   level 17: Low 4500, Moderate 7200, High 11700
+//   level 18: Low 5000, Moderate 8700, High 14200
+//   level 19: Low 5500, Moderate 10700, High 17200
+//   level 20: Low 6400, Moderate 13200, High 22000
 // XP: Goblin Warrior 50, Goblin Boss 200, Wolf 50, Skeleton 50, Zombie 50,
 // Cultist 25, Giant Spider 200, Bugbear Warrior 200, Cultist Fanatic 450,
 // Ghoul 200, Dire Wolf 200, Animated Armor 200, Ghast 450, Ogre 450, Wight 700,
 // Bandit Captain 450, Black Dragon Wyrmling 450, Warrior Veteran 700, Hobgoblin
 // Captain 700, Knight 700, Owlbear 700, Troll 1800, Hill Giant 1800, Mage 2300,
 // Young Black Dragon 2900, Assassin 3900, Frost Giant 3900, Fire Giant 5000,
-// Bone Devil 5000, Stone Golem 5900, Archmage 8000, Mummy Lord 13000.
+// Bone Devil 5000, Stone Golem 5900, Archmage 8000, Vampire 10000, Mummy Lord 13000,
+// Iron Golem 15000, Balor 22000, Pit Fiend 25000, Lich 33000, Adult Black Dragon 11500.
 //
 // The board is 8 squares wide and 10 deep, heroes start at the bottom.
 // `walls` are solid (Total Cover, no line of sight); `cover` squares are low
@@ -34,6 +40,7 @@ import {
   GHOUL, GHAST, DIRE_WOLF, OGRE, ANIMATED_ARMOR, WIGHT,
   BANDIT_CAPTAIN, WARRIOR_VETERAN, HOBGOBLIN_CAPTAIN, KNIGHT, MAGE, OWLBEAR, TROLL, HILL_GIANT, BLACK_DRAGON_WYRMLING, YOUNG_BLACK_DRAGON,
   ASSASSIN, FROST_GIANT, FIRE_GIANT, BONE_DEVIL, STONE_GOLEM, ARCHMAGE, MUMMY_LORD,
+  VAMPIRE, IRON_GOLEM, BALOR, LICH, ADULT_BLACK_DRAGON,
 } from '../rules/data.js';
 
 const W = GOBLIN_WARRIOR, BOSS = GOBLIN_BOSS;
@@ -412,6 +419,124 @@ export const ENCOUNTERS = {
       else if (n === 3) list = [abbot];                                         // 13000 XP: Moderate for three
       else list = [abbot, wi[0], wi[1], wi[2], wi[3], gh[0], gh[1]];            // 16700 XP: Moderate for four
       if (flags.bricked) list = list.filter((f) => f !== wi[0] && f !== wi[1]);
+      return label(list);
+    },
+  },
+  // Chapter 22, "Garside Hall" (level 16): Lady Cecily Garside, a Vampire, with
+  // her household knights and the dead of her family. Bite and Life Drain heal
+  // her. Catching her in the chapel at sunset (flag `coffin`) leaves the
+  // knights up at the house.
+  garside: {
+    name: 'Garside chapel', level: 16,
+    walls: ['0,2', '1,2', '6,2', '7,2', '3,5'],
+    cover: ['2,4', '5,4', '4,1'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const vamp = { ...at(VAMPIRE, 3, 0), label: 'Lady Cecily Garside' };
+      const kn = [at(KNIGHT, 2, 1), at(KNIGHT, 5, 1), at(KNIGHT, 6, 3)];
+      const wi = [at(WIGHT, 1, 0), at(WIGHT, 6, 0), at(WIGHT, 1, 3), at(WIGHT, 5, 3)];
+      const as = at(ASSASSIN, 6, 1);
+      let list;
+      // One or two heroes meet her household without her: she stays in the gallery.
+      if (n <= 1) list = [kn[0], kn[1], wi[0], wi[1], wi[2]];                   // 3500 XP: Low to Moderate for one
+      else if (n === 2) list = [kn[0], kn[1], wi[0], wi[1], as];                // 6700 XP: Low for two
+      else if (n === 3) list = [vamp, kn[0], kn[1], wi[0], wi[1]];              // 12800 XP: Low to Moderate for three
+      else list = [vamp, kn[0], kn[1], kn[2], wi[0], wi[1], wi[2], wi[3]];      // 14900 XP: Low for four
+      if (flags.coffin) list = list.filter((f) => f.def !== KNIGHT);
+      return label(list);
+    },
+  },
+  // Chapter 23, "Saint Hild's Cell" (level 17): the iron figure from the
+  // mine, battering at the door of a chapel on the moor, with Pettifer's two
+  // pupils, their hired swords and the stone monk from Saint Botolph's. Fire heals it; its breath is poison.
+  // Coming up unseen through the peat (flag `unseen`) catches a pupil and the
+  // swords away from it.
+  cell: {
+    name: "Saint Hild's Cell", level: 17,
+    walls: ['2,0', '5,0', '1,1', '6,1', '0,6', '7,5'],
+    cover: ['2,4', '5,3', '3,6'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const golem = { ...at(IRON_GOLEM, 3, 1), label: 'The Iron Figure' };
+      const mg = [at(MAGE, 1, 0, 'caster'), at(MAGE, 6, 0, 'caster')];
+      const kn = [at(KNIGHT, 2, 2), at(KNIGHT, 5, 2)];
+      const monk = { ...at(STONE_GOLEM, 4, 2), label: 'The Stone Monk' };
+      let list;
+      // One hero catches the pupils with the figure still inside the door.
+      if (n <= 1) list = [mg[0], mg[1], kn[0], kn[1]];                          // 6000 XP: Moderate for one
+      else if (n === 2) list = [golem];                                         // 15000 XP: Moderate to High for two
+      else if (n === 3) list = [golem, mg[0], mg[1]];                           // 19600 XP: Moderate for three
+      else list = [golem, monk, mg[0], mg[1], kn[0], kn[1]];                    // 26900 XP: Moderate for four
+      if (flags.unseen) list = list.filter((f) => f !== mg[1] && f.def !== KNIGHT);
+      return label(list);
+    },
+  },
+  // Chapter 24, "The Pit Under the Cell" (level 18): a Balor, half held by
+  // the brothers' old binding, and the brothers who stayed down with it.
+  // Fire Aura, a whip that pulls you in, and Death Throes when it dies.
+  // Saying the brothers' words over their bones (flag `words`) lays the
+  // Wights to rest.
+  deep: {
+    name: 'The pit', level: 18,
+    walls: ['0,0', '7,0', '0,1', '7,1', '2,5', '5,5'],
+    cover: ['1,3', '6,3'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const balor = at(BALOR, 4, 0);
+      const wi = [at(WIGHT, 2, 1), at(WIGHT, 5, 1), at(WIGHT, 1, 2), at(WIGHT, 6, 2), at(WIGHT, 3, 2), at(WIGHT, 4, 3)];
+      const fg = at(FIRE_GIANT, 3, 0);
+      let list;
+      // One or two heroes meet the brothers on the stair; the Balor is still held.
+      if (n <= 1) list = [wi[0], wi[1], wi[2], fg];                             // 7100 XP: Moderate for one
+      else if (n === 2) list = [...wi.slice(0, 4), fg];                         // 7800 XP: Low to Moderate for two
+      else if (n === 3) list = [balor, wi[0]];                                  // 22700 XP: Moderate for three
+      else list = [balor, ...wi];                                               // 26200 XP: Low to Moderate for four
+      if (flags.words) list = list.filter((f) => f.def !== WIGHT);
+      return label(list);
+    },
+  },
+  // Chapter 25, "Old Sedge" (level 19): Skellmaw's mother, an Adult Black
+  // Dragon, comes up out of Gallow Fen for the people who killed her child.
+  // Legendary Actions and a 60-foot Acid Breath. Firing the reed beds along
+  // the dyke (flag `reeds`) keeps her young ones back.
+  dyke: {
+    name: 'The long dyke', level: 19,
+    walls: ['0,3', '1,3', '6,4', '7,4'],
+    cover: ['3,2', '4,5', '2,6'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const sedge = { ...at(ADULT_BLACK_DRAGON, 4, 0), label: 'Old Sedge' };
+      const yg = [at(YOUNG_BLACK_DRAGON, 1, 1), at(YOUNG_BLACK_DRAGON, 6, 1)];
+      const tr = [at(TROLL, 2, 2), at(TROLL, 5, 2)];
+      let list;
+      // One or two heroes meet her young ones in the reeds; she stays out on the water.
+      if (n <= 1) list = [yg[0], tr[0], tr[1]];                                 // 6500 XP: Moderate for one
+      else if (n === 2) list = [yg[0], yg[1], tr[0]];                           // 7600 XP: Low to Moderate for two
+      else if (n === 3) list = [sedge, yg[0], yg[1]];                           // 17300 XP: Low to Moderate for three
+      else list = [sedge, yg[0], yg[1], tr[0], tr[1]];                          // 20900 XP: Low to Moderate for four
+      if (flags.reeds && n >= 3) list = list.filter((f) => f.def !== YOUNG_BLACK_DRAGON);
+      return label(list);
+    },
+  },
+  // Chapter 26, "Oxlaw" (level 20): Simon Pettifer, a Lich now, in his own
+  // house, with the Bone Devils he borrowed. The Pit Fiend who made him a
+  // lich watches, and takes whichever side is left. Breaking his spirit jar
+  // first (flag `jar`) sends the devils guarding it home.
+  oxlaw: {
+    name: 'Oxlaw', level: 20,
+    walls: ['0,2', '7,2', '2,4', '5,4', '0,7', '7,7'],
+    cover: ['3,1', '4,1', '1,5', '6,5'],
+    heroStarts: BOTTOM,
+    foes(n, flags = {}) {
+      const lich = { ...at(LICH, 4, 0, 'caster'), label: 'Simon Pettifer' };
+      const bd = [at(BONE_DEVIL, 2, 1), at(BONE_DEVIL, 5, 1), at(BONE_DEVIL, 6, 3)];
+      let list;
+      // One or two heroes meet the devils on the stair; Pettifer waits upstairs.
+      if (n <= 1) list = [bd[2]];                                               // 5000 XP: Low for one
+      else if (n === 2) list = [bd[1], bd[2]];                                  // 10000 XP: Low to Moderate for two
+      else if (n === 3) list = [lich];                                          // 33000 XP: Moderate to High for three
+      else list = [lich, bd[0]];                                                // 38000 XP: Moderate for four
+      if (flags.jar && n >= 3) list = list.filter((f) => f !== bd[0] && f !== bd[1]);
       return label(list);
     },
   },
