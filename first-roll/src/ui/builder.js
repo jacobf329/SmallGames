@@ -13,13 +13,13 @@ import {
   CLASSES, BACKGROUNDS, SPECIES, FEATS, ORIGIN_FEATS, SKILLS, SKILL_NAMES, ABILITIES, ABILITY_NAMES, STANDARD_ARRAY,
   DRAGON_ANCESTRY, KITS, FIGHTING_STYLES, WEAPONS, MASTERIES, SPELLS, SPELL_LISTS, POINT_COST, POINT_BUDGET,
   DRUID_ORDERS, LAND_SPELLS, landSpells, HUNTER_PREY, INVOCATIONS, INVOCATIONS_KNOWN, PACT_WEAPONS, METAMAGIC, stylesFor,
-  abilityMod, signed, MAX_LEVEL, ASI_FEATS, STYLE_FEATS, asiLevels, STRIKES, DEFENSIVE_TACTICS, RESILIENCE_TYPES, arcanumLevels,
+  abilityMod, signed, MAX_LEVEL, ASI_FEATS, STYLE_FEATS, asiLevels, STRIKES, DEFENSIVE_TACTICS, RESILIENCE_TYPES, arcanumLevels, EPIC_FEATS, EPIC_LEVEL,
 } from '../rules/data.js';
 import {
   buildHero, defaultSpec, suggestPlus, validateSpec, DEFAULT_BACKGROUND, classSpellCounts, domainSpells,
   maxSpellLevel, miCantrips, miSpells, pointCost, rollTotal, speciesCantrips, bookLimit, SCHOLAR_SKILLS,
   extraSkills, expertiseCount, styleAt, metamagicCount, levelChoices, swapLimit, droppedPicks, alwaysPrepared, alwaysCantrips, finalScores,
-  classSpellList, discoveryOptions, AFFINITY_TYPES, arcanumOptions,
+  classSpellList, discoveryOptions, AFFINITY_TYPES, arcanumOptions, masteryOptions,
 } from '../rules/character.js';
 import { GLOSSARY } from '../rules/glossary.js';
 import { $, show } from './dom.js';
@@ -114,6 +114,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
     metamagic: { cap: () => metamagicCount(d.cls, level), label: 'Metamagic option' },
     discoveries: { cap: () => (d.cls === 'bard' && level >= 6 ? 2 : 0), label: 'Magical Discoveries spell' },
     masteries: { cap: () => C().masteryCount, label: 'weapon for Weapon Mastery' },
+    signature: { cap: () => (d.cls === 'wizard' && level >= 20 ? 2 : 0), label: 'Signature Spell' },
     cantrips: { cap: () => counts().cantrips, label: 'cantrip' },
     book: { cap: () => counts().book, label: 'spellbook spell' },
     prepared: { cap: () => counts().prepared, label: 'prepared spell' },
@@ -191,7 +192,7 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
   }
   function setClass(cls) {
     d.cls = cls;
-    for (const k of ['skills', 'expertise', 'masteries', 'kit', 'style', 'warriorCantrips', 'order', 'cantrips', 'book', 'prepared', 'scholar', 'invocations', 'pactWeapon', 'metamagic', 'land', 'prey', 'discoveries', 'affinity', 'strikes', 'style2', 'tactics', 'resilience', 'arcanum']) delete d[k];
+    for (const k of ['skills', 'expertise', 'masteries', 'kit', 'style', 'warriorCantrips', 'order', 'cantrips', 'book', 'prepared', 'scholar', 'invocations', 'pactWeapon', 'metamagic', 'land', 'prey', 'discoveries', 'affinity', 'strikes', 'style2', 'tactics', 'resilience', 'arcanum', 'mastery', 'signature']) delete d[k];
     if (!touched.background) { d.background = DEFAULT_BACKGROUND[cls]; delete d.bgFeat; }
     if (!touched.scores) { d.method = 'array'; d.scores = { ...CLASSES[cls].suggested }; }
     if (!touched.plus) d.plus = suggestPlus(cls, d.background, d.scores);
@@ -609,6 +610,17 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
           ${arcanumOptions(sl).map((sid) => card({ on: d.arcanum?.[sl] === sid, title: SPELLS[sid].name, body: `<span>${esc(SPELLS[sid].text || '')}</span>${SPELLS[sid].kind === 'utility' ? '<span class="dim">Not used in fights here.</span>' : ''}`, attr: `data-set="arcanum.${sl}=${sid}"` })).join('')}`;
       }
     }
+    if (has('mastery') && d.cls === 'wizard') {
+      h += `<div class="ph sep"><b>${R('spell-mastery', 'Spell Mastery')}</b></div><p class="note">A level 1 and a level 2 spell from your spellbook that take an action. You can cast each at its lowest level with no spell slot, as often as you like.</p>`;
+      for (const sl of [1, 2]) {
+        const opts = masteryOptions(d.book, sl);
+        h += `<div class="ph"><b>Level ${sl}</b></div>${opts.length ? opts.map((sid) => card({ on: d.mastery?.[sl] === sid, title: SPELLS[sid].name, body: `<span>${esc(SPELLS[sid].text || '')}</span>${SPELLS[sid].kind === 'utility' ? '<span class="dim">Not used in fights here.</span>' : ''}`, attr: `data-set="mastery.${sl}=${sid}"` })).join('') : `<p class="note">Your spellbook has no level ${sl} spell that takes an action.</p>`}`;
+      }
+    }
+    if (has('signature') && d.cls === 'wizard') {
+      const opts = (d.book || []).filter((x) => SPELLS[x].level === 3);
+      h += pickList('signature', opts.map((sid) => chip('signature', sid, SPELLS[sid].name)), `${R('signature-spells', 'Signature Spells')}: two level 3 spells from your book, each cast once at level 3 with no slot, back on a Short or Long Rest`);
+    }
     if (has('feat')) for (const lv of asiLevels(d.cls, level)) if (!only || lv === level) h += featBlock(lv);
     if (!only) {
       h += `<div class="ph sep"><b>Starting equipment</b></div>${c.kits.map((k) => {
@@ -650,10 +662,13 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
     };
     let h = `<div class="ph sep"><b>Level ${lv}: ${R('ability-score-improvement', 'Ability Score Improvement')} or a feat</b></div>
       <p class="note">Take the Ability Score Improvement feat, or another feat you qualify for: a General feat, an ${R('origin-feat', 'Origin feat')}${styleAt(d.cls, 20) ? ', or a Fighting Style feat' : ''}.</p>`;
-    h += ASI_FEATS.map((id) => {
+    const epicLv = lv === EPIC_LEVEL;
+    if (epicLv) h += `<p class="note">At level ${EPIC_LEVEL} you can take an ${R('epic-boon', 'Epic Boon')} instead: a powerful feat that also raises one score by 1, up to 30.</p>`;
+    const choices = epicLv ? [...EPIC_FEATS.filter((id) => !FEATS[id].caster || CLASSES[d.cls].spellcasting), ...ASI_FEATS] : ASI_FEATS;
+    h += choices.map((id) => {
       const F = FEATS[id];
       const no = f.feat !== id && why(id);
-      return card({ on: f.feat === id, title: F.name, sub: F.general ? 'General feat' : F.style ? 'Fighting Style feat' : 'Origin feat',
+      return card({ on: f.feat === id, title: F.name, sub: F.epic ? 'Epic Boon' : F.general ? 'General feat' : F.style ? 'Fighting Style feat' : 'Origin feat',
         body: `<span>${esc(F.text)}</span>${no ? `<span class="dim">${esc(no)}</span>` : ''}`, attr: `data-set="${p}.feat=${id}"`, off: !!no });
     }).join('');
     if (f.feat === 'ability-score-improvement') {
@@ -662,6 +677,8 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
         return `<div class="srow"><span><b>${ABILITY_NAMES[a]}</b><span class="dim">${before[a]} → ${before[a] + v} (${signed(abilityMod(before[a] + v))})</span></span>
           <span class="seg">${[2, 1, 0].map((n) => `<button data-asi="${i}:${a}:${n}" class="${v === n ? 'on' : ''}" ${before[a] + n > 20 ? 'disabled' : ''}>+${n}</button>`).join('')}</span></div>`;
       }).join('')}</div>`;
+    } else if (FEATS[f.feat]?.epic) {
+      h += `<div class="ph"><b>${esc(FEATS[f.feat].name)}: +1 to</b></div>${seg(`${p}.grab`, FEATS[f.feat].plusFrom.filter((a) => before[a] < 30).map((a) => [a, `${ABILITY_NAMES[a]} (${before[a]} → ${before[a] + 1})`]), Object.keys(f.plus || {})[0])}`;
     } else if (f.feat === 'grappler') {
       h += `<div class="ph"><b>Grappler: +1 to</b></div>${seg(`${p}.grab`, ['str', 'dex'].filter((a) => before[a] < 20).map((a) => [a, `${ABILITY_NAMES[a]} (${before[a]} → ${before[a] + 1})`]), Object.keys(f.plus || {})[0])}`;
     } else if (f.feat === 'fighting-style') {
@@ -710,14 +727,30 @@ export function openBuilder({ spec = null, playerName = '', level = 1, mode = 'n
     bind();
   }
 
+  // A tap that would knock out more earlier picks than a swap allows (dropping
+  // Eldritch Blast takes Agonizing Blast with it) is undone.
+  const GUARDED = ['invocations', 'cantrips', 'metamagic'];
+  function guarded(fn) {
+    if (!when || !was) return fn();
+    const keep = JSON.stringify(d);
+    const over = () => {
+      let v = d;
+      try { v = validateSpec(d, { level }); } catch { /* checked on Next */ }
+      return GUARDED.filter((k) => dropped(k, v[k] || []).length > limit(k));
+    };
+    const before = over();
+    fn();
+    const now = over().filter((k) => !before.includes(k));
+    if (now.length) { d = JSON.parse(keep); err = `That would also take away ${now.map((k) => `an earlier ${LISTS[k].label}`).join(' and ')} that depends on it. ${swapMsg(now[0])}`; }
+  }
   function bind() {
     const B = $('build-body');
     const redraw = () => render();
     for (const el of B.querySelectorAll('[data-set]')) {
-      el.onclick = () => { const [p, v] = el.dataset.set.split('='); setOne(p, v); redraw(); };
+      el.onclick = () => { const [p, v] = el.dataset.set.split('='); guarded(() => setOne(p, v)); redraw(); };
     }
     for (const el of B.querySelectorAll('[data-tog]')) {
-      el.onclick = () => { const i = el.dataset.tog.indexOf(':'); toggle(el.dataset.tog.slice(0, i), el.dataset.tog.slice(i + 1)); redraw(); };
+      el.onclick = () => { const i = el.dataset.tog.indexOf(':'); guarded(() => toggle(el.dataset.tog.slice(0, i), el.dataset.tog.slice(i + 1))); redraw(); };
     }
     for (const el of B.querySelectorAll('select[data-sel]')) el.onchange = () => { setOne(el.dataset.sel, el.value); redraw(); };
     for (const el of B.querySelectorAll('[data-method]')) el.onclick = () => { setMethod(el.dataset.method); redraw(); };

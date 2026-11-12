@@ -590,6 +590,10 @@ function resourceChips(b, me) {
   if (me.ownLuck) c(`Own Luck ${me.ownLuck.uses}`, 'dark-ones-own-luck', !me.ownLuck.uses);
   if (me.wholeness) c(`Wholeness ${me.wholeness.uses}`, 'wholeness-of-body', !me.wholeness.uses);
   if (me.tireless) c(`Tireless ${me.tireless.uses}`, 'tireless', !me.tireless.uses);
+  if (me.nimbusOn) c('✨ Holy Nimbus', 'holy-nimbus');
+  if (me.strokeOfLuck) c(`Stroke of Luck ${me.strokeOfLuck.uses}`, 'stroke-of-luck', !me.strokeOfLuck.uses);
+  if (me.fate) c(`Fate ${me.fate.uses}`, 'boon-of-fate', !me.fate.uses);
+  if (me.combatProwess) c(`Peerless Aim ${me.prowessUsed ? 0 : 1}`, 'boon-of-combat-prowess', !!me.prowessUsed);
   const mk = b.effects.find((e) => e.type === 'mark' && e.by === me.id);
   if (mk) c(`🎯 ${esc(mk.name)}: ${esc(b.creatures[mk.target]?.name || '')}`, mk.spell);
   return out.join('');
@@ -644,6 +648,10 @@ function classButtons(b, me, extra, btn) {
   }
   if (me.veil) extra.push(btn(`Nature's Veil (${me.veil.uses})`, { a: 'veil' }, t.bonus && me.veil.uses > 0, 'natures-veil'));
   if (me.sanctuary) aimBtn(`Nature's Sanctuary (${me.wildShape?.uses || 0})`, { kind: 'sanctuary' }, t.action && !t.magicUsed && me.wildShape?.uses > 0, "Nature's Sanctuary");
+  if (me.nimbus) extra.push(btn(me.nimbusOn ? 'Holy Nimbus (on)' : `Holy Nimbus (${me.nimbus.uses})`, { a: 'nimbus' }, !me.nimbusOn && t.bonus && me.nimbus.uses > 0, 'holy-nimbus'));
+  const qv = b.effects.find((e) => e.type === 'quiver' && e.by === me.id);
+  if (qv) extra.push(btn(`Quivering Palm: end it (${esc(b.creatures[qv.target]?.name || '')})`, { a: 'quiver' }, canAttack(t), 'quivering-palm'));
+  if (me.blinkSteps) aimBtn('Blink Steps', { kind: 'blink' }, (t.attackAction || t.magicUsed) && !t.blinked, 'Blink Steps');
   if (me.fleetStep && t.flurried && !t.fleeted) extra.push(btn('Fleet Step (1 Focus)', { a: 'fleet' }, me.focus?.uses > 0, 'fleet-step'));
 }
 
@@ -652,13 +660,13 @@ function classButtons(b, me, extra, btn) {
 // text says. app.aim = { kind: 'spell'|'breath'|'jaunt', spell, slot, picks, point, err }.
 function aimOf(a) {
   if (a.kind === 'breath') return { mode: 'area', ...BREATH_AREAS[a.shape], range: 0 };
-  if (a.kind === 'jaunt') return { mode: 'point', range: 30 };
+  if (a.kind === 'jaunt' || a.kind === 'blink') return { mode: 'point', range: 30 };
   if (a.kind === 'landsaid') return { mode: 'area', shape: 'sphere', size: 10, from: 'point', range: 60 };
   if (a.kind === 'exhale') return { mode: 'area', shape: 'cone', size: 15, from: 'self', range: 0 };
   if (a.kind === 'sanctuary') return { mode: 'area', shape: 'cube', size: 15, from: 'point', range: 120 };
   return spellAim(a.spell, a.slot, a.meta || null, myLevel());
 }
-const OTHER_AIMS = { landsaid: { name: "Land's Aid", rule: 'lands-aid', go: 'Use' }, exhale: { name: "Dragon's Breath", rule: 'dragons-breath', go: 'Exhale' }, sanctuary: { name: "Nature's Sanctuary", rule: 'natures-sanctuary', go: 'Grow' } };
+const OTHER_AIMS = { landsaid: { name: "Land's Aid", rule: 'lands-aid', go: 'Use' }, exhale: { name: "Dragon's Breath", rule: 'dragons-breath', go: 'Exhale' }, sanctuary: { name: "Nature's Sanctuary", rule: 'natures-sanctuary', go: 'Grow' }, blink: { name: 'Blink Steps', rule: 'boon-of-dimensional-travel', go: 'Teleport' } };
 const aimName = (me, a) => (a.kind === 'breath' ? `Breath Weapon (${a.shape === 'line' ? '30-ft Line' : '15-ft Cone'})` : a.kind === 'jaunt' ? "Cloud's Jaunt" : OTHER_AIMS[a.kind]?.name || SPELLS[a.spell].name);
 
 function startAim(b, me, a) {

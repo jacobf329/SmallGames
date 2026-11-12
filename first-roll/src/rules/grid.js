@@ -41,7 +41,7 @@ export function occupantAt(b, x, y) {
   return null;
 }
 
-const SIZES = { tiny: 0, small: 1, medium: 2, large: 3, huge: 4 };
+const SIZES = { tiny: 0, small: 1, medium: 2, large: 3, huge: 4, gargantuan: 5 };
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 // Cheapest cost (in feet) to every square the mover can reach within budget.

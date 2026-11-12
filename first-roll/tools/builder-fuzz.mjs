@@ -132,7 +132,7 @@ for (let run = 0; run < RUNS; run++) {
       const check = (what, from, to, when) => {
         for (const k of keys) {
           const n = droppedPicks(to.cls, level + 1, to.land, from[k] || [], to[k] || []).length;
-          if (n > swapLimit(to.cls, when, k)) throw new Error(`${what} dropped ${n} ${k}`);
+          if (n > swapLimit(to.cls, when, k)) throw new Error(`${what} dropped ${n} ${k}: ${JSON.stringify(from[k])} -> ${JSON.stringify(to[k])}`);
         }
       };
       const up = drive({ spec: out, playerName: 'Ana', level: level + 1, mode: 'levelup', before }, 40);

@@ -26,6 +26,9 @@ function nowHtml(c) {
   use('ownLuck', "Dark One's Own Luck", 'dark-ones-own-luck');
   use('wholeness', 'Wholeness of Body', 'wholeness-of-body');
   use('tireless', 'Tireless', 'tireless');
+  use('nimbus', 'Holy Nimbus', 'holy-nimbus');
+  use('strokeOfLuck', 'Stroke of Luck', 'stroke-of-luck');
+  use('fate', 'Boon of Fate', 'boon-of-fate');
   if (c.breath) L.push(`<div class="ln"><span>${R('breath-weapon', 'Breath Weapon')}</span><b>${c.breath.uses} left</b></div>`);
   if (c.hitDice) L.push(`<div class="ln"><span>${R('hit-point-dice', `Hit Point Dice (d${c.hitDice.die})`)}</span><b>${pips(c.hitDice.left, c.hitDice.max)}</b></div>`);
   if (c.inspiration) L.push(`<div class="ln"><span>${R('heroic-inspiration', 'Heroic Inspiration')}</span><b>ready</b></div>`);

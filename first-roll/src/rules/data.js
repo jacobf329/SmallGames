@@ -479,6 +479,50 @@ export const SPELLS = {
     text: 'Concentration, up to 1 minute. The ground shakes in a 100-foot-radius circle, knocking creatures Prone and opening fissures. (Not used in fights here yet.)' },
   'maze': { name: 'Maze', level: 8, time: 'action', range: 60, kind: 'utility', conc: true,
     text: 'Concentration, up to 10 minutes. A creature is banished into a labyrinth on another plane until it finds its way out. (Not used in fights here yet.)' },
+  // ---- level 9
+  'meteor-swarm': { name: 'Meteor Swarm', level: 9, time: 'action', range: 300, kind: 'area', area: { shape: 'sphere', size: 20, from: 'point' }, save: 'dex', dice: '20d6', type: 'Fire', also: { dice: '20d6', type: 'Bludgeoning' }, half: true,
+    text: 'Blazing orbs crash down. Each creature in the blast makes a Dexterity save: 20d6 Fire damage and 20d6 Bludgeoning damage on a failure, half as much on a success. (The real spell drops four Spheres, each 40 feet in radius, which is wider than this whole board, so here the meteors fall as one 20-foot-radius Sphere at a point you pick.)' },
+  'power-word-kill': { name: 'Power Word Kill', level: 9, time: 'action', range: 60, kind: 'pwkill',
+    text: 'A word of power at a creature you can see within 60 feet. With 100 Hit Points or fewer, it dies, with no save. Otherwise it takes 12d12 Psychic damage.' },
+  'mass-heal': { name: 'Mass Heal', level: 9, time: 'action', range: 60, kind: 'massheal', pool: 700, targets: 6, cures: ['blinded', 'poisoned'],
+    text: 'Healing energy flows into the creatures you choose within 60 feet (here: up to six). Share out 700 Hit Points among them as you like (here: each in turn gets what it needs, the most hurt first). It also ends the Blinded, Deafened and Poisoned conditions on them.' },
+  'power-word-heal': { name: 'Power Word Heal', level: 9, time: 'action', range: 60, kind: 'heal', full: true, cures: ['charmed', 'frightened', 'paralyzed', 'poisoned', 'stunned'],
+    text: "A wave of healing washes over a creature you can see within 60 feet. It regains all its Hit Points, and the Charmed, Frightened, Paralyzed, Poisoned and Stunned conditions end on it. If it is Prone, it can use its Reaction to stand up." },
+  'weird': { name: 'Weird', level: 9, time: 'action', range: 120, kind: 'area', area: { shape: 'sphere', size: 30, from: 'point' }, save: 'wis', dice: '10d10', type: 'Psychic', half: true, choose: true, conc: true, rider: 'weird',
+    text: 'Concentration, up to 1 minute. Illusory terrors in the minds of the creatures you choose in a 30-foot-radius Sphere within 120 feet. Each makes a Wisdom save: 10d10 Psychic damage and Frightened on a failure, half the damage on a success. At the end of each of its turns, a Frightened target takes 5d10 Psychic damage and saves again; a success ends it.' },
+  'time-stop': { name: 'Time Stop', level: 9, time: 'action', kind: 'utility',
+    text: 'You briefly stop the flow of time for everyone but yourself, and take 1d4 + 1 turns in a row. It ends if anything you do affects another creature or something it is carrying. (Not used in fights here yet.)' },
+  'foresight': { name: 'Foresight', level: 9, time: 'action', range: 5, touch: true, kind: 'utility',
+    text: 'Takes 1 minute to cast. For 8 hours a willing creature you touch has Advantage on D20 Tests, and attack rolls against it have Disadvantage. (Cast before a fight; not used in fights here yet.)' },
+  'true-polymorph': { name: 'True Polymorph', level: 9, time: 'action', range: 30, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 hour. Turn a creature into another creature or an object, or an object into a creature (a Wisdom save resists). Held for the full hour, it lasts until dispelled. (Not used in fights here yet.)' },
+  'shapechange': { name: 'Shapechange', level: 9, time: 'action', kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 hour. You take the form of a creature whose Challenge Rating is no higher than your level, and can change form again as a Magic action. (Not used in fights here yet.)' },
+  'storm-of-vengeance': { name: 'Storm of Vengeance', level: 9, time: 'action', kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. A churning storm cloud 300 feet in radius: thunder, acid rain, lightning bolts and hail, worse each round. (Not used in fights here yet: the cloud is far bigger than the board.)' },
+  'wish': { name: 'Wish', level: 9, time: 'action', kind: 'utility',
+    text: 'The mightiest spell a mortal can cast. Copy any spell of level 8 or lower without its materials, or ask for something greater, at a risk of never casting Wish again. (Not used in fights here yet.)' },
+  // ---- level 5 spells of the Paladin and Ranger lists
+  'destructive-wave': { name: 'Destructive Wave', level: 5, time: 'action', kind: 'area', area: { shape: 'emanation', size: 30, from: 'self' }, save: 'con', dice: '5d6', type: 'Thunder', also: { dice: '5d6', type: 'Radiant' }, half: true, choose: true, rider: 'prone',
+    text: 'You strike the ground. Each creature you choose within 30 feet of you makes a Constitution save: 5d6 Thunder damage and 5d6 Radiant damage and it falls Prone on a failure, half the damage on a success. (You can pick Necrotic instead of Radiant; here it is Radiant.)' },
+  'conjure-volley': { name: 'Conjure Volley', level: 5, time: 'action', range: 150, kind: 'area', area: { shape: 'sphere', size: 40, from: 'point' }, save: 'dex', dice: '8d8', type: 'Force', half: true, choose: true,
+    text: 'Spectral arrows fall in a 40-foot-radius, 20-foot-high Cylinder at a point within 150 feet. Each creature you choose in it makes a Dexterity save: 8d8 Force damage on a failure, half as much on a success.' },
+  'steel-wind-strike': { name: 'Steel Wind Strike', level: 5, time: 'action', range: 30, kind: 'attack', melee: true, dice: '6d10', type: 'Force', targets: 5, wind: true,
+    text: 'You flourish your weapon and vanish. Make a melee spell attack against each of up to five creatures you can see within 30 feet: 6d10 Force damage on a hit. Then you teleport to an empty space within 5 feet of one of them.' },
+  'banishing-smite': { name: 'Banishing Smite', level: 5, time: 'bonus', kind: 'utility', conc: true,
+    text: 'Right after you hit with a melee weapon: an extra 5d10 Force damage, and a target left with 50 Hit Points or fewer makes a Charisma save or is banished while you keep Concentration. (Not offered in fights here yet: Divine Smite with a level 5 slot is.)' },
+  'circle-of-power': { name: 'Circle of Power', level: 5, time: 'action', kind: 'utility', conc: true,
+    text: 'Concentration, up to 10 minutes. You and your allies within 30 feet have Advantage on saves against spells and magical effects, and take no damage when such a save would halve it. (Not used in fights here yet.)' },
+  'raise-dead': { name: 'Raise Dead', level: 5, time: 'action', range: 5, touch: true, kind: 'utility',
+    text: 'Takes 1 hour to cast. A creature dead no longer than 10 days returns to life with 1 Hit Point. (Useful outside of fights.)' },
+  'summon-celestial': { name: 'Summon Celestial', level: 5, time: 'action', range: 90, kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 hour. A celestial spirit, an Avenger or a Defender, fights at your side. (Not used in fights here yet.)' },
+  'swift-quiver': { name: 'Swift Quiver', level: 5, time: 'bonus', kind: 'utility', conc: true,
+    text: 'Concentration, up to 1 minute. Your quiver never runs out, and each turn you can make two extra attacks with a bow or crossbow as a Bonus Action. (Not used in fights here yet.)' },
+  'commune-with-nature': { name: 'Commune with Nature', level: 5, time: 'action', kind: 'utility',
+    text: 'Takes 1 minute to cast. You learn the lie of the land for 3 miles around: water, settlements, strong creatures, plants and minerals. (Useful outside of fights.)' },
+  'commune': { name: 'Commune', level: 5, time: 'action', kind: 'utility',
+    text: 'Takes 1 minute to cast. You ask your god up to three questions that can be answered yes or no. (Useful outside of fights.)' },
 };
 
 // Each class's spell list (the spells of the SRD this game has).
@@ -489,10 +533,11 @@ export const SPELL_LISTS = {
     2: ['aid', 'hold-person', 'lesser-restoration', 'spiritual-weapon'],
     3: ['spirit-guardians', 'mass-healing-word', 'revivify', 'dispel-magic', 'beacon-of-hope'],
     4: ['death-ward', 'aura-of-life', 'freedom-of-movement', 'guardian-of-faith'],
-    5: ['flame-strike', 'mass-cure-wounds', 'greater-restoration', 'insect-plague', 'legend-lore', 'geas'],
+    5: ['flame-strike', 'mass-cure-wounds', 'greater-restoration', 'insect-plague', 'legend-lore', 'geas', 'commune', 'raise-dead'],
     6: ['heal', 'harm', 'sunbeam', 'blade-barrier'],
     7: ['fire-storm', 'divine-word', 'regenerate', 'conjure-celestial'],
     8: ['sunburst', 'holy-aura', 'earthquake'],
+    9: ['mass-heal', 'power-word-heal'],
   },
   wizard: {
     0: ['fire-bolt', 'ray-of-frost', 'chill-touch', 'shocking-grasp', 'poison-spray', 'acid-splash', 'mage-hand', 'light', 'mending', 'dancing-lights', 'minor-illusion', 'prestidigitation'],
@@ -500,10 +545,11 @@ export const SPELL_LISTS = {
     2: ['scorching-ray', 'misty-step', 'hold-person', 'shatter', 'web', 'blur', 'dragons-breath', 'alter-self', 'suggestion', 'magic-weapon'],
     3: ['fireball', 'lightning-bolt', 'haste', 'slow', 'hypnotic-pattern', 'fear', 'vampiric-touch', 'stinking-cloud', 'sleet-storm', 'counterspell', 'dispel-magic', 'fly'],
     4: ['ice-storm', 'blight', 'greater-invisibility', 'stoneskin', 'fire-shield', 'dimension-door', 'polymorph', 'arcane-eye'],
-    5: ['cone-of-cold', 'hold-monster', 'cloudkill', 'legend-lore', 'wall-of-stone', 'geas'],
+    5: ['cone-of-cold', 'hold-monster', 'cloudkill', 'legend-lore', 'wall-of-stone', 'geas', 'steel-wind-strike'],
     6: ['chain-lightning', 'disintegrate', 'circle-of-death', 'sunbeam', 'freezing-sphere', 'eyebite', 'flesh-to-stone', 'irresistible-dance', 'globe-of-invulnerability'],
     7: ['finger-of-death', 'delayed-blast-fireball', 'prismatic-spray', 'reverse-gravity', 'forcecage', 'arcane-sword'],
     8: ['sunburst', 'power-word-stun', 'incendiary-cloud', 'befuddlement', 'dominate-monster', 'maze'],
+    9: ['meteor-swarm', 'power-word-kill', 'weird', 'time-stop', 'foresight', 'true-polymorph', 'shapechange', 'wish'],
   },
   bard: {
     0: ['vicious-mockery', 'starry-wisp', 'dancing-lights', 'light', 'mage-hand', 'mending', 'minor-illusion', 'prestidigitation'],
@@ -511,10 +557,11 @@ export const SPELL_LISTS = {
     2: ['shatter', 'hold-person', 'aid', 'lesser-restoration', 'suggestion', 'zone-of-truth'],
     3: ['mass-healing-word', 'hypnotic-pattern', 'fear', 'slow', 'stinking-cloud', 'dispel-magic'],
     4: ['greater-invisibility', 'polymorph', 'dimension-door', 'freedom-of-movement', 'charm-monster'],
-    5: ['mass-cure-wounds', 'hold-monster', 'greater-restoration', 'legend-lore', 'geas'],
+    5: ['mass-cure-wounds', 'hold-monster', 'greater-restoration', 'legend-lore', 'geas', 'raise-dead'],
     6: ['eyebite', 'irresistible-dance'],
     7: ['prismatic-spray', 'regenerate', 'forcecage', 'arcane-sword'],
     8: ['power-word-stun', 'befuddlement', 'dominate-monster'],
+    9: ['power-word-kill', 'power-word-heal', 'foresight', 'true-polymorph'],
   },
   druid: {
     0: ['produce-flame', 'thorn-whip', 'starry-wisp', 'poison-spray', 'guidance', 'spare-the-dying', 'resistance-cantrip', 'druidcraft', 'mending'],
@@ -522,22 +569,25 @@ export const SPELL_LISTS = {
     2: ['barkskin', 'hold-person', 'lesser-restoration', 'pass-without-trace'],
     3: ['call-lightning', 'sleet-storm', 'revivify', 'dispel-magic'],
     4: ['ice-storm', 'blight', 'stoneskin', 'fire-shield', 'polymorph', 'freedom-of-movement', 'charm-monster'],
-    5: ['cone-of-cold', 'mass-cure-wounds', 'greater-restoration', 'insect-plague', 'tree-stride', 'wall-of-stone', 'geas'],
+    5: ['cone-of-cold', 'mass-cure-wounds', 'greater-restoration', 'insect-plague', 'tree-stride', 'wall-of-stone', 'geas', 'commune-with-nature'],
     6: ['heal', 'sunbeam', 'flesh-to-stone'],
     7: ['fire-storm', 'regenerate', 'reverse-gravity'],
     8: ['sunburst', 'incendiary-cloud', 'befuddlement', 'earthquake'],
+    9: ['foresight', 'shapechange', 'storm-of-vengeance'],
   },
   paladin: {
     1: ['divine-favor', 'bless', 'cure-wounds', 'heroism', 'shield-of-faith', 'command', 'protection-from-evil-and-good', 'divine-smite', 'detect-magic'],
     2: ['aid', 'lesser-restoration', 'magic-weapon', 'prayer-of-healing', 'zone-of-truth', 'find-steed'],
     3: ['revivify', 'dispel-magic'],
     4: ['death-ward', 'aura-of-life', 'freedom-of-movement'],
+    5: ['destructive-wave', 'banishing-smite', 'circle-of-power', 'raise-dead', 'summon-celestial'],
   },
   ranger: {
     1: ['hunters-mark', 'cure-wounds', 'entangle', 'longstrider', 'fog-cloud', 'alarm', 'detect-magic', 'speak-with-animals'],
     2: ['aid', 'barkskin', 'lesser-restoration', 'magic-weapon', 'pass-without-trace'],
     3: ['revivify', 'dispel-magic'],
     4: ['freedom-of-movement', 'stoneskin'],
+    5: ['conjure-volley', 'steel-wind-strike', 'greater-restoration', 'tree-stride', 'swift-quiver', 'commune-with-nature'],
   },
   sorcerer: {
     0: ['fire-bolt', 'sorcerous-burst', 'ray-of-frost', 'shocking-grasp', 'chill-touch', 'acid-splash', 'poison-spray', 'dancing-lights', 'light', 'mage-hand', 'mending', 'minor-illusion', 'prestidigitation'],
@@ -549,6 +599,7 @@ export const SPELL_LISTS = {
     6: ['chain-lightning', 'disintegrate', 'circle-of-death', 'sunbeam', 'freezing-sphere', 'eyebite', 'flesh-to-stone', 'globe-of-invulnerability'],
     7: ['finger-of-death', 'fire-storm', 'delayed-blast-fireball', 'prismatic-spray', 'reverse-gravity'],
     8: ['sunburst', 'power-word-stun', 'incendiary-cloud', 'dominate-monster', 'earthquake'],
+    9: ['meteor-swarm', 'power-word-kill', 'time-stop', 'wish'],
   },
   warlock: {
     0: ['eldritch-blast', 'chill-touch', 'poison-spray', 'mage-hand', 'minor-illusion', 'prestidigitation'],
@@ -560,6 +611,7 @@ export const SPELL_LISTS = {
     6: ['circle-of-death', 'eyebite'],
     7: ['finger-of-death', 'forcecage'],
     8: ['power-word-stun', 'befuddlement', 'dominate-monster'],
+    9: ['power-word-kill', 'weird', 'foresight', 'true-polymorph'],
   },
 };
 // Cantrips known, and spells you can prepare, by class level (2024 tables).
@@ -765,8 +817,9 @@ export const SUBCLASSES = {
 };
 // Spells a subclass or class feature always has prepared (they don't count).
 export const ALWAYS_PREPARED = {
-  paladin: { 2: ['divine-smite'], 3: ['protection-from-evil-and-good', 'shield-of-faith'], 5: ['aid', 'zone-of-truth', 'find-steed'], 9: ['beacon-of-hope', 'dispel-magic'], 13: ['freedom-of-movement', 'guardian-of-faith'] },
+  paladin: { 2: ['divine-smite'], 3: ['protection-from-evil-and-good', 'shield-of-faith'], 5: ['aid', 'zone-of-truth', 'find-steed'], 9: ['beacon-of-hope', 'dispel-magic'], 13: ['freedom-of-movement', 'guardian-of-faith'], 17: ['commune', 'flame-strike'] },
   ranger: { 1: ['hunters-mark'] },
+  bard: { 20: ['power-word-heal', 'power-word-kill'] },
   sorcerer: { 3: ['alter-self', 'chromatic-orb', 'command', 'dragons-breath'], 5: ['fear', 'fly'], 7: ['arcane-eye', 'charm-monster'], 9: ['legend-lore', 'summon-dragon'] },
   warlock: { 3: ['burning-hands', 'command', 'scorching-ray', 'suggestion'], 5: ['fireball', 'stinking-cloud'], 7: ['fire-shield', 'wall-of-fire'], 9: ['geas', 'insect-plague'] },
 };
@@ -854,8 +907,8 @@ export const arcanumLevels = (level) => Object.entries(ARCANUM_LEVELS).filter(([
 export const SLOT_COST = { 1: 2, 2: 3, 3: 5, 4: 6, 5: 7 };
 // Font of Magic can make a slot of a level up to this, by Sorcerer level.
 export const SLOT_MIN_LEVEL = { 1: 2, 2: 3, 3: 5, 4: 7, 5: 9 };
-// The highest level the campaign reaches so far (the tables above run to 20).
-export const MAX_LEVEL = 15;
+// The highest level a hero can reach (the class tables run to 20).
+export const MAX_LEVEL = 20;
 // Class tables (SRD 5.2.1): a value that changes at set levels.
 const stepAt = (lv, steps) => { let v = steps[0][1]; for (const [l, x] of steps) if (lv >= l) v = x; return v; };
 export const PROGRESSION = {
@@ -1006,13 +1059,40 @@ Object.assign(FEATS, {
   'fighting-style': { name: 'Fighting Style', rule: 'fighting-style', style: true, repeatable: true,
     text: 'Learn a Fighting Style you don\'t already have (needs the Fighting Style feature).' },
 });
+// Epic Boons (level 19): each also gives +1 to one ability score, which can go up to 30.
+Object.assign(FEATS, {
+  'boon-of-combat-prowess': { name: 'Boon of Combat Prowess', rule: 'boon-of-combat-prowess', epic: true, plusFrom: ['str', 'dex', 'con', 'int', 'wis', 'cha'],
+    text: 'Peerless Aim: when you miss with an attack roll, you can hit instead. Then you can\'t do it again until the start of your next turn. (Used for you automatically.)' },
+  'boon-of-dimensional-travel': { name: 'Boon of Dimensional Travel', rule: 'boon-of-dimensional-travel', epic: true, plusFrom: ['str', 'dex', 'con', 'int', 'wis', 'cha'],
+    text: 'Blink Steps: right after you take the Attack action or the Magic action, you can teleport up to 30 feet to an empty space you can see. Teleporting doesn\'t provoke Opportunity Attacks.' },
+  'boon-of-fate': { name: 'Boon of Fate', rule: 'boon-of-fate', epic: true, plusFrom: ['str', 'dex', 'con', 'int', 'wis', 'cha'],
+    text: 'Improve Fate: when you or another creature within 60 feet succeeds or fails a D20 Test, you can roll 2d4 and add it to the roll or subtract it. Once until you roll Initiative or finish a Short or Long Rest. (Here: used for you on a saving throw it would change, an ally\'s failure or an enemy\'s success.)' },
+  'boon-of-irresistible-offense': { name: 'Boon of Irresistible Offense', rule: 'boon-of-irresistible-offense', epic: true, plusFrom: ['str', 'dex'],
+    text: 'Overcome Defenses: your Bludgeoning, Piercing and Slashing damage ignores Resistance. Overwhelming Strike: when you roll a 20 on the d20 of an attack roll, the target takes extra damage of the attack\'s type equal to the ability score this feat raised.' },
+  'boon-of-spell-recall': { name: 'Boon of Spell Recall', rule: 'boon-of-spell-recall', epic: true, caster: true, plusFrom: ['int', 'wis', 'cha'],
+    text: 'Free Casting: when you cast a spell with a level 1 to 4 spell slot, roll 1d4. If the number is the slot\'s level, the slot isn\'t spent. (Needs the Spellcasting or Pact Magic feature.)' },
+  'boon-of-the-night-spirit': { name: 'Boon of the Night Spirit', rule: 'boon-of-the-night-spirit', epic: true, plusFrom: ['str', 'dex', 'con', 'int', 'wis', 'cha'],
+    text: 'Merge with Shadows: in Dim Light or Darkness, a Bonus Action makes you Invisible until you take an action, a Bonus Action or a Reaction. Shadowy Form: in Dim Light or Darkness, Resistance to all damage but Psychic and Radiant. (Every fight here is in Bright Light, so it is used outside of fights.)' },
+  'boon-of-truesight': { name: 'Boon of Truesight', rule: 'boon-of-truesight', epic: true, plusFrom: ['str', 'dex', 'con', 'int', 'wis', 'cha'],
+    text: 'Truesight out to 60 feet: you see Invisible creatures and through illusions. (Here: Invisible creatures within 60 feet get no Advantage or Disadvantage against you.)' },
+});
+export const EPIC_FEATS = ['boon-of-combat-prowess', 'boon-of-dimensional-travel', 'boon-of-fate', 'boon-of-irresistible-offense', 'boon-of-spell-recall', 'boon-of-the-night-spirit', 'boon-of-truesight'];
+// The Epic Boon each class's table suggests. (The Rogue's, the Night Spirit, does nothing in these brightly lit fights, so its companions take Combat Prowess.)
+export const EPIC_DEFAULT = {
+  barbarian: 'boon-of-irresistible-offense', bard: 'boon-of-spell-recall', cleric: 'boon-of-fate', druid: 'boon-of-dimensional-travel', fighter: 'boon-of-combat-prowess',
+  monk: 'boon-of-irresistible-offense', paladin: 'boon-of-truesight', ranger: 'boon-of-dimensional-travel', rogue: 'boon-of-combat-prowess', sorcerer: 'boon-of-dimensional-travel',
+  warlock: 'boon-of-fate', wizard: 'boon-of-spell-recall',
+};
+// The level of the Epic Boon feature.
+export const EPIC_LEVEL = 19;
 // Feats a hero can take at an Ability Score Improvement level.
 export const ASI_FEATS = ['ability-score-improvement', 'grappler', 'fighting-style', ...ORIGIN_FEATS];
 // The Fighting Styles that are feats (a Paladin's and a Ranger's own cantrip styles aren't).
 export const STYLE_FEATS = ['archery', 'defense', 'great-weapon', 'two-weapon'];
-// Ability Score Improvement levels (SRD 5.2.1 class tables; level 19 is an Epic Boon).
-export const ASI_LEVELS = { fighter: [4, 6, 8, 12, 14, 16], rogue: [4, 8, 10, 12, 16] };
-export const asiLevels = (cls, level) => (ASI_LEVELS[cls] || [4, 8, 12, 16]).filter((l) => l <= level);
+// Ability Score Improvement levels (SRD 5.2.1 class tables).
+// Level 19 is the Epic Boon: an Epic Boon feat, or any other feat the hero qualifies for.
+export const ASI_LEVELS = { fighter: [4, 6, 8, 12, 14, 16, 19], rogue: [4, 8, 10, 12, 16, 19] };
+export const asiLevels = (cls, level) => (ASI_LEVELS[cls] || [4, 8, 12, 16, 19]).filter((l) => l <= level);
 export const MI_DEFAULT_ABILITY = { cleric: 'wis', druid: 'wis', wizard: 'int' };
 export const LIST_NAMES = { cleric: 'Cleric', druid: 'Druid', wizard: 'Wizard', bard: 'Bard', paladin: 'Paladin', ranger: 'Ranger', sorcerer: 'Sorcerer', warlock: 'Warlock' };
 
@@ -1368,6 +1448,102 @@ export const MUMMY_LORD = {
     { id: 'strike', name: 'Necrotic Strike', kind: 'strike', text: 'It makes one Rotting Fist or Channel Negative Energy attack.' },
   ] },
   multiattack: 1, multiName: 'one Rotting Fist or Channel Negative Energy attack, and uses Dreadful Glare', xp: 13000, cr: '15',
+};
+
+export const VAMPIRE = {
+  kind: 'vampire', name: 'Vampire', emoji: '🧛', type: 'Medium Undead', size: 'medium', creature: 'undead',
+  ac: 16, hp: 195, hpFormula: '23d8+92', speed: 40,
+  abilities: { str: 18, dex: 18, con: 18, int: 17, wis: 15, cha: 18 }, saves: { dex: 9, wis: 7, cha: 9 }, skills: { perception: 7, stealth: 9 },
+  resist: ['Necrotic'], traits: { spiderClimb: true },
+  attacks: [
+    { id: 'grave', name: 'Grave Strike', kind: 'melee', bonus: 9, dice: '1d8', flat: 4, type: 'Bludgeoning', extra: [{ dice: '2d6', type: 'Necrotic' }], rider: { grapple: 14, size: 'large' } },
+  ],
+  drain: { name: 'Bite', dc: 17, dice: '3d8', flat: 0, type: 'Necrotic', needsHeld: true, heal: true },
+  legRes: 3,
+  legendary: { uses: 3, options: [
+    { id: 'deathless', name: 'Deathless Strike', kind: 'strike', move: true, text: 'It moves up to half its Speed and makes one Grave Strike attack.' },
+  ] },
+  multiattack: 3, multiName: 'two Grave Strike attacks and uses Bite (here: Bite replaces one of the three)', xp: 10000, cr: '13',
+};
+export const IRON_GOLEM = {
+  kind: 'iron-golem', name: 'Iron Golem', emoji: '⚙️', type: 'Large Construct', size: 'large', creature: 'construct',
+  ac: 20, hp: 252, hpFormula: '24d10+120', speed: 30,
+  abilities: { str: 24, dex: 9, con: 20, int: 3, wis: 11, cha: 1 },
+  immune: ['Fire', 'Poison', 'Psychic'], condImmune: ['charmed', 'frightened', 'paralyzed', 'petrified', 'poisoned'], traits: { magicRes: true },
+  absorb: ['Fire'], absorbName: 'Fire Absorption',
+  attacks: [
+    { id: 'arm', name: 'Bladed Arm', kind: 'melee', bonus: 12, dice: '3d8', flat: 7, type: 'Slashing', reach: 10, extra: [{ dice: '3d6', type: 'Fire' }] },
+    { id: 'bolt', name: 'Fiery Bolt', kind: 'ranged', bonus: 10, dice: '8d8', flat: 0, type: 'Fire', range: [120, 120] },
+  ],
+  mbreath: { name: 'Poison Breath', recharge: 6, ability: 'con', dc: 18, dice: '10d10', type: 'Poison', shape: 'cone', size: 60 },
+  multiattack: 2, multiName: 'two attacks, using Bladed Arm or Fiery Bolt in any mix', xp: 15000, cr: '16',
+};
+export const BALOR = {
+  kind: 'balor', name: 'Balor', emoji: '👹', type: 'Huge Fiend (Demon)', size: 'huge', creature: 'fiend',
+  ac: 19, hp: 287, hpFormula: '23d12+138', speed: 40,
+  abilities: { str: 26, dex: 15, con: 22, int: 20, wis: 16, cha: 22 }, saves: { con: 12, wis: 9 }, skills: { perception: 9 },
+  resist: ['Cold', 'Lightning'], immune: ['Fire', 'Poison'], condImmune: ['charmed', 'frightened', 'poisoned'], traits: { magicRes: true },
+  sight: 120,
+  attacks: [
+    { id: 'whip', name: 'Flame Whip', kind: 'melee', bonus: 14, dice: '3d6', flat: 8, type: 'Force', reach: 30, extra: [{ dice: '5d6', type: 'Fire' }], rider: { pull: 25 } },
+    { id: 'blade', name: 'Lightning Blade', kind: 'melee', bonus: 14, dice: '3d8', flat: 8, type: 'Force', reach: 10, extra: [{ dice: '4d10', type: 'Lightning' }], rider: { noReact: true } },
+  ],
+  aura: { name: 'Fire Aura', dice: '3d8', type: 'Fire' },
+  throes: { dc: 20, size: 30, dice: '9d6', type: 'Fire', also: { dice: '9d6', type: 'Force' } },
+  legRes: 3,
+  multiattack: 2, multiName: 'one Flame Whip and one Lightning Blade attack', xp: 22000, cr: '19',
+};
+export const PIT_FIEND = {
+  kind: 'pit-fiend', name: 'Pit Fiend', emoji: '😈', type: 'Large Fiend (Devil)', size: 'large', creature: 'fiend',
+  ac: 21, hp: 337, hpFormula: '27d10+189', speed: 30,
+  abilities: { str: 26, dex: 14, con: 24, int: 22, wis: 18, cha: 24 }, saves: { dex: 8, wis: 10 }, skills: { perception: 10, persuasion: 19 },
+  resist: ['Cold'], immune: ['Fire', 'Poison'], condImmune: ['poisoned'], traits: { magicRes: true },
+  sight: 120,
+  attacks: [
+    { id: 'bite', name: 'Bite', kind: 'melee', bonus: 14, dice: '3d6', flat: 8, type: 'Piercing', reach: 10, rider: { poison: true, noHeal: true } },
+    { id: 'claw', name: 'Devilish Claw', kind: 'melee', bonus: 14, dice: '4d8', flat: 8, type: 'Necrotic', reach: 10 },
+    { id: 'mace', name: 'Fiery Mace', kind: 'melee', bonus: 14, dice: '4d6', flat: 8, type: 'Force', reach: 10, extra: [{ dice: '6d6', type: 'Fire' }] },
+  ],
+  fearAura: { size: 20, dc: 21 },
+  casting: { ability: 'cha', dc: 21, attack: 13, spells: { fireball: { n: 2, level: 5 } }, note: '(Here: its Hellfire Spellcasting is played as two Fireballs a day.)' },
+  legRes: 4,
+  multiattack: 4, multiName: 'one Bite, two Devilish Claw and one Fiery Mace attack', xp: 25000, cr: '20',
+};
+export const LICH = {
+  kind: 'lich', name: 'Lich', emoji: '💀', type: 'Medium Undead (Wizard)', size: 'medium', creature: 'undead',
+  ac: 20, hp: 315, hpFormula: '42d8+126', speed: 30,
+  abilities: { str: 11, dex: 16, con: 16, int: 21, wis: 14, cha: 16 }, saves: { dex: 10, con: 10, int: 12, wis: 9 }, skills: { arcana: 19, history: 12, insight: 9, perception: 9 },
+  resist: ['Cold', 'Lightning'], immune: ['Necrotic', 'Poison'], condImmune: ['charmed', 'frightened', 'paralyzed', 'poisoned'],
+  sight: 120,
+  attacks: [
+    { id: 'burst-ranged', name: 'Eldritch Burst', kind: 'ranged', bonus: 12, dice: '4d12', flat: 5, type: 'Force', range: [120, 120] },
+    { id: 'burst', name: 'Eldritch Burst (melee)', kind: 'melee', bonus: 12, dice: '4d12', flat: 5, type: 'Force' },
+    { id: 'touch', name: 'Paralyzing Touch', kind: 'melee', bonus: 12, dice: '3d6', flat: 5, type: 'Cold', rider: { paralyze: { auto: true } } },
+  ],
+  casting: { ability: 'int', dc: 20, attack: 12, spells: { fireball: { n: 99, level: 5 }, 'chain-lightning': 1, 'finger-of-death': 1, shield: 99 } },
+  legRes: 4,
+  legendary: { uses: 3, options: [
+    { id: 'disrupt', name: 'Disrupt Life', kind: 'emanation', ability: 'con', dc: 20, dice: '9d6', type: 'Necrotic', size: 20, once: true,
+      text: 'Constitution save DC 20, each creature that isn\'t Undead within 20 feet: 9d6 Necrotic damage on a failure, half on a success. Not again until the start of its next turn.' },
+    { id: 'deathly', name: 'Deathly Teleport', kind: 'deathly', range: 60, burst: 10, dice: '2d10', type: 'Necrotic',
+      text: 'It teleports up to 60 feet to a space it can see, and each creature within 10 feet of the space it left takes 2d10 Necrotic damage.' },
+  ] },
+  multiattack: 3, multiName: 'three attacks, using Eldritch Burst or Paralyzing Touch in any mix', xp: 33000, cr: '21',
+};
+export const ANCIENT_BLACK_DRAGON = {
+  kind: 'ancient-dragon', name: 'Ancient Black Dragon', emoji: '🐲', type: 'Gargantuan Dragon (Chromatic)', size: 'gargantuan', creature: 'dragon',
+  ac: 22, hp: 367, hpFormula: '21d20+147', speed: 40,
+  abilities: { str: 27, dex: 14, con: 25, int: 16, wis: 15, cha: 22 }, saves: { dex: 9, wis: 9 }, skills: { perception: 16, stealth: 9 },
+  immune: ['Acid'], traits: { amphibious: true },
+  attacks: [{ id: 'rend', name: 'Rend', kind: 'melee', bonus: 15, dice: '2d8', flat: 8, type: 'Slashing', reach: 15, extra: [{ dice: '2d8', type: 'Acid' }] }],
+  mbreath: { name: 'Acid Breath', recharge: 5, dc: 22, dice: '15d8', type: 'Acid', shape: 'line', size: 90 },
+  legRes: 4,
+  legendary: { uses: 3, options: [
+    { id: 'insects', name: 'Cloud of Insects', kind: 'save', ability: 'dex', dc: 21, dice: '6d10', type: 'Poison', range: 120, once: true,
+      text: 'Dexterity save DC 21, one creature within 120 feet: 6d10 Poison damage on a failure. Not again until the start of its next turn.' },
+    { id: 'pounce', name: 'Pounce', kind: 'strike', move: true, text: 'It moves up to half its Speed and makes one Rend attack.' },
+  ] },
+  multiattack: 3, xp: 33000, cr: '21',
 };
 
 // Phase 0's one-off skirmish, kept for the quick-fight mode and the tests.

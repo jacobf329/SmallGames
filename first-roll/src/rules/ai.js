@@ -68,7 +68,7 @@ function weaponOptions(b, me, { kind = null } = {}) {
       out.push({ intent: { a: 'attack', target: T.id, attack: o.atk.id }, score: o.expected + finishing(T, o.avg) + bonus, why: { T, o }, time: 'action', ranged: o.atk.kind === 'ranged' });
     }
     // Life Drain (Wight) in place of one attack: better against heavy armor.
-    if (me.drain && !kind && cheb(me, T) <= 1 && !down(T)) {
+    if (me.drain && !kind && cheb(me, T) <= 1 && !down(T) && drainOk(me, T)) {
       const pFail = 1 - saveChance(b, T, 'con', me.drain.dc);
       const avg = (avgDice(me.drain.dice) + me.drain.flat) * damageMult(T, me.drain.type);
       out.push({ intent: { a: 'drain', target: T.id }, score: pFail * avg * 1.5 + finishing(T, avg) * pFail, why: { T, o: { mode: 'normal' } }, time: 'action', ranged: false });
@@ -121,6 +121,17 @@ export function specialOptions(b, me, { light = false } = {}) {
     switch (s.kind) {
       case 'attack': case 'rays': {
         const atk = spellAttack(me, sid, { melee: !!s.melee });
+        if (s.wind) {
+          // Steel Wind Strike: up to five creatures within 30 feet, one cast.
+          const pick = foes.filter((T) => !down(T) && sees(b, me, T, range))
+            .map((T) => {
+              const p = hitChance(hitBonus(atk), acAgainst(b, me, T, atk).value, attackFactors(b, me, T, atk).mode, me.luck);
+              const each = avgDice(sc.dice) * damageMult(T, s.type);
+              return { T, v: p * each + finishing(T, each) };
+            }).sort((p, q) => q.v - p.v).slice(0, sc.targets);
+          if (pick.length) add({ a: 'cast', spell: sid, target: pick[0].T.id, targets: pick.map((x) => x.T.id) }, pick.reduce((acc, x) => acc + x.v, 0) - cost, { T: pick[0].T, ids: pick.map((x) => x.T.id) });
+          break;
+        }
         for (const T of foes) {
           if (!sees(b, me, T, range)) continue;
           const f = attackFactors(b, me, T, atk);
@@ -153,6 +164,14 @@ export function specialOptions(b, me, { light = false } = {}) {
         const pick = foes.filter((T) => !down(T) && T.hp <= 40 && sees(b, me, T, range))
           .map((T) => ({ T, v: (1 - saveChance(b, T, 'cha', dc)) * (T.hp <= 20 ? T.hp + 8 : 10) })).sort((p, q) => q.v - p.v).slice(0, sc.targets);
         if (pick.length) add({ a: 'cast', spell: sid, target: pick[0].T.id, targets: pick.map((x) => x.T.id) }, pick.reduce((acc, x) => acc + x.v, 0) - cost, { T: pick[0].T, ids: pick.map((x) => x.T.id) }, 'bonus');
+        break;
+      }
+      case 'pwkill': {
+        for (const T of foes) {
+          if (down(T) || !sees(b, me, T, range)) continue;
+          const v = T.hp <= 100 ? T.hp + 15 + 8 * (T.multiattack || 1) : 78 * damageMult(T, 'Psychic');
+          add({ a: 'cast', spell: sid, target: T.id }, v - cost, { T });
+        }
         break;
       }
       case 'pwstun': {
@@ -203,7 +222,8 @@ export function specialOptions(b, me, { light = false } = {}) {
         for (const { x, y } of spotsNear(b, me, aim, foes)) {
           const hit = areaTargets(b, me, aim, x, y);
           const fs = hit.filter((c) => c.side !== me.side && !down(c) && !c.dead);
-          const pals = hit.filter((c) => c.side === me.side);
+          // Destructive Wave, Conjure Volley, Weird: only the chosen creatures, so allies inside are safe.
+          const pals = s.choose && !s.cond ? [] : hit.filter((c) => c.side === me.side);
           if (!fs.length) continue;
           // Sleep, Entangle, Web: a condition instead of damage. Sleep skips allies.
           if (s.cond) {
@@ -227,8 +247,9 @@ export function specialOptions(b, me, { light = false } = {}) {
           }
           if (fs.length < 2 && !(near && aim.from === 'self')) continue;
           const mult = (c) => (s.prismatic ? s.prismatic.reduce((acc, ty) => acc + damageMult(c, ty), 0) / s.prismatic.length : damageMult(c, s.type));
-          const rider = s.rider === 'blind' || s.rider === 'sunblind' ? 2 : 0;
-          const exp = fs.reduce((acc, c) => acc + (avgDice(sc.dice) * mult(c) + rider) * (1 - saveChance(b, c, s.save, dc) / 2), 0);
+          const rider = s.rider === 'blind' || s.rider === 'sunblind' ? 2 : s.rider === 'weird' ? 20 : s.rider === 'prone' ? 1.5 : 0;
+          const also = (c) => (s.also ? avgDice(s.also.dice) * damageMult(c, s.also.type) : 0);
+          const exp = fs.reduce((acc, c) => acc + (avgDice(sc.dice) * mult(c) + also(c) + rider) * (1 - saveChance(b, c, s.save, dc) / 2), 0);
           add({ a: 'cast', spell: sid, x, y }, exp + (near && aim.from === 'self' ? 2 : 0) - cost, { foes: fs, pals });
         }
         break;
@@ -244,6 +265,15 @@ export function specialOptions(b, me, { light = false } = {}) {
         break;
       }
       case 'heal': {
+        if (s.full) {
+          // Power Word Heal: worth it on someone badly hurt or down.
+          for (const F of friends) {
+            if ((!sees(b, me, F, range) && F !== me) || cantHeal(b, F)) continue;
+            const miss = F.hpMax - F.hp;
+            if (F.hp <= 0 || (F.hp <= F.hpMax / 3 && miss >= 40)) add({ a: 'cast', spell: sid, target: F.id }, (F.hp <= 0 ? 22 : 10) + miss / 10 - cost, { T: F, heal: miss });
+          }
+          break;
+        }
         for (const F of friends) {
           if (!sees(b, me, F, range) && F !== me) continue;
           if (cantHeal(b, F)) continue;
@@ -329,7 +359,8 @@ export function specialOptions(b, me, { light = false } = {}) {
       case 'massheal': {
         const hurt = friends.filter((F) => !F.dead && F.hp < F.hpMax / 2 && (F === me || sees(b, me, F, range))).slice(0, sc.targets);
         const ups = hurt.filter((F) => F.hp <= 0).length;
-        if (hurt.length >= 2 || ups) add({ a: 'cast', spell: sid, targets: hurt.map((c) => c.id) }, hurt.length * 4 + ups * 12 - cost, { ids: hurt.map((c) => c.id) }, 'bonus');
+        const big = s.pool ? 8 : 4;
+        if (hurt.length >= 2 || ups) add({ a: 'cast', spell: sid, targets: hurt.map((c) => c.id) }, hurt.length * big + ups * 12 - cost, { ids: hurt.map((c) => c.id) }, s.time);
         break;
       }
       case 'revive': {
@@ -419,7 +450,7 @@ export function specialOptions(b, me, { light = false } = {}) {
       const hit = areaTargets(b, me, area, T.x, T.y);
       const fs = hit.filter((c) => c.side !== me.side && !down(c));
       if (!fs.length || hit.some((c) => c.side === me.side)) continue;
-      const exp = fs.reduce((acc, c) => acc + avgDice(br.dice) * damageMult(c, br.type) * (1 - saveChance(b, c, 'dex', br.dc) / 2), 0);
+      const exp = fs.reduce((acc, c) => acc + avgDice(br.dice) * damageMult(c, br.type) * (1 - saveChance(b, c, br.ability || 'dex', br.dc) / 2), 0);
       add({ a: 'mbreath', x: T.x, y: T.y }, exp - (me.multiattack || 1) * 4, { foes: fs });
     }
   }
@@ -550,6 +581,8 @@ function classOptions(b, me, add, { friends, foes, light }) {
       if (T) add({ a: 'remark', target: T.id }, 7, { T }, 'bonus');
     }
   }
+  // Holy Nimbus (Paladin 20): early in a big fight.
+  if (me.nimbus?.uses > 0 && !me.nimbusOn && t.bonus && totalFoeHp(b, me) > 60) add({ a: 'nimbus' }, 7, { T: me }, 'bonus');
   // Innate Sorcery: early in a fight worth it.
   if (me.innate && !me.innateOn && (me.innate.uses > 0 || (me.incarnate && me.sorcery?.uses >= 4)) && t.bonus && totalFoeHp(b, me) > 15) add({ a: 'innate' }, me.innate.uses > 0 ? 5 : 3, { T: me }, 'bonus');
   // Wholeness of Body (Open Hand monk): a Bonus Action heal when hurt.
@@ -791,6 +824,10 @@ export function aiNext(b, id) {
     }
   }
 
+  // Quivering Palm: end the vibrations for 10d12 Force damage, in place of one attack.
+  const qv = me.quiveringPalm && canAttack(t) && b.effects.find((e) => e.type === 'quiver' && e.by === id);
+  if (qv && b.creatures[qv.target] && !down(b.creatures[qv.target])) return { a: 'quiver' };
+
   // Held fast: break free if there's nothing better to do from here.
   const web = condOf(me, 'restrained');
   const grab = condOf(me, 'grappled');
@@ -858,6 +895,11 @@ export function aiNext(b, id) {
     if (w.length && (foes.filter((f) => !down(f)).length > 1 || w.some((o) => o.why.T.hp > 6))) return { a: 'surge' };
   }
 
+  // Boon of Dimensional Travel: after the Attack or Magic action, Blink Steps out of reach.
+  if (me.blinkSteps && (t.attackAction || t.magicUsed) && !t.blinked && RANGED_STYLES.includes(style) && threatened(b, me) && !canAttack(t)) {
+    const s = mistySpot(b, me);
+    if (s) return { a: 'blink', x: s.x, y: s.y };
+  }
   // Done attacking and still in reach: step back (Cunning Action Disengage first).
   if (RANGED_STYLES.includes(style) && threatened(b, me) && t.moveLeft >= 5) {
     const free = b.effects.some((e) => e.type === 'disengage' && e.by === id);
@@ -888,6 +930,8 @@ function canAttackSomeone(b, me) {
   return weaponOptions(b, me).length > 0;
 }
 
+// The Vampire's Bite needs a willing, Grappled, Incapacitated or Restrained target.
+const drainOk = (me, T) => !me.drain.needsHeld || incap(T) || hasCond(T, 'restrained') || (T.conds || []).some((x) => x.id === 'grappled' && x.by === me.id);
 // Chill Touch, Infernal Sting and the mummy's curse stop all healing for a while.
 function cantHeal(b, F) { return b.effects.some((e) => e.type === 'grave' && e.target === F.id); }
 
@@ -939,6 +983,9 @@ export function coach(b, id) {
       else if (s.kind === 'save' && intent.targets?.length > 1) text = `Cast ${s.name} on ${intent.targets.map((x) => b.creatures[x]?.name).join(', ')}: each makes a DC ${o?.why.dc} ${s.save.toUpperCase()} save (${lvl}).`;
       else if (s.kind === 'save') text = `Cast ${s.name} on ${T.name}: it must beat DC ${o?.why.dc} on a ${s.save.toUpperCase()} save, so ${Math.round((o?.why.pFail || 0) * 100)}% it fails (${lvl}).`;
       else if (s.kind === 'word') text = `Speak ${s.name} at ${(intent.targets || []).map((x) => b.creatures[x]?.name).join(', ')} (${lvl}, a Bonus Action): on a failed Charisma save, the weakest die and the rest are Blinded or Stunned.`;
+      else if (s.kind === 'pwkill') text = T.hp <= 100 ? `Cast ${s.name} on ${T.name}: with ${T.hp} Hit Points it dies, no save (${lvl}).` : `Cast ${s.name} on ${T.name}: it has more than 100 Hit Points, so it takes 12d12 Psychic damage (${lvl}).`;
+      else if (s.kind === 'massheal' && s.pool) text = `Cast ${s.name}: ${s.pool} Hit Points shared among ${(intent.targets || []).map((x) => b.creatures[x]?.name).join(', ')} (${lvl}).`;
+      else if (s.wind) text = `Cast ${s.name}: a melee spell attack against ${(intent.targets || []).map((x) => b.creatures[x]?.name).join(', ')}, then you teleport next to one of them (${lvl}).`;
       else if (s.kind === 'pwstun') text = `Cast ${s.name} on ${T.name}: with ${T.hp} Hit Points it is Stunned, no save to stop it (${lvl}).`;
       else if (s.kind === 'missile') text = `Cast ${s.name} at ${T.name}: it never misses (${lvl}).`;
       else if (s.kind === 'buff') text = `Cast ${s.name} on your allies (${lvl}).${conc}`;
@@ -998,6 +1045,9 @@ export function coach(b, id) {
     case 'lay': text = intent.cure ? `Use Lay on Hands to end ${T.name}'s condition (5 from the pool each).` : `${T.name} needs help: use Lay on Hands (Bonus Action) to restore ${intent.amount} Hit Points.`; break;
     case 'sacred': text = 'Use Channel Divinity: Sacred Weapon as you attack: your Charisma modifier is added to your melee attack rolls.'; break;
     case 'remark': text = `Your mark's creature is down: move it to ${T.name} (Bonus Action).`; break;
+    case 'nimbus': text = 'Call up Holy Nimbus (Bonus Action): enemies that start their turn near you take Radiant damage.'; break;
+    case 'quiver': text = `End your Quivering Palm vibrations in place of one attack: 10d12 Force damage, half on a Constitution save.`; break;
+    case 'blink': text = 'Use Blink Steps: teleport up to 30 feet out of reach after your action.'; break;
     case 'innate': text = 'Use Innate Sorcery (Bonus Action): +1 to your spell save DC and Advantage on your Sorcerer spell attacks for 1 minute.'; break;
     case 'wholeness': text = `Use Wholeness of Body (Bonus Action): heal 1d${String(me.martialDie || '1d6').split('d')[1]} + your Wisdom modifier.`; break;
     case 'tireless': text = 'Use Tireless (Magic action): 1d8 + your Wisdom modifier in Temporary Hit Points.'; break;

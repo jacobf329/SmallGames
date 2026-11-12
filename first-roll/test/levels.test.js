@@ -12,9 +12,9 @@ import { setTurn, dice, last } from './helpers.js';
 const spec = (cls, extra = {}, level = 4) => validateSpec({ ...defaultSpec(cls), ...extra }, { level });
 
 test('Ability Score Improvement levels: 4, 8, 12, 16 and 19 is the boon; fighters and rogues get extra', () => {
-  assert.deepEqual(asiLevels('wizard', 20), [4, 8, 12, 16]);
-  assert.deepEqual(asiLevels('fighter', 20), [4, 6, 8, 12, 14, 16]);
-  assert.deepEqual(asiLevels('rogue', 20), [4, 8, 10, 12, 16]);
+  assert.deepEqual(asiLevels('wizard', 20), [4, 8, 12, 16, 19]);
+  assert.deepEqual(asiLevels('fighter', 20), [4, 6, 8, 12, 14, 16, 19]);
+  assert.deepEqual(asiLevels('rogue', 20), [4, 8, 10, 12, 16, 19]);
   assert.ok(levelChoices('wizard', 4).includes('feat'));
   assert.ok(!levelChoices('wizard', 5).includes('feat'));
   assert.ok(levelChoices('fighter', 6).includes('feat'));
