@@ -20,6 +20,9 @@ function wrap(name) {
   src = src.replace(/^import\s*\{([\s\S]*?)\}\s*from\s*'\.\/(\w+)\.js';?/gm,
     (_, names, mod) => `const {${names.replace(/\s+as\s+/g, ': ')}} = __mods.${mod};`);
   src = src.replace(/^export\s*\{([^}]*)\};?/gm, (_, names) => { exported.push(...names.split(',').map(n => n.trim()).filter(Boolean)); return ''; });
+  // "export const A = 1, B = 2" would only export A here: refuse it.
+  const multi = src.match(/^export\s+(const|let)\s+\w+\s*=[^;\n]*,\s*\w+\s*=/m);
+  if (multi) throw new Error(`${name}.js: split "${multi[0].slice(0, 60)}…" into one export per line`);
   src = src.replace(/^export\s+(const|let|function|class|async function)\s+(\w+)/gm, (_, kw, id) => { exported.push(id); return `${kw} ${id}`; });
   if (/^\s*(import|export)\s/m.test(src)) throw new Error(`${name}.js has syntax the bundler does not handle`);
   return `/* ===== ${name}.js ===== */\n__mods.${name} = (() => {\n${src}\nreturn { ${[...new Set(exported)].join(', ')} };\n})();\n`;

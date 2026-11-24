@@ -166,7 +166,7 @@ net.on('players', m => {
   const before = me()?.gold;
   G.players = m.list;
   renderHud();
-  if (me()?.gold !== before) renderSheet();
+  renderSheet();      // cheap: it only rebuilds when what it shows changed (gold, skills, levels)
   if (!$('#team').classList.contains('hidden')) renderTeam();
 });
 net.on('nope', m => { toast(m.msg, 'warn'); sfx.nope(); });

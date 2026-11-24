@@ -80,7 +80,9 @@ export const TREE_IDS = Object.keys(TREES);
 // costs n points, so maxing a tree (5) costs 15 and a whole game pays for
 // about two. `mastery[tree]` holds the level, 0..5.
 export const MAX_MASTERY = 5;
-export const SP_START = 1, SP_PER_WAVE = 1, SP_BOSS_BONUS = 1;
+export const SP_START = 1;
+export const SP_PER_WAVE = 1;
+export const SP_BOSS_BONUS = 1;
 export const skillCost = lvl => lvl + 1;                 // cost of going from lvl to lvl+1
 export const masteryLevel = lvl => lvl || 0;
 export const MASTERY_DISCOUNT = 0.10;    // from level 2: tower upgrades in that tree cost 10% less
