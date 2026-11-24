@@ -124,6 +124,7 @@ input:focus { border-color: var(--a); }
 .tm .top b { flex: 1; }
 .tm .gift { display: flex; gap: 6px; }
 
+.panel.wide { max-width: 640px; }
 .overlay { position: fixed; inset: 0; background: rgba(10, 6, 4, .7); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
 
 /* Landscape / desktop: the overlay slides in from the right instead. */
@@ -217,6 +218,11 @@ input:focus { border-color: var(--a); }
   <label class="check"><input type="checkbox" id="opt-sound" checked> Sound</label>
   <label class="check"><input type="checkbox" id="opt-ranges"> Show all tower ranges</label>
   <a href="#" class="btn ghost" data-leave>LEAVE KITCHEN</a>
+</div></div>
+
+<div id="newfood" class="overlay hidden"><div class="panel wide">
+  <div id="newfood-body"></div>
+  <button id="newfood-ok" class="btn big">GOT IT</button>
 </div></div>
 
 <div id="results" class="overlay hidden"><div class="panel">
@@ -686,7 +692,7 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     diff, wave: 0, phase: 'build', buildT: BUILD_TIME(1), lives: D.lives, maxLives: D.lives,
     endless: false, speed: 1, enemies: [], towers: new Map(), players: P, events: [],
     plan: null, waveT: 0, spawnI: 0, lastFams: [], towersVer: 1, playersVer: 1, nextId: 1,
-    warn: null, fams: [], time: 0,
+    warn: null, fams: [], time: 0, seen: new Set(), next: null, preview: null,
   };
   const n = () => P.size;
   const ev = e => g.events.push(e);
@@ -850,12 +856,29 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     g.phase = 'wave';
     g.waveT = 0; g.spawnI = 0;
     for (const p of P.values()) p.ready = false;
-    g.plan = planWave({ w: g.wave, n: n(), towers: [...g.towers.values()], lastFams: g.lastFams, rng });
+    g.plan = g.next && g.next.n === g.wave ? g.next.plan : planWave({ w: g.wave, n: n(), towers: [...g.towers.values()], lastFams: g.lastFams, rng });
+    g.next = null;
     g.lastFams = g.plan.fams;
     g.fams = g.plan.fams;
     g.warn = g.plan.warn;
     g.playersVer++;
     ev({ t: 'wave', n: g.wave, fams: g.plan.fams, warn: g.plan.warn, boss: g.plan.boss, bossIntro: g.plan.bossIntro, doors: doorsFor(n()) });
+  }
+
+  // The next wave is decided as the build break starts, so everyone can see
+  // what's coming (and meet any food they haven't fought yet) before it lands.
+  function planNext() {
+    const w = g.wave + 1;
+    const plan = planWave({ w, n: n(), towers: [...g.towers.values()], lastFams: g.lastFams, rng });
+    g.next = { n: w, plan };
+    const types = new Set();
+    const add = id => { if (types.has(id)) return; types.add(id); const sp = ENEMIES[id].split; if (sp) add(sp.into); };
+    for (const s of plan.spawns) add(s.type);
+    // Cards for food nobody has met yet (split-off pieces are covered by their parent's card).
+    const parents = [...types].filter(id => !g.seen.has(id) && ![...types].some(o => ENEMIES[o].split?.into === id));
+    for (const id of types) g.seen.add(id);
+    g.preview = { n: w, fams: plan.fams, warn: plan.warn, boss: plan.boss, bossIntro: plan.bossIntro, newFoods: parents };
+    ev({ t: 'preview', ...g.preview });
   }
 
   function waveCleared() {
@@ -876,10 +899,12 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (w === WAVES && !g.endless) { g.phase = 'won'; ev({ t: 'won', n: w }); return; }
     g.phase = 'build';
     g.buildT = BUILD_TIME(w + 1);
+    planNext();
   }
   g.continueEndless = () => {
     if (g.phase !== 'won') return;
     g.endless = true; g.phase = 'build'; g.buildT = BUILD_TIME(g.wave + 1);
+    planNext();
   };
 
   // ------------------------------------------------------------ enemies ----
@@ -1066,6 +1091,7 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (g.spawnI >= sp.length && g.enemies.length === 0) waveCleared();
   };
   g.startNow = () => { if (g.phase === 'build') startWave(); };
+  planNext();
 
   return g;
 }
@@ -1420,6 +1446,70 @@ const SKILL_CSS = `
 `;
 
 return { chipsHtml, skillsHtml, SKILL_CSS };
+})();
+
+/* ===== foodinfo.js ===== */
+__mods.foodinfo = (() => {
+// Leftover Uprising - "new food!" cards. Everything on a card is worked out
+// from the food's numbers in data.js, so a balance change can never leave a
+// card saying something false. Shared by the solo page, the TV and the phones.
+
+const { ENEMIES } = __mods.data;
+
+const DT = { heat: ['🔥', 'Heat'], chop: ['🔪', 'Chop'], cold: ['❄️', 'Cold'], sticky: ['🍯', 'Sticky'], basic: ['🍽️', 'Prep Stations'] };
+const pct = v => `${Math.round(v * 100)}%`;
+
+function foodInfo(id) {
+  const e = ENEMIES[id];
+  const traits = [], weak = [], resist = [];
+  if (e.boss) traits.push(`Boss: costs ${e.leak} lives if it escapes. Freezes and stuns barely hold it`);
+  if (e.air) traits.push('Flies: Chop and Sticky towers can’t reach it. Heat, Cold and Prep Stations can');
+  if (e.armour) traits.push(`Armour ${e.armour}: knocks ${e.armour} off every hit, so big hits work best. The Meat Tenderizer ignores it`);
+  if (e.regen) traits.push(`Regrows ${e.regen} health a second, but not while it’s burning (Heat)`);
+  if (e.frozen) traits.push('Frozen solid: it can’t be slowed or frozen');
+  if (e.greasy) traits.push('Greasy: syrup slides right off');
+  if (e.split) traits.push(`Splits into ${e.split.n} ${ENEMIES[e.split.into].name.toLowerCase()}${e.split.n > 1 ? 's' : ''} when it pops`);
+  if (e.speed >= 1.6) traits.push('Fast: it’s through the kitchen before slow towers get a second shot');
+  else if (e.speed <= 0.65 && !e.boss) traits.push('Slow and tough');
+  if (!e.boss && e.leak > 1) traits.push(`Costs ${e.leak} lives if it escapes`);
+  for (const [dt, v] of Object.entries(e.res)) {
+    const [icon, name] = DT[dt] || ['', dt];
+    if (v === 0) resist.push(`${icon} ${name}: immune`);
+    else if (v < 1) resist.push(`${icon} ${name} (takes only ${pct(v)})`);
+    else if (v > 1) weak.push(`${icon} ${name} (takes ${pct(v)})`);
+  }
+  if (e.armour >= 15) weak.push('🔨 Meat Tenderizer (ignores armour)');
+  if (e.regen && !(e.res.heat < 1)) weak.push('🔥 Burning stops it regrowing');
+  return { id, icon: e.icon, name: e.name, hp: e.hp, traits, weak, resist };
+}
+
+function foodCardHtml(id) {
+  const f = foodInfo(id);
+  const list = (title, items, cls) => items.length ? `<div class="fc-list ${cls}"><b>${title}</b>${items.map(t => `<span>${t}</span>`).join('')}</div>` : '';
+  return `<div class="fc">
+    <div class="fc-top"><span class="fc-icon">${f.icon === '🟢' ? '<i class="fc-pea"></i>' : f.icon}</span><div><b class="fc-name">${f.name}</b><small>${f.hp} health</small></div></div>
+    ${list('Traits', f.traits, 'tr')}${list('Weak to', f.weak, 'wk')}${list('Resists', f.resist, 'rs')}
+    ${!f.traits.length && !f.weak.length && !f.resist.length ? '<div class="fc-list"><span>No tricks: anything hurts it.</span></div>' : ''}
+  </div>`;
+}
+
+// A popup body for one or more new foods.
+function newFoodHtml(ids, wave) {
+  return `<div class="fc-head"><span class="fc-kicker">New food${ids.length > 1 ? 's' : ''} coming${wave ? ` in wave ${wave}` : ''}</span></div>
+    <div class="fc-grid">${ids.map(foodCardHtml).join('')}</div>`;
+}
+
+const FOOD_CSS = `
+.fc-head{text-align:center;margin-bottom:10px}.fc-kicker{display:inline-block;background:#ffd23f;color:#2a1206;border-radius:99px;padding:4px 14px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;font-size:.8rem}
+.fc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.fc{background:#33241b;border:1px solid rgba(255,240,220,.14);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px;color:#fff4e6;text-align:left}
+.fc-top{display:flex;align-items:center;gap:12px}.fc-icon{font-size:2.6rem;line-height:1}.fc-name{display:block;font-size:1.2rem}.fc-top small{color:#c9b39a}
+.fc-pea{display:inline-block;width:1.6rem;height:1.6rem;border-radius:50%;background:#6cc04a;border:2px solid #3d7a25}
+.fc-list{display:flex;flex-direction:column;gap:3px;font-size:.86rem;line-height:1.3}.fc-list b{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:#a08870}
+.fc-list.wk span{color:#9fe6a8}.fc-list.rs span{color:#ffb0a8}.fc-list.tr span{color:#f3e2cc}
+`;
+
+return { foodInfo, foodCardHtml, newFoodHtml, FOOD_CSS };
 })();
 
 /* ===== rtc.js ===== */
@@ -2125,6 +2215,7 @@ __mods.main = (() => {
 const { TICK, TOWERS, TREES, MAX_TOWERS, SELL_BACK, MASTERY_DISCOUNT,
   masteryLevel, buildable, doorsFor } = __mods.data;
 const { chipsHtml, skillsHtml, SKILL_CSS } = __mods.skillsui;
+const { newFoodHtml, FOOD_CSS } = __mods.foodinfo;
 const { createServer } = __mods.session;
 const { Host, LocalTransport, RtcTransport, normCode, onlineSupported } = __mods.rtc;
 const { Net } = __mods.net;
@@ -2145,7 +2236,7 @@ const G = window.LU = {
   fams: [], sel: null, skillsOpen: false, showRanges: false, endless: false, spd: 1,
 };
 const net = new Net();
-document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS }));
+document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS + FOOD_CSS }));
 const renderer = G.renderer = new Renderer($('#view'));
 
 // ================================ screens ================================
@@ -2320,7 +2411,12 @@ function onEvent(e) {
       sfx.wave();
       toast(`Wave ${e.n}: ${e.fams.map(f => FAM_NAMES[f] || f).join(', ')}`);
       if (e.bossIntro) { sfx.boss(); toast(e.bossIntro, 'boss', 6000); }
-      if (e.warn) toast(e.warn, 'warn', 6000);
+      break;
+    }
+    case 'preview': {
+      // The next wave is decided as the break starts: warn now, and introduce new food.
+      if (e.warn) toast(e.warn, 'warn', 7000);
+      if (e.newFoods?.length) showNewFood(e.newFoods, e.n);
       break;
     }
     case 'cleared': sfx.coin(); toast(`Wave ${e.n} cleared: +${e.bonus} gold${e.team ? ` (+${e.team} from registers)` : ''}, +${e.sp} skill point${e.sp > 1 ? 's' : ''}`, 'good'); break;
@@ -2328,6 +2424,19 @@ function onEvent(e) {
     case 'speed': toast(e.speed === 2 ? '⏩ Double speed: everyone agreed' : `▶ Back to normal speed (${nameOf(e.by)})`); break;
   }
 }
+
+// =============================== new food ================================
+// One card per food the first time it's coming. If cards are already up,
+// the new ones join them.
+let nfQueue = [], nfWave = 0;
+function showNewFood(ids, wave) {
+  const open = !$('#newfood').classList.contains('hidden');
+  nfQueue = open ? [...nfQueue, ...ids.filter(i => !nfQueue.includes(i))] : ids.slice();
+  nfWave = wave;
+  $('#newfood-body').innerHTML = newFoodHtml(nfQueue, nfWave);
+  $('#newfood').classList.remove('hidden');
+}
+$('#newfood-ok').addEventListener('click', () => { $('#newfood').classList.add('hidden'); nfQueue = []; });
 
 // ================================== toasts ===============================
 function toast(text, kind = '', ms = 3500) {

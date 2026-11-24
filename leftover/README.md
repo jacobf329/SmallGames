@@ -59,6 +59,7 @@ js/director.js  builds waves for the team size and reacts to the team's mix
 js/game.js      the simulation: towers, food, statuses, combos, gold, lives
 js/ai.js        AI cooks (lobby fillers, and the balance test's players)
 js/session.js   the host: lobby, snapshots to phones, requests from phones
+js/foodinfo.js  "new food" cards: traits, weaknesses, resistances (from data.js)
 js/skillsui.js  skill tree panel (shared with the Party Pad phone)
 js/main.js      phone client: screens, input, sheet, team panel, HUD
 js/render.js    2D canvas renderer (placeholder art lives here)

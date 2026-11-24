@@ -5,6 +5,7 @@
 import { TICK, TOWERS, TREES, MAX_TOWERS, SELL_BACK, MASTERY_DISCOUNT,
   masteryLevel, buildable, doorsFor } from './data.js';
 import { chipsHtml, skillsHtml, SKILL_CSS } from './skillsui.js';
+import { newFoodHtml, FOOD_CSS } from './foodinfo.js';
 import { createServer } from './session.js';
 import { Host, LocalTransport, RtcTransport, normCode, onlineSupported } from './rtc.js';
 import { Net } from './net.js';
@@ -25,7 +26,7 @@ const G = window.LU = {
   fams: [], sel: null, skillsOpen: false, showRanges: false, endless: false, spd: 1,
 };
 const net = new Net();
-document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS }));
+document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS + FOOD_CSS }));
 const renderer = G.renderer = new Renderer($('#view'));
 
 // ================================ screens ================================
@@ -200,7 +201,12 @@ function onEvent(e) {
       sfx.wave();
       toast(`Wave ${e.n}: ${e.fams.map(f => FAM_NAMES[f] || f).join(', ')}`);
       if (e.bossIntro) { sfx.boss(); toast(e.bossIntro, 'boss', 6000); }
-      if (e.warn) toast(e.warn, 'warn', 6000);
+      break;
+    }
+    case 'preview': {
+      // The next wave is decided as the break starts: warn now, and introduce new food.
+      if (e.warn) toast(e.warn, 'warn', 7000);
+      if (e.newFoods?.length) showNewFood(e.newFoods, e.n);
       break;
     }
     case 'cleared': sfx.coin(); toast(`Wave ${e.n} cleared: +${e.bonus} gold${e.team ? ` (+${e.team} from registers)` : ''}, +${e.sp} skill point${e.sp > 1 ? 's' : ''}`, 'good'); break;
@@ -208,6 +214,19 @@ function onEvent(e) {
     case 'speed': toast(e.speed === 2 ? '⏩ Double speed: everyone agreed' : `▶ Back to normal speed (${nameOf(e.by)})`); break;
   }
 }
+
+// =============================== new food ================================
+// One card per food the first time it's coming. If cards are already up,
+// the new ones join them.
+let nfQueue = [], nfWave = 0;
+function showNewFood(ids, wave) {
+  const open = !$('#newfood').classList.contains('hidden');
+  nfQueue = open ? [...nfQueue, ...ids.filter(i => !nfQueue.includes(i))] : ids.slice();
+  nfWave = wave;
+  $('#newfood-body').innerHTML = newFoodHtml(nfQueue, nfWave);
+  $('#newfood').classList.remove('hidden');
+}
+$('#newfood-ok').addEventListener('click', () => { $('#newfood').classList.add('hidden'); nfQueue = []; });
 
 // ================================== toasts ===============================
 function toast(text, kind = '', ms = 3500) {

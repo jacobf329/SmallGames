@@ -29,7 +29,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     diff, wave: 0, phase: 'build', buildT: BUILD_TIME(1), lives: D.lives, maxLives: D.lives,
     endless: false, speed: 1, enemies: [], towers: new Map(), players: P, events: [],
     plan: null, waveT: 0, spawnI: 0, lastFams: [], towersVer: 1, playersVer: 1, nextId: 1,
-    warn: null, fams: [], time: 0,
+    warn: null, fams: [], time: 0, seen: new Set(), next: null, preview: null,
   };
   const n = () => P.size;
   const ev = e => g.events.push(e);
@@ -193,12 +193,29 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     g.phase = 'wave';
     g.waveT = 0; g.spawnI = 0;
     for (const p of P.values()) p.ready = false;
-    g.plan = planWave({ w: g.wave, n: n(), towers: [...g.towers.values()], lastFams: g.lastFams, rng });
+    g.plan = g.next && g.next.n === g.wave ? g.next.plan : planWave({ w: g.wave, n: n(), towers: [...g.towers.values()], lastFams: g.lastFams, rng });
+    g.next = null;
     g.lastFams = g.plan.fams;
     g.fams = g.plan.fams;
     g.warn = g.plan.warn;
     g.playersVer++;
     ev({ t: 'wave', n: g.wave, fams: g.plan.fams, warn: g.plan.warn, boss: g.plan.boss, bossIntro: g.plan.bossIntro, doors: doorsFor(n()) });
+  }
+
+  // The next wave is decided as the build break starts, so everyone can see
+  // what's coming (and meet any food they haven't fought yet) before it lands.
+  function planNext() {
+    const w = g.wave + 1;
+    const plan = planWave({ w, n: n(), towers: [...g.towers.values()], lastFams: g.lastFams, rng });
+    g.next = { n: w, plan };
+    const types = new Set();
+    const add = id => { if (types.has(id)) return; types.add(id); const sp = ENEMIES[id].split; if (sp) add(sp.into); };
+    for (const s of plan.spawns) add(s.type);
+    // Cards for food nobody has met yet (split-off pieces are covered by their parent's card).
+    const parents = [...types].filter(id => !g.seen.has(id) && ![...types].some(o => ENEMIES[o].split?.into === id));
+    for (const id of types) g.seen.add(id);
+    g.preview = { n: w, fams: plan.fams, warn: plan.warn, boss: plan.boss, bossIntro: plan.bossIntro, newFoods: parents };
+    ev({ t: 'preview', ...g.preview });
   }
 
   function waveCleared() {
@@ -219,10 +236,12 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (w === WAVES && !g.endless) { g.phase = 'won'; ev({ t: 'won', n: w }); return; }
     g.phase = 'build';
     g.buildT = BUILD_TIME(w + 1);
+    planNext();
   }
   g.continueEndless = () => {
     if (g.phase !== 'won') return;
     g.endless = true; g.phase = 'build'; g.buildT = BUILD_TIME(g.wave + 1);
+    planNext();
   };
 
   // ------------------------------------------------------------ enemies ----
@@ -409,6 +428,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (g.spawnI >= sp.length && g.enemies.length === 0) waveCleared();
   };
   g.startNow = () => { if (g.phase === 'build') startWave(); };
+  planNext();
 
   return g;
 }
