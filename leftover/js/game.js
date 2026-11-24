@@ -8,7 +8,7 @@
 
 import {
   TOWERS, ENEMIES, DIFFICULTY, PATH_GEO, WAVES, START_GOLD, WAVE_BONUS, BUILD_TIME, EARLY_BONUS,
-  MAX_TOWERS, SELL_BACK, TREE_IDS, MASTERY_DISCOUNT, MASTERY_POWER, masteryLevel, buildable,
+  MAX_TOWERS, SELL_BACK, TREE_IDS, MASTERY_DISCOUNT, MAX_MASTERY, SP_START, SP_PER_WAVE, SP_BOSS_BONUS, skillCost, masteryLevel, buildable,
   pathPoint, teamScale, waveHpMult, doorsFor,
 } from './data.js';
 import { planWave } from './director.js';
@@ -20,7 +20,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
   const P = new Map();
   for (const p of players) {
     P.set(p.id, {
-      id: p.id, name: p.name, color: p.color, ai: !!p.ai, gold: START_GOLD * D.gold,
+      id: p.id, name: p.name, color: p.color, ai: !!p.ai, gold: START_GOLD * D.gold, sp: SP_START,
       mastery: Object.fromEntries(TREE_IDS.map(t => [t, 0])),
       stats: { dmg: 0, kills: 0, combos: 0, built: 0 }, ready: false,
     });
@@ -39,6 +39,11 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
   // ----------------------------------------------------- service auras ----
   // Each tower's boost from Service towers of a DIFFERENT tree in range.
   function recomputeBuffs() {
+    for (const t of g.towers.values()) {
+      const tree = TOWERS[t.kind].tree;
+      t.lvl = tree ? (P.get(t.owner)?.mastery[tree] || 0) : 0;
+      t.rangeB = t.lvl >= 5 ? 0.3 : 0;
+    }
     const svc = [...g.towers.values()].filter(t => TOWERS[t.kind].buff);
     for (const t of g.towers.values()) {
       const def = TOWERS[t.kind];
@@ -46,8 +51,8 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
       if (def.dmg) for (const s of svc) {
         const sd = TOWERS[s.kind];
         if (def.tree === 'service') continue;
-        if (Math.hypot(s.x - t.x, s.y - t.y) > sd.range + 0.01) continue;
-        buff += sd.buff; haste += sd.haste || 0;
+        if (Math.hypot(s.x - t.x, s.y - t.y) > sd.range + s.rangeB + 0.01) continue;
+        buff += sd.buff + (s.lvl >= 4 ? 0.05 : 0) + (s.lvl >= 5 ? 0.10 : 0); haste += sd.haste || 0;
       }
       t.buff = Math.min(0.75, buff); t.haste = Math.min(0.35, haste);
     }
@@ -58,13 +63,12 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
   function costFor(p, kind) {
     const def = TOWERS[kind];
     const lvl = def.tree ? masteryLevel(p.mastery[def.tree]) : 0;
-    return Math.round(def.cost * (1 - MASTERY_DISCOUNT * lvl));
+    return Math.round(def.cost * (lvl >= 2 ? 1 - MASTERY_DISCOUNT : 1));
   }
   g.costFor = (pid, kind) => costFor(P.get(pid), kind);
 
-  function spend(p, amount, tree) {
+  function spend(p, amount) {
     p.gold -= amount;
-    if (tree) p.mastery[tree] += amount;
     g.playersVer++;
   }
 
@@ -125,6 +129,18 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
         ev({ t: 'gift', from: pid, to: to.id, amt });
         return null;
       }
+      case 'skill': {
+        if (!TREE_IDS.includes(m.tree)) return 'no such tree';
+        const lvl = p.mastery[m.tree];
+        if (lvl >= MAX_MASTERY) return 'already mastered';
+        const c = skillCost(lvl);
+        if (p.sp < c) return `needs ${c} skill points`;
+        p.sp -= c; p.mastery[m.tree] = lvl + 1;
+        recomputeBuffs();
+        g.playersVer++;
+        ev({ t: 'skill', by: pid, tree: m.tree, lvl: lvl + 1 });
+        return null;
+      }
       case 'ready': {
         if (g.phase !== 'build') return 'wave already running';
         p.ready = !p.ready; g.playersVer++;
@@ -148,7 +164,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
   };
   g.addPlayer = p => {
     if (P.has(p.id)) return;
-    P.set(p.id, { id: p.id, name: p.name, color: p.color, ai: !!p.ai, gold: START_GOLD * D.gold * (1 + g.wave * 0.25),
+    P.set(p.id, { id: p.id, name: p.name, color: p.color, ai: !!p.ai, gold: START_GOLD * D.gold * (1 + g.wave * 0.25), sp: SP_START + g.wave,
       mastery: Object.fromEntries(TREE_IDS.map(t => [t, 0])), stats: { dmg: 0, kills: 0, combos: 0, built: 0 }, ready: false });
     g.playersVer++;
   };
@@ -175,15 +191,18 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
   function waveCleared() {
     const w = g.wave;
     const bonus = WAVE_BONUS(w) * D.gold;
+    const incomeOf = t => (TOWERS[t.kind].income || 0) * (t.lvl >= 1 ? 1.1 : 1) * (t.lvl >= 4 ? 1.5 : 1);
     let team = 0;
     for (const t of g.towers.values()) team += TOWERS[t.kind].teamIncome || 0;
+    const sp = SP_PER_WAVE + (g.plan?.boss ? SP_BOSS_BONUS : 0);
     for (const p of P.values()) {
       let inc = 0;
-      for (const t of g.towers.values()) if (t.owner === p.id) inc += TOWERS[t.kind].income || 0;
+      for (const t of g.towers.values()) if (t.owner === p.id) inc += incomeOf(t);
       p.gold += bonus + inc + team;
+      p.sp += sp;
     }
     g.playersVer++;
-    ev({ t: 'cleared', n: w, bonus: Math.round(bonus), team });
+    ev({ t: 'cleared', n: w, bonus: Math.round(bonus), team, sp });
     if (w === WAVES && !g.endless) { g.phase = 'won'; ev({ t: 'won', n: w }); return; }
     g.phase = 'build';
     g.buildT = BUILD_TIME(w + 1);
@@ -231,13 +250,14 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (e.dead) return;
     const ed = ENEMIES[e.type];
     const p = P.get(owner);
-    const lvl = p && def.tree ? masteryLevel(p.mastery[def.tree]) : 0;
-    const power = (1 + MASTERY_POWER * lvl) * (1 + (t.buff || 0));
+    const lvl = t.lvl || 0;
+    const power = (1 + (lvl >= 1 ? 0.1 : 0) + (lvl >= 5 ? 0.2 : 0)) * (1 + (t.buff || 0));
     let res = ed.res[def.dtype] ?? 1, armour = ed.armour;
     // Solo, bosses don't hard-counter your one strategy.
     if (P.size === 1 && ed.fam === 'boss') { res = 1 - (1 - res) * 0.4; armour *= 0.5; }
     let dmg = base * res * power;
     // Combos: they only happen when two different trees work on the same food.
+    if (def.dtype === 'chop' && def.tree === 'chop' && lvl >= 4 && rng() < 0.2) dmg *= 2;   // Razor Edge
     if (def.dtype === 'chop' && e.freezeT > 0) {
       dmg *= SHATTER; e.freezeT = 0;
       combo(e, 'Shatter!', owner);
@@ -256,19 +276,20 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (p) p.stats.dmg += dmg;
     // Effects
     const bossK = ed.boss ? 0.3 : 1;
+    const heatL4 = def.tree === 'heat' && lvl >= 4, coldK = def.tree === 'cold' && lvl >= 4 ? 1.4 : 1, gooey = def.tree === 'sticky' && lvl >= 4 ? 1 : 0;
     if (def.burn && (ed.res.heat ?? 1) > 0.15) {
-      const dps = def.burn.dps * power * (ed.res.heat ?? 1);
+      const dps = def.burn.dps * power * (ed.res.heat ?? 1) * (heatL4 ? 1.5 : 1);
       if (dps >= e.burnDps || e.burnT <= 0) { e.burnDps = dps; e.burnBy = owner; }
-      e.burnT = Math.max(e.burnT, def.burn.t);
+      e.burnT = Math.max(e.burnT, def.burn.t + (heatL4 ? 1 : 0));
     }
-    if (def.slow && !ed.frozen) { e.slowT = Math.max(e.slowT, def.slow.t); e.slowF = Math.min(e.slowF, def.slow.f); e.chilled = def.slow.t; }
+    if (def.slow && !ed.frozen) { e.slowT = Math.max(e.slowT, def.slow.t * coldK); e.slowF = Math.min(e.slowF, def.slow.f); e.chilled = def.slow.t; }
     // Freezes and stuns can't be chained forever: a short immunity follows each.
     if (e.ccImm <= 0 && ((def.freeze && !ed.frozen) || def.stun)) {
-      const dur = Math.max(def.freeze && !ed.frozen ? def.freeze : 0, def.stun || 0) * bossK;
+      const dur = Math.max(def.freeze && !ed.frozen ? def.freeze * coldK : 0, def.stun || 0) * bossK;
       if (def.freeze && !ed.frozen) e.freezeT = Math.max(e.freezeT, dur); else e.stunT = Math.max(e.stunT, dur);
       e.ccImm = dur + (ed.boss ? 3 : 0.7);
     }
-    if (def.sticky && !ed.greasy && !ed.air) e.stickyT = Math.max(e.stickyT, def.sticky);
+    if (def.sticky && !ed.greasy && !ed.air) e.stickyT = Math.max(e.stickyT, def.sticky + gooey);
     if (e.hp <= 0) kill(e, owner);
   }
   function combo(e, name, by) {
@@ -283,7 +304,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (e.dead) return false;
     if (ENEMIES[e.type].air && !def.air) return false;
     const [x, y] = posOf(e);
-    return Math.hypot(x - (t.x + 0.5), y - (t.y + 0.5)) <= def.range;
+    return Math.hypot(x - (t.x + 0.5), y - (t.y + 0.5)) <= def.range + (t.rangeB || 0);
   }
   function pickTarget(t, def, list) {
     let best = null, bv = -Infinity;
@@ -320,7 +341,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
           if (e.dead || (ENEMIES[e.type].air && !def.air)) continue;
           const [x, y] = posOf(e);
           const dd = Math.hypot(x - tx, y - ty);
-          if (e === target || dd <= def.splash) hit(e, t, def, e === target ? def.dmg : def.dmg * 0.6, t.owner);
+          if (e === target || dd <= def.splash * (def.tree === 'sticky' && t.lvl >= 4 ? 1.3 : 1)) hit(e, t, def, e === target ? def.dmg : def.dmg * 0.6, t.owner);
         }
       } else hit(target, t, def, def.dmg, t.owner);
     }

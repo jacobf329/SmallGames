@@ -5,7 +5,7 @@
 // Each cook settles on a main tree (the one the team has least of) and
 // a backup, builds Prep Stations on the best free spots, and upgrades.
 
-import { TOWERS, TREE_IDS, PATH_GEO, PATHS, COLS, ROWS, buildable, doorsFor, masteryLevel, MAX_TOWERS } from './data.js';
+import { TOWERS, TREE_IDS, PATH_GEO, PATHS, COLS, ROWS, buildable, doorsFor, MAX_TOWERS, MAX_MASTERY, skillCost } from './data.js';
 
 const FIRST = { heat: 'grill', chop: 'cleaver', cold: 'vent', sticky: 'syrup', service: 'tipjar' };
 const FORK = { heat: ['oven', 'wok'], chop: ['mallet', 'blender'], cold: ['nitro', 'icecream'], sticky: ['gum', 'grater'], service: ['waiter', 'register'] };
@@ -64,6 +64,15 @@ export function createCook(game, pid, { tree = null, seed = Math.random() } = {}
     chooseTrees();
     const p = me(); if (!p) return;
     if (spotsN !== game.players.size) { spots = spotScores(game.players.size); spotsN = game.players.size; }
+    // Skill points: the main tree first, then a second one.
+    for (let guard = 0; guard < 5; guard++) {
+      let t = p.mastery[main] < MAX_MASTERY ? main : null;
+      if (!t) {
+        backup ||= TREE_IDS.filter(x => x !== main && x !== 'service').sort(() => Math.random() - 0.5)[0];
+        t = p.mastery[backup] < MAX_MASTERY ? backup : null;
+      }
+      if (!t || p.sp < skillCost(p.mastery[t]) || game.act(pid, { t: 'skill', tree: t })) break;
+    }
     const mine = myTowers();
     const tree = main === 'service' && mine.filter(t => TOWERS[t.kind].tree === 'service').length >= 4 ? (backup ||= 'heat') : main;
 
@@ -99,7 +108,7 @@ export function createCook(game, pid, { tree = null, seed = Math.random() } = {}
       if (def.tier < 3) break;     // save up for the cheapest step rather than skipping ahead
     }
     // 4) Rich, or blocked on mastery: more towers.
-    if (p.gold > 400 || masteryLevel(p.mastery[tree]) < 2) build();
+    if (p.gold > 400 || p.mastery[tree] < 3) build();
   }
   return { step, get tree() { return main; } };
 }

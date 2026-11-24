@@ -11,10 +11,11 @@ music and a polish pass come next.
 - **Everyone starts the same.** Every tower begins as a blank **Prep Station**.
   You spend gold to send it down one of five trees: **Heat**, **Chop**,
   **Cold**, **Sticky**, **Service**. Anyone can buy anything.
-- **Mastery.** Gold you spend in a tree is your mastery there: cheaper upgrades
-  (4% per level), stronger towers (6% per level), and the tier-4 towers need
-  mastery 2. Nobody can afford to master everything, so cooks specialise by
-  choice.
+- **Skill tree.** Every cleared wave gives each cook a skill point (two after a
+  boss). Spend them on levels 1-5 in a tree: +10% damage, then tier 3 and 10%
+  cheaper upgrades, then tier 4, then a signature perk, then +20% damage and
+  range. Level n costs n points, so a game pays for about two mastered trees:
+  cooks specialise by choice. Gold only buys towers.
 - **The food adapts.** The director (`js/director.js`) watches the team's
   damage mix. Lean too hard on one type (over 40% of team damage) and the next
   waves bring food that shrugs it off, with a warning toast. Gentle solo, hard
@@ -58,6 +59,7 @@ js/director.js  builds waves for the team size and reacts to the team's mix
 js/game.js      the simulation: towers, food, statuses, combos, gold, lives
 js/ai.js        AI cooks (lobby fillers, and the balance test's players)
 js/session.js   the host: lobby, snapshots to phones, requests from phones
+js/skillsui.js  skill tree panel (shared with the Party Pad phone)
 js/main.js      phone client: screens, input, sheet, team panel, HUD
 js/render.js    2D canvas renderer (placeholder art lives here)
 js/rtc.js, net.js   online rooms (shared with Blockout Arena)

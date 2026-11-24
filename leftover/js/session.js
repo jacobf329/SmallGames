@@ -61,7 +61,7 @@ export function createServer({ code = 'SOLO' } = {}) {
   }
   function playersMsg() {
     return { t: 'players', list: [...game.players.values()].map(p => ({
-      id: p.id, name: p.name, color: p.color, ai: p.ai, gold: Math.floor(p.gold), ready: p.ready,
+      id: p.id, name: p.name, color: p.color, ai: p.ai, gold: Math.floor(p.gold), sp: p.sp, ready: p.ready,
       m: p.mastery, st: { dmg: Math.round(p.stats.dmg), kills: p.stats.kills, combos: p.stats.combos },
     })) };
   }
@@ -130,7 +130,7 @@ export function createServer({ code = 'SOLO' } = {}) {
           case 'go':          // host: start the next wave now
             if (me && me.id === hostId && game) game.startNow();
             break;
-          case 'build': case 'up': case 'sell': case 'mode': case 'gift': case 'ready': {
+          case 'build': case 'up': case 'sell': case 'mode': case 'gift': case 'ready': case 'skill': {
             if (!me || !game) return;
             const err = game.act(me.id, m);
             if (err) send(conn, { t: 'nope', msg: err });

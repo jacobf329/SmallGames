@@ -2,8 +2,9 @@
 // (food smoothed between the host's snapshots), building and upgrading,
 // the team panel and the HUD.
 
-import { TICK, TOWERS, TREES, MAX_TOWERS, SELL_BACK, MASTERY_STEPS, MASTERY_DISCOUNT,
+import { TICK, TOWERS, TREES, MAX_TOWERS, SELL_BACK, MASTERY_DISCOUNT,
   masteryLevel, buildable, doorsFor } from './data.js';
+import { chipsHtml, skillsHtml, SKILL_CSS } from './skillsui.js';
 import { createServer } from './session.js';
 import { Host, LocalTransport, RtcTransport, normCode, onlineSupported } from './rtc.js';
 import { Net } from './net.js';
@@ -24,6 +25,7 @@ const G = window.LU = {
   fams: [], sel: null, showRanges: false, endless: false,
 };
 const net = new Net();
+document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS }));
 const renderer = G.renderer = new Renderer($('#view'));
 
 // ================================ screens ================================
@@ -163,7 +165,7 @@ net.on('players', m => {
   const before = me()?.gold;
   G.players = m.list;
   renderHud();
-  if (me()?.gold !== before) renderSheet(true);
+  if (me()?.gold !== before) renderSheet();
   if (!$('#team').classList.contains('hidden')) renderTeam();
 });
 net.on('nope', m => { toast(m.msg, 'warn'); sfx.nope(); });
@@ -200,7 +202,8 @@ function onEvent(e) {
       if (e.warn) toast(e.warn, 'warn', 6000);
       break;
     }
-    case 'cleared': sfx.coin(); toast(`Wave ${e.n} cleared: +${e.bonus} gold${e.team ? ` (+${e.team} from registers)` : ''}`, 'good'); break;
+    case 'cleared': sfx.coin(); toast(`Wave ${e.n} cleared: +${e.bonus} gold${e.team ? ` (+${e.team} from registers)` : ''}, +${e.sp} skill point${e.sp > 1 ? 's' : ''}`, 'good'); break;
+    case 'skill': if (e.by === G.id) sfx.combo(); break;
   }
 }
 
@@ -224,6 +227,7 @@ function renderHud() {
   $('#h-wave').textContent = G.wave + (G.endless ? '∞' : '');
   $('#h-lives').textContent = G.lives;
   $('#h-gold').textContent = p ? p.gold : 0;
+  $('#h-skills').dataset.n = p?.sp || 0;
   const go = $('#h-go');
   if (G.phase === 'build') {
     const humans = G.players.filter(q => !q.ai), ready = humans.filter(q => q.ready).length;
@@ -236,6 +240,7 @@ function renderHud() {
   }
 }
 $('#h-go').addEventListener('click', () => { sfx.unlock(); net.send({ t: 'ready' }); });
+$('#h-skills').addEventListener('click', () => { G.sel = null; renderSheet(); });
 
 // ============================ tap on the kitchen =========================
 $('#view').addEventListener('pointerup', e => {
@@ -257,7 +262,7 @@ $('#view').addEventListener('pointerup', e => {
 function costFor(kind) {
   const def = TOWERS[kind], p = me();
   const lvl = def.tree && p ? masteryLevel(p.m[def.tree]) : 0;
-  return Math.round(def.cost * (1 - MASTERY_DISCOUNT * lvl));
+  return Math.round(def.cost * (lvl >= 2 ? 1 - MASTERY_DISCOUNT : 1));
 }
 function statLine(def) {
   if (def.tree === 'service') {
@@ -274,25 +279,19 @@ function statLine(def) {
   bits.push(def.air ? 'hits fliers' : 'ground only');
   return bits.join(' · ');
 }
-function masteryChips(p) {
-  return `<div class="mast">${Object.entries(TREES).map(([k, t]) => {
-    const lvl = masteryLevel(p.m[k]);
-    return `<span title="${t.name}">${t.icon} <b>${lvl}</b>${lvl < 4 ? `<small> ${p.m[k]}/${MASTERY_STEPS[lvl + 1]}</small>` : ''}</span>`;
-  }).join('')}</div>`;
-}
-let sheetKey = '';
-function renderSheet(goldOnly = false) {
+const masteryChips = p => chipsHtml(p.m);
+// The sheet is only rebuilt when what it shows actually changes (gold ticks up
+// with every kill, and a rebuild mid-tap would swallow the tap).
+function setHtml(node, html) { if (node._html === html) return false; node._html = html; node.innerHTML = html; return true; }
+function renderSheet() {
   const p = me();
   const body = $('#sheet-body');
-  const key = JSON.stringify([G.sel, p?.gold, p?.m, G.sel?.tower && G.towers.get(G.sel.tower)]);
-  if (goldOnly && key === sheetKey) return;
-  sheetKey = key;
-  if (!p) { body.innerHTML = '<p class="hint">Joining…</p>'; return; }
+  if (!p) { setHtml(body, '<p class="hint">Joining…</p>'); return; }
   if (G.sel?.tile) {
     const c = costFor('prep'), mine = [...G.towers.values()].filter(t => t.owner === G.id).length, cap = MAX_TOWERS(G.players.length);
-    body.innerHTML = `<h3>🍽️ Prep Station</h3><p class="sub">${TOWERS.prep.desc} ${statLine(TOWERS.prep)}</p>
+    if (!setHtml(body, `<h3>🍽️ Prep Station</h3><p class="sub">${TOWERS.prep.desc} ${statLine(TOWERS.prep)}</p>
       <div class="tools"><button class="btn" id="do-build" ${p.gold < c || mine >= cap ? 'disabled' : ''}>BUILD · ${c} gold</button>
-      <span class="hint">Your towers: ${mine}/${cap}. Tip: tap the same tile twice to build.</span></div>`;
+      <span class="hint">Your towers: ${mine}/${cap}. Tip: tap the same tile twice to build.</span></div>`)) return;
     $('#do-build').onclick = () => net.send({ t: 'build', x: G.sel.tile.x, y: G.sel.tile.y });
     return;
   }
@@ -308,20 +307,21 @@ function renderSheet(goldOnly = false) {
           const locked = nd.req && lvl < nd.req;
           return `<button class="opt ${locked ? 'locked' : ''} ${p.gold < c ? 'poor' : ''}" data-up="${id}">
             <b>${nd.icon} ${nd.name}</b><small>${nd.desc || (def.tier === 0 ? TREES[nd.tree].blurb : statLine(nd))}</small>
-            <span class="cost">${locked ? `needs ${TREES[nd.tree].name} mastery ${nd.req} (you: ${lvl})` : `${c} gold`}</span></button>`;
+            <span class="cost">${locked ? `needs ${TREES[nd.tree].name} level ${nd.req} in the skill tree (you: ${lvl})` : `${c} gold`}</span></button>`;
         }).join('') + '</div>';
       } else html += '<p class="hint">Fully upgraded.</p>';
       html += `<div class="tools">${def.rate ? `<span class="hint">Aim:</span><div class="seg" id="seg-mode">${['first', 'strong', 'last'].map(m => `<button data-m="${m}" class="${t.mode === m ? 'on' : ''}">${m}</button>`).join('')}</div>` : ''}
         <button class="btn ghost small" id="do-sell">SELL · ${Math.round(t.spent * SELL_BACK)}</button></div>`;
     }
-    body.innerHTML = html;
+    if (!setHtml(body, html)) return;
     body.querySelectorAll('[data-up]').forEach(b => b.onclick = () => net.send({ t: 'up', id: t.id, to: b.dataset.up }));
     body.querySelectorAll('#seg-mode button').forEach(b => b.onclick = () => net.send({ t: 'mode', id: t.id, mode: b.dataset.m }));
     const sb = $('#do-sell');
     if (sb) sb.onclick = () => { if (sb.dataset.sure) { net.send({ t: 'sell', id: t.id }); G.sel = null; } else { sb.dataset.sure = 1; sb.textContent = 'TAP AGAIN TO SELL'; } };
     return;
   }
-  body.innerHTML = `<p class="hint">Tap an empty floor tile to build a Prep Station, then tap it to send it down a tree. Your mastery:</p>${masteryChips(p)}`;
+  if (!setHtml(body, `<p class="hint">Tap an empty floor tile to build a Prep Station, then tap it to send it down a tree.</p>${skillsHtml(p)}`)) return;
+  body.querySelectorAll('[data-skill]').forEach(b => b.onclick = () => net.send({ t: 'skill', tree: b.dataset.skill }));
 }
 // ================================= team ==================================
 function renderTeam() {

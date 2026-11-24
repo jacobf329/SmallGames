@@ -146,7 +146,7 @@ input:focus { border-color: var(--a); }
         <li>Food marches from the doors to the <b>back door</b>. Every one that escapes costs lives.</li>
         <li><b>Tap an empty floor tile</b> to build a <b>Prep Station</b>. Everyone starts with the same blank counter.</li>
         <li><b>Tap your tower</b> to upgrade it into a tree: <b>🔥 Heat</b>, <b>🔪 Chop</b>, <b>❄️ Cold</b>, <b>🍯 Sticky</b> or <b>💰 Service</b>.</li>
-        <li>Gold you spend in a tree builds your <b>mastery</b> in it: cheaper, stronger towers, and the top tier unlocks.</li>
+        <li>Every wave you clear earns a <b>skill point</b> (two after a boss). Spend them in the <b>📖 skill tree</b> to level up a tree: more damage, cheaper upgrades, and the top towers unlock.</li>
         <li>Nobody can master everything, and the food adapts: if the team leans on one tree, the next waves bring food that shrugs it off. Split up.</li>
         <li><b>Combos</b> need two trees: freeze then Chop to <b>Shatter</b>, syrup then Heat to <b>Caramelize</b>. Service towers only boost other trees.</li>
         <li>More cooks means more doors, more food and more kinds at once. Solo, the food stays beatable with one strategy.</li>
@@ -183,6 +183,7 @@ input:focus { border-color: var(--a); }
     <div class="stat" title="Lives"><small>LIVES</small><b id="h-lives">30</b></div>
     <div class="stat gold" title="Your gold"><small>GOLD</small><b id="h-gold">0</b></div>
     <button id="h-go" class="btn small">NEXT WAVE</button>
+    <button id="h-skills" class="iconbtn sk-badge" title="Skill tree" data-n="0">📖</button>
     <button id="h-team" class="iconbtn" title="Team">👥</button>
     <button id="h-menu" class="iconbtn" title="Menu">☰</button>
   </header>
@@ -297,12 +298,28 @@ const TREES = {
 };
 const TREE_IDS = Object.keys(TREES);
 
-// Mastery: gold a player has spent in a tree. Higher mastery = cheaper and
-// stronger towers in that tree, and the top tiers need it.
-const MASTERY_STEPS = [0, 150, 650, 1400, 2600];
-const masteryLevel = spent => { let l = 0; for (let i = 1; i < MASTERY_STEPS.length; i++) if (spent >= MASTERY_STEPS[i]) l = i; return l; };
-const MASTERY_DISCOUNT = 0.04;    // per level, on that tree's upgrades
-const MASTERY_POWER = 0.06;       // per level, on that tree's damage
+// Mastery: skill points. Every cook earns SP_PER_WAVE for each wave cleared
+// (+SP_BOSS_BONUS after a boss) and spends them on levels in a tree. Level n
+// costs n points, so maxing a tree (5) costs 15 and a whole game pays for
+// about two. `mastery[tree]` holds the level, 0..5.
+const MAX_MASTERY = 5;
+const SP_START = 1, SP_PER_WAVE = 1, SP_BOSS_BONUS = 1;
+const skillCost = lvl => lvl + 1;                 // cost of going from lvl to lvl+1
+const masteryLevel = lvl => lvl || 0;
+const MASTERY_DISCOUNT = 0.10;    // from level 2: tower upgrades in that tree cost 10% less
+// What each level gives, per tree. Effects are applied in game.js.
+const SKILLS = {
+  heat:    ['+10% Heat damage', 'Char Grills unlocked, Heat upgrades 10% cheaper', 'Flame Wok and Pizza Oven unlocked',
+            'Spreading Flames: burns hit 50% harder and last a second longer', 'Head Chef: +20% Heat damage, +0.3 range'],
+  chop:    ['+10% Chop damage', 'Santoku unlocked, Chop upgrades 10% cheaper', 'Blender and Meat Tenderizer unlocked',
+            'Razor Edge: 20% of Chop hits do double damage', 'Head Butcher: +20% Chop damage, +0.3 range'],
+  cold:    ['+10% Cold damage', 'Deep Freezer unlocked, Cold upgrades 10% cheaper', 'Soft-Serve Machine and Liquid Nitrogen unlocked',
+            'Deep Chill: freezes and slows last 40% longer', 'Head of Ice: +20% Cold damage, +0.3 range'],
+  sticky:  ['+10% Sticky damage', 'Molasses Cannon unlocked, Sticky upgrades 10% cheaper', 'Gum Trap and Cheese Grater unlocked',
+            'Extra Gooey: 30% bigger splashes, syrup lasts a second longer', 'Syrup Master: +20% Sticky damage, +0.3 range'],
+  service: ['+10% tips from your Service towers', 'Head Waiter unlocked, Service upgrades 10% cheaper', 'Waiter Station and Cash Register unlocked',
+            'Big Tippers: Service income +50%, boosts +5%', 'Maitre d\': boosts +10% more, +0.3 range'],
+};
 
 // Tower kinds. `next` lists what it can upgrade into. `req` = mastery level
 // needed in the tree. Ranges in tiles, rate in attacks per second.
@@ -316,42 +333,42 @@ T.prep = { name: 'Prep Station', tree: null, tier: 0, cost: 50, icon: '🍽️',
 
 T.grill  = { name: 'Grill', tree: 'heat', tier: 1, cost: 70, icon: '🔥', range: 2.4, rate: 1.2, dmg: 11, dtype: 'heat', air: true, burn: { dps: 8, t: 2 }, next: ['grill2'] };
 T.grill2 = { name: 'Searing Grill', tree: 'heat', tier: 2, cost: 110, icon: '🔥', range: 2.5, rate: 1.25, dmg: 18, dtype: 'heat', air: true, burn: { dps: 14, t: 2 }, next: ['grill3'] };
-T.grill3 = { name: 'Char Grill', tree: 'heat', tier: 3, req: 1, cost: 180, icon: '🔥', range: 2.6, rate: 1.3, dmg: 28, dtype: 'heat', air: true, splash: 0.7, burn: { dps: 22, t: 2 }, next: ['wok', 'oven'] };
-T.wok    = { name: 'Flame Wok', tree: 'heat', tier: 4, req: 2, cost: 340, icon: '🥘', range: 1.9, rate: 3, dmg: 14, dtype: 'heat', air: true, splash: 1.0, burn: { dps: 38, t: 2 },
+T.grill3 = { name: 'Char Grill', tree: 'heat', tier: 3, req: 2, cost: 180, icon: '🔥', range: 2.6, rate: 1.3, dmg: 28, dtype: 'heat', air: true, splash: 0.7, burn: { dps: 22, t: 2 }, next: ['wok', 'oven'] };
+T.wok    = { name: 'Flame Wok', tree: 'heat', tier: 4, req: 3, cost: 340, icon: '🥘', range: 1.9, rate: 3, dmg: 14, dtype: 'heat', air: true, splash: 1.0, burn: { dps: 38, t: 2 },
   desc: 'Short range, sprays fire over the whole crowd.', next: [] };
-T.oven   = { name: 'Pizza Oven', tree: 'heat', tier: 4, req: 2, cost: 380, icon: '♨️', range: 4.2, rate: 0.4, dmg: 160, dtype: 'heat', air: true, splash: 1.3, burn: { dps: 25, t: 3 },
+T.oven   = { name: 'Pizza Oven', tree: 'heat', tier: 4, req: 3, cost: 380, icon: '♨️', range: 4.2, rate: 0.4, dmg: 160, dtype: 'heat', air: true, splash: 1.3, burn: { dps: 25, t: 3 },
   desc: 'Long range fireballs with a big splash.', next: [] };
 
 T.cleaver  = { name: 'Cleaver', tree: 'chop', tier: 1, cost: 70, icon: '🔪', range: 1.8, rate: 0.9, dmg: 24, dtype: 'chop', air: false, next: ['cleaver2'] };
 T.cleaver2 = { name: "Chef's Knife", tree: 'chop', tier: 2, cost: 110, icon: '🔪', range: 1.9, rate: 0.95, dmg: 42, dtype: 'chop', air: false, next: ['cleaver3'] };
-T.cleaver3 = { name: 'Santoku', tree: 'chop', tier: 3, req: 1, cost: 180, icon: '🔪', range: 2.0, rate: 1.0, dmg: 68, dtype: 'chop', air: false, next: ['blender', 'mallet'] };
-T.blender  = { name: 'Blender', tree: 'chop', tier: 4, req: 2, cost: 340, icon: '🌀', range: 1.4, rate: 2, dmg: 38, dtype: 'chop', air: false, aura: true,
+T.cleaver3 = { name: 'Santoku', tree: 'chop', tier: 3, req: 2, cost: 180, icon: '🔪', range: 2.0, rate: 1.0, dmg: 68, dtype: 'chop', air: false, next: ['blender', 'mallet'] };
+T.blender  = { name: 'Blender', tree: 'chop', tier: 4, req: 3, cost: 340, icon: '🌀', range: 1.4, rate: 2, dmg: 38, dtype: 'chop', air: false, aura: true,
   desc: 'Shreds every ground food in reach, all at once.', next: [] };
-T.mallet   = { name: 'Meat Tenderizer', tree: 'chop', tier: 4, req: 2, cost: 380, icon: '🔨', range: 2.1, rate: 0.5, dmg: 280, dtype: 'chop', air: false, pierce: true, stun: 0.4, splash: 0.6,
+T.mallet   = { name: 'Meat Tenderizer', tree: 'chop', tier: 4, req: 3, cost: 380, icon: '🔨', range: 2.1, rate: 0.5, dmg: 280, dtype: 'chop', air: false, pierce: true, stun: 0.4, splash: 0.6,
   desc: 'Huge hits that ignore armour and stun.', next: [] };
 
 T.vent  = { name: 'Freezer Vent', tree: 'cold', tier: 1, cost: 70, icon: '❄️', range: 2.3, rate: 1.0, dmg: 4, dtype: 'cold', air: true, slow: { f: 0.6, t: 1.5 }, next: ['vent2'] };
 T.vent2 = { name: 'Chill Blaster', tree: 'cold', tier: 2, cost: 110, icon: '❄️', range: 2.4, rate: 1.0, dmg: 7, dtype: 'cold', air: true, slow: { f: 0.5, t: 1.8 }, splash: 0.6, next: ['vent3'] };
-T.vent3 = { name: 'Deep Freezer', tree: 'cold', tier: 3, req: 1, cost: 180, icon: '❄️', range: 2.5, rate: 0.9, dmg: 12, dtype: 'cold', air: true, slow: { f: 0.45, t: 2 }, splash: 0.9, freeze: 0.5, next: ['icecream', 'nitro'] };
-T.icecream = { name: 'Soft-Serve Machine', tree: 'cold', tier: 4, req: 2, cost: 340, icon: '🍦', range: 1.8, rate: 0.5, dmg: 16, dtype: 'cold', air: true, aura: true, freeze: 0.9, slow: { f: 0.5, t: 2.5 },
+T.vent3 = { name: 'Deep Freezer', tree: 'cold', tier: 3, req: 2, cost: 180, icon: '❄️', range: 2.5, rate: 0.9, dmg: 12, dtype: 'cold', air: true, slow: { f: 0.45, t: 2 }, splash: 0.9, freeze: 0.5, next: ['icecream', 'nitro'] };
+T.icecream = { name: 'Soft-Serve Machine', tree: 'cold', tier: 4, req: 3, cost: 340, icon: '🍦', range: 1.8, rate: 0.5, dmg: 16, dtype: 'cold', air: true, aura: true, freeze: 0.9, slow: { f: 0.5, t: 2.5 },
   desc: 'Pulses a freeze over everything nearby.', next: [] };
-T.nitro    = { name: 'Liquid Nitrogen', tree: 'cold', tier: 4, req: 2, cost: 380, icon: '🧪', range: 3.6, rate: 0.6, dmg: 45, dtype: 'cold', air: true, freeze: 2.2,
+T.nitro    = { name: 'Liquid Nitrogen', tree: 'cold', tier: 4, req: 3, cost: 380, icon: '🧪', range: 3.6, rate: 0.6, dmg: 45, dtype: 'cold', air: true, freeze: 2.2,
   desc: 'Freezes one target solid. Chop shatters it.', next: [] };
 
 T.syrup  = { name: 'Syrup Pump', tree: 'sticky', tier: 1, cost: 60, icon: '🍯', range: 2.4, rate: 0.8, dmg: 3, dtype: 'sticky', air: false, splash: 0.8, sticky: 2.5, next: ['syrup2'] };
 T.syrup2 = { name: 'Maple Mortar', tree: 'sticky', tier: 2, cost: 100, icon: '🍯', range: 2.6, rate: 0.85, dmg: 6, dtype: 'sticky', air: false, splash: 1.0, sticky: 3, next: ['syrup3'] };
-T.syrup3 = { name: 'Molasses Cannon', tree: 'sticky', tier: 3, req: 1, cost: 160, icon: '🍯', range: 2.8, rate: 0.9, dmg: 10, dtype: 'sticky', air: false, splash: 1.2, sticky: 3.5, next: ['gum', 'grater'] };
-T.gum    = { name: 'Gum Trap', tree: 'sticky', tier: 4, req: 2, cost: 300, icon: '🫧', range: 2.8, rate: 0.6, dmg: 14, dtype: 'sticky', air: false, splash: 1.3, sticky: 4, stun: 1.0,
+T.syrup3 = { name: 'Molasses Cannon', tree: 'sticky', tier: 3, req: 2, cost: 160, icon: '🍯', range: 2.8, rate: 0.9, dmg: 10, dtype: 'sticky', air: false, splash: 1.2, sticky: 3.5, next: ['gum', 'grater'] };
+T.gum    = { name: 'Gum Trap', tree: 'sticky', tier: 4, req: 3, cost: 300, icon: '🫧', range: 2.8, rate: 0.6, dmg: 14, dtype: 'sticky', air: false, splash: 1.3, sticky: 4, stun: 1.0,
   desc: 'Glues a whole group in place for a moment.', next: [] };
-T.grater = { name: 'Cheese Grater', tree: 'sticky', tier: 4, req: 2, cost: 320, icon: '🧀', range: 1.6, rate: 2, dmg: 22, dtype: 'chop', air: false, aura: true, sticky: 2,
+T.grater = { name: 'Cheese Grater', tree: 'sticky', tier: 4, req: 3, cost: 320, icon: '🧀', range: 1.6, rate: 2, dmg: 22, dtype: 'chop', air: false, aura: true, sticky: 2,
   desc: 'Grinds and gums up all ground food in reach.', next: [] };
 
 T.tipjar  = { name: 'Tip Jar', tree: 'service', tier: 1, cost: 70, icon: '💰', range: 2.0, rate: 0, dmg: 0, income: 20, buff: 0.10, next: ['tipjar2'] };
 T.tipjar2 = { name: 'Bus Station', tree: 'service', tier: 2, cost: 110, icon: '💰', range: 2.2, rate: 0, dmg: 0, income: 35, buff: 0.15, next: ['tipjar3'] };
-T.tipjar3 = { name: 'Head Waiter', tree: 'service', tier: 3, req: 1, cost: 170, icon: '🛎️', range: 2.4, rate: 0, dmg: 0, income: 50, buff: 0.22, haste: 0.08, next: ['waiter', 'register'] };
-T.waiter   = { name: 'Waiter Station', tree: 'service', tier: 4, req: 2, cost: 320, icon: '🛎️', range: 2.8, rate: 0, dmg: 0, income: 55, buff: 0.38, haste: 0.18,
+T.tipjar3 = { name: 'Head Waiter', tree: 'service', tier: 3, req: 2, cost: 170, icon: '🛎️', range: 2.4, rate: 0, dmg: 0, income: 50, buff: 0.22, haste: 0.08, next: ['waiter', 'register'] };
+T.waiter   = { name: 'Waiter Station', tree: 'service', tier: 4, req: 3, cost: 320, icon: '🛎️', range: 2.8, rate: 0, dmg: 0, income: 55, buff: 0.38, haste: 0.18,
   desc: 'Big damage and speed boost for other trees nearby.', next: [] };
-T.register = { name: 'Cash Register', tree: 'service', tier: 4, req: 2, cost: 340, icon: '💵', range: 2.0, rate: 0, dmg: 0, income: 70, teamIncome: 45, buff: 0.15,
+T.register = { name: 'Cash Register', tree: 'service', tier: 4, req: 3, cost: 340, icon: '💵', range: 2.0, rate: 0, dmg: 0, income: 70, teamIncome: 45, buff: 0.15,
   desc: 'Pays you, and every teammate, each wave.', next: [] };
 
 for (const [id, t] of Object.entries(T)) { t.id = id; t.ground = true; }
@@ -437,15 +454,15 @@ const BOSS_INTRO = {
 function teamScale(n) {
   n = Math.max(1, n);
   return {
-    count: n === 1 ? 0.8 : 0.25 + 0.75 * n,     // enemy numbers (and boss hp)
-    bossHp: n === 1 ? 0.55 : 0.4 + 0.6 * n,  // boss (and boss-spawn) toughness
+    count: n === 1 ? 1.25 : 0.25 + 0.75 * n,     // enemy numbers (and boss hp)
+    bossHp: n === 1 ? 1.0 : 0.4 + 0.6 * n,  // boss (and boss-spawn) toughness
     families: n === 1 ? 1 : n <= 4 ? 2 : 3,     // distinct families per wave, before wave bonuses
     adapt: n === 1 ? 0.25 : n <= 4 ? 1 : 1.6,   // how hard the food reacts to a monoculture
-    pay: n === 1 ? 1.3 : 1.05 / (0.25 + 0.75 * n), // per-player share of each bounty
+    pay: n === 1 ? 1.05 : 1.05 / (0.25 + 0.75 * n), // per-player share of each bounty
   };
 }
 const waveBudget = w => (26 + 9 * w) * Math.pow(1.085, w) * (w <= 3 ? 0.8 : 1);
-const waveHpMult = w => 1 + Math.max(0, w - 12) * 0.045 + Math.max(0, w - WAVES) * 0.08;
+const waveHpMult = w => 1 + Math.max(0, w - 8) * 0.05 + Math.max(0, w - WAVES) * 0.08;
 
 const START_GOLD = 220;
 const WAVE_BONUS = w => 40 + 4 * w;
@@ -453,7 +470,7 @@ const BUILD_TIME = w => (w === 1 ? 40 : 22);   // seconds between waves
 const EARLY_BONUS = 2;                         // gold per second skipped, per player
 const MAX_TOWERS = n => Math.max(8, Math.min(40, Math.floor(180 / n)));
 
-return { TICK, SNAP_RATE, MAX_PLAYERS, WAVES, COLORS, DIFFICULTY, COLS, ROWS, PATHS, doorsFor, PATH_GEO, pathPoint, PATH_TILES, buildable, DTYPES, TREES, TREE_IDS, MASTERY_STEPS, masteryLevel, MASTERY_DISCOUNT, MASTERY_POWER, TOWERS, TOWER_IDS, SELL_BACK, ENEMIES, ENEMY_IDS, FAMILIES, MEMBER_FROM, FAMILY_LATE, COUNTERS, BOSSES, BOSS_INTRO, teamScale, waveBudget, waveHpMult, START_GOLD, WAVE_BONUS, BUILD_TIME, EARLY_BONUS, MAX_TOWERS };
+return { TICK, SNAP_RATE, MAX_PLAYERS, WAVES, COLORS, DIFFICULTY, COLS, ROWS, PATHS, doorsFor, PATH_GEO, pathPoint, PATH_TILES, buildable, DTYPES, TREES, TREE_IDS, MAX_MASTERY, SP_START, skillCost, masteryLevel, MASTERY_DISCOUNT, SKILLS, TOWERS, TOWER_IDS, SELL_BACK, ENEMIES, ENEMY_IDS, FAMILIES, MEMBER_FROM, FAMILY_LATE, COUNTERS, BOSSES, BOSS_INTRO, teamScale, waveBudget, waveHpMult, START_GOLD, WAVE_BONUS, BUILD_TIME, EARLY_BONUS, MAX_TOWERS };
 })();
 
 /* ===== director.js ===== */
@@ -633,7 +650,7 @@ __mods.game = (() => {
 
 const {
   TOWERS, ENEMIES, DIFFICULTY, PATH_GEO, WAVES, START_GOLD, WAVE_BONUS, BUILD_TIME, EARLY_BONUS,
-  MAX_TOWERS, SELL_BACK, TREE_IDS, MASTERY_DISCOUNT, MASTERY_POWER, masteryLevel, buildable,
+  MAX_TOWERS, SELL_BACK, TREE_IDS, MASTERY_DISCOUNT, MAX_MASTERY, SP_START, SP_PER_WAVE, SP_BOSS_BONUS, skillCost, masteryLevel, buildable,
   pathPoint, teamScale, waveHpMult, doorsFor,
 } = __mods.data;
 const { planWave } = __mods.director;
@@ -645,7 +662,7 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
   const P = new Map();
   for (const p of players) {
     P.set(p.id, {
-      id: p.id, name: p.name, color: p.color, ai: !!p.ai, gold: START_GOLD * D.gold,
+      id: p.id, name: p.name, color: p.color, ai: !!p.ai, gold: START_GOLD * D.gold, sp: SP_START,
       mastery: Object.fromEntries(TREE_IDS.map(t => [t, 0])),
       stats: { dmg: 0, kills: 0, combos: 0, built: 0 }, ready: false,
     });
@@ -664,6 +681,11 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
   // ----------------------------------------------------- service auras ----
   // Each tower's boost from Service towers of a DIFFERENT tree in range.
   function recomputeBuffs() {
+    for (const t of g.towers.values()) {
+      const tree = TOWERS[t.kind].tree;
+      t.lvl = tree ? (P.get(t.owner)?.mastery[tree] || 0) : 0;
+      t.rangeB = t.lvl >= 5 ? 0.3 : 0;
+    }
     const svc = [...g.towers.values()].filter(t => TOWERS[t.kind].buff);
     for (const t of g.towers.values()) {
       const def = TOWERS[t.kind];
@@ -671,8 +693,8 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
       if (def.dmg) for (const s of svc) {
         const sd = TOWERS[s.kind];
         if (def.tree === 'service') continue;
-        if (Math.hypot(s.x - t.x, s.y - t.y) > sd.range + 0.01) continue;
-        buff += sd.buff; haste += sd.haste || 0;
+        if (Math.hypot(s.x - t.x, s.y - t.y) > sd.range + s.rangeB + 0.01) continue;
+        buff += sd.buff + (s.lvl >= 4 ? 0.05 : 0) + (s.lvl >= 5 ? 0.10 : 0); haste += sd.haste || 0;
       }
       t.buff = Math.min(0.75, buff); t.haste = Math.min(0.35, haste);
     }
@@ -683,13 +705,12 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
   function costFor(p, kind) {
     const def = TOWERS[kind];
     const lvl = def.tree ? masteryLevel(p.mastery[def.tree]) : 0;
-    return Math.round(def.cost * (1 - MASTERY_DISCOUNT * lvl));
+    return Math.round(def.cost * (lvl >= 2 ? 1 - MASTERY_DISCOUNT : 1));
   }
   g.costFor = (pid, kind) => costFor(P.get(pid), kind);
 
-  function spend(p, amount, tree) {
+  function spend(p, amount) {
     p.gold -= amount;
-    if (tree) p.mastery[tree] += amount;
     g.playersVer++;
   }
 
@@ -750,6 +771,18 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
         ev({ t: 'gift', from: pid, to: to.id, amt });
         return null;
       }
+      case 'skill': {
+        if (!TREE_IDS.includes(m.tree)) return 'no such tree';
+        const lvl = p.mastery[m.tree];
+        if (lvl >= MAX_MASTERY) return 'already mastered';
+        const c = skillCost(lvl);
+        if (p.sp < c) return `needs ${c} skill points`;
+        p.sp -= c; p.mastery[m.tree] = lvl + 1;
+        recomputeBuffs();
+        g.playersVer++;
+        ev({ t: 'skill', by: pid, tree: m.tree, lvl: lvl + 1 });
+        return null;
+      }
       case 'ready': {
         if (g.phase !== 'build') return 'wave already running';
         p.ready = !p.ready; g.playersVer++;
@@ -773,7 +806,7 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
   };
   g.addPlayer = p => {
     if (P.has(p.id)) return;
-    P.set(p.id, { id: p.id, name: p.name, color: p.color, ai: !!p.ai, gold: START_GOLD * D.gold * (1 + g.wave * 0.25),
+    P.set(p.id, { id: p.id, name: p.name, color: p.color, ai: !!p.ai, gold: START_GOLD * D.gold * (1 + g.wave * 0.25), sp: SP_START + g.wave,
       mastery: Object.fromEntries(TREE_IDS.map(t => [t, 0])), stats: { dmg: 0, kills: 0, combos: 0, built: 0 }, ready: false });
     g.playersVer++;
   };
@@ -800,15 +833,18 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
   function waveCleared() {
     const w = g.wave;
     const bonus = WAVE_BONUS(w) * D.gold;
+    const incomeOf = t => (TOWERS[t.kind].income || 0) * (t.lvl >= 1 ? 1.1 : 1) * (t.lvl >= 4 ? 1.5 : 1);
     let team = 0;
     for (const t of g.towers.values()) team += TOWERS[t.kind].teamIncome || 0;
+    const sp = SP_PER_WAVE + (g.plan?.boss ? SP_BOSS_BONUS : 0);
     for (const p of P.values()) {
       let inc = 0;
-      for (const t of g.towers.values()) if (t.owner === p.id) inc += TOWERS[t.kind].income || 0;
+      for (const t of g.towers.values()) if (t.owner === p.id) inc += incomeOf(t);
       p.gold += bonus + inc + team;
+      p.sp += sp;
     }
     g.playersVer++;
-    ev({ t: 'cleared', n: w, bonus: Math.round(bonus), team });
+    ev({ t: 'cleared', n: w, bonus: Math.round(bonus), team, sp });
     if (w === WAVES && !g.endless) { g.phase = 'won'; ev({ t: 'won', n: w }); return; }
     g.phase = 'build';
     g.buildT = BUILD_TIME(w + 1);
@@ -856,13 +892,14 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (e.dead) return;
     const ed = ENEMIES[e.type];
     const p = P.get(owner);
-    const lvl = p && def.tree ? masteryLevel(p.mastery[def.tree]) : 0;
-    const power = (1 + MASTERY_POWER * lvl) * (1 + (t.buff || 0));
+    const lvl = t.lvl || 0;
+    const power = (1 + (lvl >= 1 ? 0.1 : 0) + (lvl >= 5 ? 0.2 : 0)) * (1 + (t.buff || 0));
     let res = ed.res[def.dtype] ?? 1, armour = ed.armour;
     // Solo, bosses don't hard-counter your one strategy.
     if (P.size === 1 && ed.fam === 'boss') { res = 1 - (1 - res) * 0.4; armour *= 0.5; }
     let dmg = base * res * power;
     // Combos: they only happen when two different trees work on the same food.
+    if (def.dtype === 'chop' && def.tree === 'chop' && lvl >= 4 && rng() < 0.2) dmg *= 2;   // Razor Edge
     if (def.dtype === 'chop' && e.freezeT > 0) {
       dmg *= SHATTER; e.freezeT = 0;
       combo(e, 'Shatter!', owner);
@@ -881,19 +918,20 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (p) p.stats.dmg += dmg;
     // Effects
     const bossK = ed.boss ? 0.3 : 1;
+    const heatL4 = def.tree === 'heat' && lvl >= 4, coldK = def.tree === 'cold' && lvl >= 4 ? 1.4 : 1, gooey = def.tree === 'sticky' && lvl >= 4 ? 1 : 0;
     if (def.burn && (ed.res.heat ?? 1) > 0.15) {
-      const dps = def.burn.dps * power * (ed.res.heat ?? 1);
+      const dps = def.burn.dps * power * (ed.res.heat ?? 1) * (heatL4 ? 1.5 : 1);
       if (dps >= e.burnDps || e.burnT <= 0) { e.burnDps = dps; e.burnBy = owner; }
-      e.burnT = Math.max(e.burnT, def.burn.t);
+      e.burnT = Math.max(e.burnT, def.burn.t + (heatL4 ? 1 : 0));
     }
-    if (def.slow && !ed.frozen) { e.slowT = Math.max(e.slowT, def.slow.t); e.slowF = Math.min(e.slowF, def.slow.f); e.chilled = def.slow.t; }
+    if (def.slow && !ed.frozen) { e.slowT = Math.max(e.slowT, def.slow.t * coldK); e.slowF = Math.min(e.slowF, def.slow.f); e.chilled = def.slow.t; }
     // Freezes and stuns can't be chained forever: a short immunity follows each.
     if (e.ccImm <= 0 && ((def.freeze && !ed.frozen) || def.stun)) {
-      const dur = Math.max(def.freeze && !ed.frozen ? def.freeze : 0, def.stun || 0) * bossK;
+      const dur = Math.max(def.freeze && !ed.frozen ? def.freeze * coldK : 0, def.stun || 0) * bossK;
       if (def.freeze && !ed.frozen) e.freezeT = Math.max(e.freezeT, dur); else e.stunT = Math.max(e.stunT, dur);
       e.ccImm = dur + (ed.boss ? 3 : 0.7);
     }
-    if (def.sticky && !ed.greasy && !ed.air) e.stickyT = Math.max(e.stickyT, def.sticky);
+    if (def.sticky && !ed.greasy && !ed.air) e.stickyT = Math.max(e.stickyT, def.sticky + gooey);
     if (e.hp <= 0) kill(e, owner);
   }
   function combo(e, name, by) {
@@ -908,7 +946,7 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (e.dead) return false;
     if (ENEMIES[e.type].air && !def.air) return false;
     const [x, y] = posOf(e);
-    return Math.hypot(x - (t.x + 0.5), y - (t.y + 0.5)) <= def.range;
+    return Math.hypot(x - (t.x + 0.5), y - (t.y + 0.5)) <= def.range + (t.rangeB || 0);
   }
   function pickTarget(t, def, list) {
     let best = null, bv = -Infinity;
@@ -945,7 +983,7 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
           if (e.dead || (ENEMIES[e.type].air && !def.air)) continue;
           const [x, y] = posOf(e);
           const dd = Math.hypot(x - tx, y - ty);
-          if (e === target || dd <= def.splash) hit(e, t, def, e === target ? def.dmg : def.dmg * 0.6, t.owner);
+          if (e === target || dd <= def.splash * (def.tree === 'sticky' && t.lvl >= 4 ? 1.3 : 1)) hit(e, t, def, e === target ? def.dmg : def.dmg * 0.6, t.owner);
         }
       } else hit(target, t, def, def.dmg, t.owner);
     }
@@ -1016,7 +1054,7 @@ __mods.ai = (() => {
 // Each cook settles on a main tree (the one the team has least of) and
 // a backup, builds Prep Stations on the best free spots, and upgrades.
 
-const { TOWERS, TREE_IDS, PATH_GEO, PATHS, COLS, ROWS, buildable, doorsFor, masteryLevel, MAX_TOWERS } = __mods.data;
+const { TOWERS, TREE_IDS, PATH_GEO, PATHS, COLS, ROWS, buildable, doorsFor, MAX_TOWERS, MAX_MASTERY, skillCost } = __mods.data;
 
 const FIRST = { heat: 'grill', chop: 'cleaver', cold: 'vent', sticky: 'syrup', service: 'tipjar' };
 const FORK = { heat: ['oven', 'wok'], chop: ['mallet', 'blender'], cold: ['nitro', 'icecream'], sticky: ['gum', 'grater'], service: ['waiter', 'register'] };
@@ -1075,6 +1113,15 @@ function createCook(game, pid, { tree = null, seed = Math.random() } = {}) {
     chooseTrees();
     const p = me(); if (!p) return;
     if (spotsN !== game.players.size) { spots = spotScores(game.players.size); spotsN = game.players.size; }
+    // Skill points: the main tree first, then a second one.
+    for (let guard = 0; guard < 5; guard++) {
+      let t = p.mastery[main] < MAX_MASTERY ? main : null;
+      if (!t) {
+        backup ||= TREE_IDS.filter(x => x !== main && x !== 'service').sort(() => Math.random() - 0.5)[0];
+        t = p.mastery[backup] < MAX_MASTERY ? backup : null;
+      }
+      if (!t || p.sp < skillCost(p.mastery[t]) || game.act(pid, { t: 'skill', tree: t })) break;
+    }
     const mine = myTowers();
     const tree = main === 'service' && mine.filter(t => TOWERS[t.kind].tree === 'service').length >= 4 ? (backup ||= 'heat') : main;
 
@@ -1110,7 +1157,7 @@ function createCook(game, pid, { tree = null, seed = Math.random() } = {}) {
       if (def.tier < 3) break;     // save up for the cheapest step rather than skipping ahead
     }
     // 4) Rich, or blocked on mastery: more towers.
-    if (p.gold > 400 || masteryLevel(p.mastery[tree]) < 2) build();
+    if (p.gold > 400 || p.mastery[tree] < 3) build();
   }
   return { step, get tree() { return main; } };
 }
@@ -1183,7 +1230,7 @@ function createServer({ code = 'SOLO' } = {}) {
   }
   function playersMsg() {
     return { t: 'players', list: [...game.players.values()].map(p => ({
-      id: p.id, name: p.name, color: p.color, ai: p.ai, gold: Math.floor(p.gold), ready: p.ready,
+      id: p.id, name: p.name, color: p.color, ai: p.ai, gold: Math.floor(p.gold), sp: p.sp, ready: p.ready,
       m: p.mastery, st: { dmg: Math.round(p.stats.dmg), kills: p.stats.kills, combos: p.stats.combos },
     })) };
   }
@@ -1252,7 +1299,7 @@ function createServer({ code = 'SOLO' } = {}) {
           case 'go':          // host: start the next wave now
             if (me && me.id === hostId && game) game.startNow();
             break;
-          case 'build': case 'up': case 'sell': case 'mode': case 'gift': case 'ready': {
+          case 'build': case 'up': case 'sell': case 'mode': case 'gift': case 'ready': case 'skill': {
             if (!me || !game) return;
             const err = game.act(me.id, m);
             if (err) send(conn, { t: 'nope', msg: err });
@@ -1295,6 +1342,57 @@ function createServer({ code = 'SOLO' } = {}) {
 }
 
 return { createServer };
+})();
+
+/* ===== skillsui.js ===== */
+__mods.skillsui = (() => {
+// Leftover Uprising - the skill tree panel and mastery chips, as HTML strings,
+// shared by the standalone phone page and the Party Pad phone controller.
+// Buttons carry data-skill="<tree>"; each page wires the click to send
+// { t: 'skill', tree }.
+
+const { TREES, SKILLS, MAX_MASTERY, skillCost } = __mods.data;
+
+// Level pips for every tree, e.g. "🔥 ●●●○○".
+function chipsHtml(m = {}, cls = 'mchips') {
+  return `<div class="${cls}">${Object.entries(TREES).map(([k, t]) => {
+    const l = m[k] || 0;
+    return `<span title="${t.name} level ${l}">${t.icon} <b>${'●'.repeat(l)}</b><i>${'○'.repeat(MAX_MASTERY - l)}</i></span>`;
+  }).join('')}</div>`;
+}
+
+// The full skill tree: one row per tree with its pips, the next level's
+// effect and a buy button.
+function skillsHtml(me) {
+  const sp = me?.sp || 0, m = me?.m || {};
+  return `<div class="sk-head"><b>📖 Skill tree</b><span class="sk-sp">${sp} point${sp === 1 ? '' : 's'} to spend</span></div>
+    <p class="sk-note">You earn 1 point per wave cleared, 2 after a boss. Level n costs n points, so you can master about two trees in a game. Split them with your team.</p>
+    <div class="sk-rows">${Object.entries(TREES).map(([k, t]) => {
+      const l = m[k] || 0, maxed = l >= MAX_MASTERY, cost = skillCost(l);
+      return `<div class="sk-row" style="--tc:${t.color}">
+        <div class="sk-top"><b>${t.icon} ${t.name}</b><span class="sk-pips">${'●'.repeat(l)}<i>${'○'.repeat(MAX_MASTERY - l)}</i></span></div>
+        <small>${maxed ? 'Mastered!' : `Level ${l + 1}: ${SKILLS[k][l]}`}</small>
+        ${maxed ? '' : `<button class="sk-buy" data-skill="${k}" ${sp < cost ? 'disabled' : ''}>Learn · ${cost} pt${cost === 1 ? '' : 's'}</button>`}
+      </div>`;
+    }).join('')}</div>`;
+}
+
+const SKILL_CSS = `
+.sk-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+.sk-sp{background:#ffd23f;color:#2a1206;border-radius:99px;padding:2px 10px;font-weight:800;font-size:.85rem}
+.sk-note{color:#c9b39a;font-size:.78rem;margin:0 0 8px}
+.sk-rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.sk-row{background:#33241b;border:1px solid rgba(255,240,220,.12);border-left:4px solid var(--tc);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:4px}
+.sk-top{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.sk-pips{color:var(--tc);letter-spacing:1px;font-size:.8rem}.sk-pips i,.mchips i{color:rgba(255,255,255,.25);font-style:normal}
+.sk-row small{color:#d8c2a8;font-size:.75rem;line-height:1.25}
+.sk-buy{background:var(--tc);color:#1d1410;border:0;border-radius:9px;padding:6px 8px;font-weight:800;cursor:pointer}
+.sk-buy[disabled]{opacity:.35}
+.mchips{display:flex;gap:6px;flex-wrap:wrap}.mchips span{background:#33241b;border-radius:8px;padding:2px 7px;font-size:.78rem;color:#d8c2a8;white-space:nowrap}.mchips b{color:#fff;font-weight:400;letter-spacing:1px}
+.sk-badge{position:relative}.sk-badge[data-n]:not([data-n="0"])::after{content:attr(data-n);position:absolute;top:-6px;right:-6px;background:#ffd23f;color:#2a1206;border-radius:99px;font-size:.7rem;font-weight:900;min-width:18px;height:18px;line-height:18px;text-align:center}
+`;
+
+return { chipsHtml, skillsHtml, SKILL_CSS };
 })();
 
 /* ===== rtc.js ===== */
@@ -1997,8 +2095,9 @@ __mods.main = (() => {
 // (food smoothed between the host's snapshots), building and upgrading,
 // the team panel and the HUD.
 
-const { TICK, TOWERS, TREES, MAX_TOWERS, SELL_BACK, MASTERY_STEPS, MASTERY_DISCOUNT,
+const { TICK, TOWERS, TREES, MAX_TOWERS, SELL_BACK, MASTERY_DISCOUNT,
   masteryLevel, buildable, doorsFor } = __mods.data;
+const { chipsHtml, skillsHtml, SKILL_CSS } = __mods.skillsui;
 const { createServer } = __mods.session;
 const { Host, LocalTransport, RtcTransport, normCode, onlineSupported } = __mods.rtc;
 const { Net } = __mods.net;
@@ -2019,6 +2118,7 @@ const G = window.LU = {
   fams: [], sel: null, showRanges: false, endless: false,
 };
 const net = new Net();
+document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS }));
 const renderer = G.renderer = new Renderer($('#view'));
 
 // ================================ screens ================================
@@ -2158,7 +2258,7 @@ net.on('players', m => {
   const before = me()?.gold;
   G.players = m.list;
   renderHud();
-  if (me()?.gold !== before) renderSheet(true);
+  if (me()?.gold !== before) renderSheet();
   if (!$('#team').classList.contains('hidden')) renderTeam();
 });
 net.on('nope', m => { toast(m.msg, 'warn'); sfx.nope(); });
@@ -2195,7 +2295,8 @@ function onEvent(e) {
       if (e.warn) toast(e.warn, 'warn', 6000);
       break;
     }
-    case 'cleared': sfx.coin(); toast(`Wave ${e.n} cleared: +${e.bonus} gold${e.team ? ` (+${e.team} from registers)` : ''}`, 'good'); break;
+    case 'cleared': sfx.coin(); toast(`Wave ${e.n} cleared: +${e.bonus} gold${e.team ? ` (+${e.team} from registers)` : ''}, +${e.sp} skill point${e.sp > 1 ? 's' : ''}`, 'good'); break;
+    case 'skill': if (e.by === G.id) sfx.combo(); break;
   }
 }
 
@@ -2219,6 +2320,7 @@ function renderHud() {
   $('#h-wave').textContent = G.wave + (G.endless ? '∞' : '');
   $('#h-lives').textContent = G.lives;
   $('#h-gold').textContent = p ? p.gold : 0;
+  $('#h-skills').dataset.n = p?.sp || 0;
   const go = $('#h-go');
   if (G.phase === 'build') {
     const humans = G.players.filter(q => !q.ai), ready = humans.filter(q => q.ready).length;
@@ -2231,6 +2333,7 @@ function renderHud() {
   }
 }
 $('#h-go').addEventListener('click', () => { sfx.unlock(); net.send({ t: 'ready' }); });
+$('#h-skills').addEventListener('click', () => { G.sel = null; renderSheet(); });
 
 // ============================ tap on the kitchen =========================
 $('#view').addEventListener('pointerup', e => {
@@ -2252,7 +2355,7 @@ $('#view').addEventListener('pointerup', e => {
 function costFor(kind) {
   const def = TOWERS[kind], p = me();
   const lvl = def.tree && p ? masteryLevel(p.m[def.tree]) : 0;
-  return Math.round(def.cost * (1 - MASTERY_DISCOUNT * lvl));
+  return Math.round(def.cost * (lvl >= 2 ? 1 - MASTERY_DISCOUNT : 1));
 }
 function statLine(def) {
   if (def.tree === 'service') {
@@ -2269,25 +2372,19 @@ function statLine(def) {
   bits.push(def.air ? 'hits fliers' : 'ground only');
   return bits.join(' · ');
 }
-function masteryChips(p) {
-  return `<div class="mast">${Object.entries(TREES).map(([k, t]) => {
-    const lvl = masteryLevel(p.m[k]);
-    return `<span title="${t.name}">${t.icon} <b>${lvl}</b>${lvl < 4 ? `<small> ${p.m[k]}/${MASTERY_STEPS[lvl + 1]}</small>` : ''}</span>`;
-  }).join('')}</div>`;
-}
-let sheetKey = '';
-function renderSheet(goldOnly = false) {
+const masteryChips = p => chipsHtml(p.m);
+// The sheet is only rebuilt when what it shows actually changes (gold ticks up
+// with every kill, and a rebuild mid-tap would swallow the tap).
+function setHtml(node, html) { if (node._html === html) return false; node._html = html; node.innerHTML = html; return true; }
+function renderSheet() {
   const p = me();
   const body = $('#sheet-body');
-  const key = JSON.stringify([G.sel, p?.gold, p?.m, G.sel?.tower && G.towers.get(G.sel.tower)]);
-  if (goldOnly && key === sheetKey) return;
-  sheetKey = key;
-  if (!p) { body.innerHTML = '<p class="hint">Joining…</p>'; return; }
+  if (!p) { setHtml(body, '<p class="hint">Joining…</p>'); return; }
   if (G.sel?.tile) {
     const c = costFor('prep'), mine = [...G.towers.values()].filter(t => t.owner === G.id).length, cap = MAX_TOWERS(G.players.length);
-    body.innerHTML = `<h3>🍽️ Prep Station</h3><p class="sub">${TOWERS.prep.desc} ${statLine(TOWERS.prep)}</p>
+    if (!setHtml(body, `<h3>🍽️ Prep Station</h3><p class="sub">${TOWERS.prep.desc} ${statLine(TOWERS.prep)}</p>
       <div class="tools"><button class="btn" id="do-build" ${p.gold < c || mine >= cap ? 'disabled' : ''}>BUILD · ${c} gold</button>
-      <span class="hint">Your towers: ${mine}/${cap}. Tip: tap the same tile twice to build.</span></div>`;
+      <span class="hint">Your towers: ${mine}/${cap}. Tip: tap the same tile twice to build.</span></div>`)) return;
     $('#do-build').onclick = () => net.send({ t: 'build', x: G.sel.tile.x, y: G.sel.tile.y });
     return;
   }
@@ -2303,20 +2400,21 @@ function renderSheet(goldOnly = false) {
           const locked = nd.req && lvl < nd.req;
           return `<button class="opt ${locked ? 'locked' : ''} ${p.gold < c ? 'poor' : ''}" data-up="${id}">
             <b>${nd.icon} ${nd.name}</b><small>${nd.desc || (def.tier === 0 ? TREES[nd.tree].blurb : statLine(nd))}</small>
-            <span class="cost">${locked ? `needs ${TREES[nd.tree].name} mastery ${nd.req} (you: ${lvl})` : `${c} gold`}</span></button>`;
+            <span class="cost">${locked ? `needs ${TREES[nd.tree].name} level ${nd.req} in the skill tree (you: ${lvl})` : `${c} gold`}</span></button>`;
         }).join('') + '</div>';
       } else html += '<p class="hint">Fully upgraded.</p>';
       html += `<div class="tools">${def.rate ? `<span class="hint">Aim:</span><div class="seg" id="seg-mode">${['first', 'strong', 'last'].map(m => `<button data-m="${m}" class="${t.mode === m ? 'on' : ''}">${m}</button>`).join('')}</div>` : ''}
         <button class="btn ghost small" id="do-sell">SELL · ${Math.round(t.spent * SELL_BACK)}</button></div>`;
     }
-    body.innerHTML = html;
+    if (!setHtml(body, html)) return;
     body.querySelectorAll('[data-up]').forEach(b => b.onclick = () => net.send({ t: 'up', id: t.id, to: b.dataset.up }));
     body.querySelectorAll('#seg-mode button').forEach(b => b.onclick = () => net.send({ t: 'mode', id: t.id, mode: b.dataset.m }));
     const sb = $('#do-sell');
     if (sb) sb.onclick = () => { if (sb.dataset.sure) { net.send({ t: 'sell', id: t.id }); G.sel = null; } else { sb.dataset.sure = 1; sb.textContent = 'TAP AGAIN TO SELL'; } };
     return;
   }
-  body.innerHTML = `<p class="hint">Tap an empty floor tile to build a Prep Station, then tap it to send it down a tree. Your mastery:</p>${masteryChips(p)}`;
+  if (!setHtml(body, `<p class="hint">Tap an empty floor tile to build a Prep Station, then tap it to send it down a tree.</p>${skillsHtml(p)}`)) return;
+  body.querySelectorAll('[data-skill]').forEach(b => b.onclick = () => net.send({ t: 'skill', tree: b.dataset.skill }));
 }
 // ================================= team ==================================
 function renderTeam() {

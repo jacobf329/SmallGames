@@ -75,12 +75,28 @@ export const TREES = {
 };
 export const TREE_IDS = Object.keys(TREES);
 
-// Mastery: gold a player has spent in a tree. Higher mastery = cheaper and
-// stronger towers in that tree, and the top tiers need it.
-export const MASTERY_STEPS = [0, 150, 650, 1400, 2600];
-export const masteryLevel = spent => { let l = 0; for (let i = 1; i < MASTERY_STEPS.length; i++) if (spent >= MASTERY_STEPS[i]) l = i; return l; };
-export const MASTERY_DISCOUNT = 0.04;    // per level, on that tree's upgrades
-export const MASTERY_POWER = 0.06;       // per level, on that tree's damage
+// Mastery: skill points. Every cook earns SP_PER_WAVE for each wave cleared
+// (+SP_BOSS_BONUS after a boss) and spends them on levels in a tree. Level n
+// costs n points, so maxing a tree (5) costs 15 and a whole game pays for
+// about two. `mastery[tree]` holds the level, 0..5.
+export const MAX_MASTERY = 5;
+export const SP_START = 1, SP_PER_WAVE = 1, SP_BOSS_BONUS = 1;
+export const skillCost = lvl => lvl + 1;                 // cost of going from lvl to lvl+1
+export const masteryLevel = lvl => lvl || 0;
+export const MASTERY_DISCOUNT = 0.10;    // from level 2: tower upgrades in that tree cost 10% less
+// What each level gives, per tree. Effects are applied in game.js.
+export const SKILLS = {
+  heat:    ['+10% Heat damage', 'Char Grills unlocked, Heat upgrades 10% cheaper', 'Flame Wok and Pizza Oven unlocked',
+            'Spreading Flames: burns hit 50% harder and last a second longer', 'Head Chef: +20% Heat damage, +0.3 range'],
+  chop:    ['+10% Chop damage', 'Santoku unlocked, Chop upgrades 10% cheaper', 'Blender and Meat Tenderizer unlocked',
+            'Razor Edge: 20% of Chop hits do double damage', 'Head Butcher: +20% Chop damage, +0.3 range'],
+  cold:    ['+10% Cold damage', 'Deep Freezer unlocked, Cold upgrades 10% cheaper', 'Soft-Serve Machine and Liquid Nitrogen unlocked',
+            'Deep Chill: freezes and slows last 40% longer', 'Head of Ice: +20% Cold damage, +0.3 range'],
+  sticky:  ['+10% Sticky damage', 'Molasses Cannon unlocked, Sticky upgrades 10% cheaper', 'Gum Trap and Cheese Grater unlocked',
+            'Extra Gooey: 30% bigger splashes, syrup lasts a second longer', 'Syrup Master: +20% Sticky damage, +0.3 range'],
+  service: ['+10% tips from your Service towers', 'Head Waiter unlocked, Service upgrades 10% cheaper', 'Waiter Station and Cash Register unlocked',
+            'Big Tippers: Service income +50%, boosts +5%', 'Maitre d\': boosts +10% more, +0.3 range'],
+};
 
 // Tower kinds. `next` lists what it can upgrade into. `req` = mastery level
 // needed in the tree. Ranges in tiles, rate in attacks per second.
@@ -94,42 +110,42 @@ T.prep = { name: 'Prep Station', tree: null, tier: 0, cost: 50, icon: '🍽️',
 
 T.grill  = { name: 'Grill', tree: 'heat', tier: 1, cost: 70, icon: '🔥', range: 2.4, rate: 1.2, dmg: 11, dtype: 'heat', air: true, burn: { dps: 8, t: 2 }, next: ['grill2'] };
 T.grill2 = { name: 'Searing Grill', tree: 'heat', tier: 2, cost: 110, icon: '🔥', range: 2.5, rate: 1.25, dmg: 18, dtype: 'heat', air: true, burn: { dps: 14, t: 2 }, next: ['grill3'] };
-T.grill3 = { name: 'Char Grill', tree: 'heat', tier: 3, req: 1, cost: 180, icon: '🔥', range: 2.6, rate: 1.3, dmg: 28, dtype: 'heat', air: true, splash: 0.7, burn: { dps: 22, t: 2 }, next: ['wok', 'oven'] };
-T.wok    = { name: 'Flame Wok', tree: 'heat', tier: 4, req: 2, cost: 340, icon: '🥘', range: 1.9, rate: 3, dmg: 14, dtype: 'heat', air: true, splash: 1.0, burn: { dps: 38, t: 2 },
+T.grill3 = { name: 'Char Grill', tree: 'heat', tier: 3, req: 2, cost: 180, icon: '🔥', range: 2.6, rate: 1.3, dmg: 28, dtype: 'heat', air: true, splash: 0.7, burn: { dps: 22, t: 2 }, next: ['wok', 'oven'] };
+T.wok    = { name: 'Flame Wok', tree: 'heat', tier: 4, req: 3, cost: 340, icon: '🥘', range: 1.9, rate: 3, dmg: 14, dtype: 'heat', air: true, splash: 1.0, burn: { dps: 38, t: 2 },
   desc: 'Short range, sprays fire over the whole crowd.', next: [] };
-T.oven   = { name: 'Pizza Oven', tree: 'heat', tier: 4, req: 2, cost: 380, icon: '♨️', range: 4.2, rate: 0.4, dmg: 160, dtype: 'heat', air: true, splash: 1.3, burn: { dps: 25, t: 3 },
+T.oven   = { name: 'Pizza Oven', tree: 'heat', tier: 4, req: 3, cost: 380, icon: '♨️', range: 4.2, rate: 0.4, dmg: 160, dtype: 'heat', air: true, splash: 1.3, burn: { dps: 25, t: 3 },
   desc: 'Long range fireballs with a big splash.', next: [] };
 
 T.cleaver  = { name: 'Cleaver', tree: 'chop', tier: 1, cost: 70, icon: '🔪', range: 1.8, rate: 0.9, dmg: 24, dtype: 'chop', air: false, next: ['cleaver2'] };
 T.cleaver2 = { name: "Chef's Knife", tree: 'chop', tier: 2, cost: 110, icon: '🔪', range: 1.9, rate: 0.95, dmg: 42, dtype: 'chop', air: false, next: ['cleaver3'] };
-T.cleaver3 = { name: 'Santoku', tree: 'chop', tier: 3, req: 1, cost: 180, icon: '🔪', range: 2.0, rate: 1.0, dmg: 68, dtype: 'chop', air: false, next: ['blender', 'mallet'] };
-T.blender  = { name: 'Blender', tree: 'chop', tier: 4, req: 2, cost: 340, icon: '🌀', range: 1.4, rate: 2, dmg: 38, dtype: 'chop', air: false, aura: true,
+T.cleaver3 = { name: 'Santoku', tree: 'chop', tier: 3, req: 2, cost: 180, icon: '🔪', range: 2.0, rate: 1.0, dmg: 68, dtype: 'chop', air: false, next: ['blender', 'mallet'] };
+T.blender  = { name: 'Blender', tree: 'chop', tier: 4, req: 3, cost: 340, icon: '🌀', range: 1.4, rate: 2, dmg: 38, dtype: 'chop', air: false, aura: true,
   desc: 'Shreds every ground food in reach, all at once.', next: [] };
-T.mallet   = { name: 'Meat Tenderizer', tree: 'chop', tier: 4, req: 2, cost: 380, icon: '🔨', range: 2.1, rate: 0.5, dmg: 280, dtype: 'chop', air: false, pierce: true, stun: 0.4, splash: 0.6,
+T.mallet   = { name: 'Meat Tenderizer', tree: 'chop', tier: 4, req: 3, cost: 380, icon: '🔨', range: 2.1, rate: 0.5, dmg: 280, dtype: 'chop', air: false, pierce: true, stun: 0.4, splash: 0.6,
   desc: 'Huge hits that ignore armour and stun.', next: [] };
 
 T.vent  = { name: 'Freezer Vent', tree: 'cold', tier: 1, cost: 70, icon: '❄️', range: 2.3, rate: 1.0, dmg: 4, dtype: 'cold', air: true, slow: { f: 0.6, t: 1.5 }, next: ['vent2'] };
 T.vent2 = { name: 'Chill Blaster', tree: 'cold', tier: 2, cost: 110, icon: '❄️', range: 2.4, rate: 1.0, dmg: 7, dtype: 'cold', air: true, slow: { f: 0.5, t: 1.8 }, splash: 0.6, next: ['vent3'] };
-T.vent3 = { name: 'Deep Freezer', tree: 'cold', tier: 3, req: 1, cost: 180, icon: '❄️', range: 2.5, rate: 0.9, dmg: 12, dtype: 'cold', air: true, slow: { f: 0.45, t: 2 }, splash: 0.9, freeze: 0.5, next: ['icecream', 'nitro'] };
-T.icecream = { name: 'Soft-Serve Machine', tree: 'cold', tier: 4, req: 2, cost: 340, icon: '🍦', range: 1.8, rate: 0.5, dmg: 16, dtype: 'cold', air: true, aura: true, freeze: 0.9, slow: { f: 0.5, t: 2.5 },
+T.vent3 = { name: 'Deep Freezer', tree: 'cold', tier: 3, req: 2, cost: 180, icon: '❄️', range: 2.5, rate: 0.9, dmg: 12, dtype: 'cold', air: true, slow: { f: 0.45, t: 2 }, splash: 0.9, freeze: 0.5, next: ['icecream', 'nitro'] };
+T.icecream = { name: 'Soft-Serve Machine', tree: 'cold', tier: 4, req: 3, cost: 340, icon: '🍦', range: 1.8, rate: 0.5, dmg: 16, dtype: 'cold', air: true, aura: true, freeze: 0.9, slow: { f: 0.5, t: 2.5 },
   desc: 'Pulses a freeze over everything nearby.', next: [] };
-T.nitro    = { name: 'Liquid Nitrogen', tree: 'cold', tier: 4, req: 2, cost: 380, icon: '🧪', range: 3.6, rate: 0.6, dmg: 45, dtype: 'cold', air: true, freeze: 2.2,
+T.nitro    = { name: 'Liquid Nitrogen', tree: 'cold', tier: 4, req: 3, cost: 380, icon: '🧪', range: 3.6, rate: 0.6, dmg: 45, dtype: 'cold', air: true, freeze: 2.2,
   desc: 'Freezes one target solid. Chop shatters it.', next: [] };
 
 T.syrup  = { name: 'Syrup Pump', tree: 'sticky', tier: 1, cost: 60, icon: '🍯', range: 2.4, rate: 0.8, dmg: 3, dtype: 'sticky', air: false, splash: 0.8, sticky: 2.5, next: ['syrup2'] };
 T.syrup2 = { name: 'Maple Mortar', tree: 'sticky', tier: 2, cost: 100, icon: '🍯', range: 2.6, rate: 0.85, dmg: 6, dtype: 'sticky', air: false, splash: 1.0, sticky: 3, next: ['syrup3'] };
-T.syrup3 = { name: 'Molasses Cannon', tree: 'sticky', tier: 3, req: 1, cost: 160, icon: '🍯', range: 2.8, rate: 0.9, dmg: 10, dtype: 'sticky', air: false, splash: 1.2, sticky: 3.5, next: ['gum', 'grater'] };
-T.gum    = { name: 'Gum Trap', tree: 'sticky', tier: 4, req: 2, cost: 300, icon: '🫧', range: 2.8, rate: 0.6, dmg: 14, dtype: 'sticky', air: false, splash: 1.3, sticky: 4, stun: 1.0,
+T.syrup3 = { name: 'Molasses Cannon', tree: 'sticky', tier: 3, req: 2, cost: 160, icon: '🍯', range: 2.8, rate: 0.9, dmg: 10, dtype: 'sticky', air: false, splash: 1.2, sticky: 3.5, next: ['gum', 'grater'] };
+T.gum    = { name: 'Gum Trap', tree: 'sticky', tier: 4, req: 3, cost: 300, icon: '🫧', range: 2.8, rate: 0.6, dmg: 14, dtype: 'sticky', air: false, splash: 1.3, sticky: 4, stun: 1.0,
   desc: 'Glues a whole group in place for a moment.', next: [] };
-T.grater = { name: 'Cheese Grater', tree: 'sticky', tier: 4, req: 2, cost: 320, icon: '🧀', range: 1.6, rate: 2, dmg: 22, dtype: 'chop', air: false, aura: true, sticky: 2,
+T.grater = { name: 'Cheese Grater', tree: 'sticky', tier: 4, req: 3, cost: 320, icon: '🧀', range: 1.6, rate: 2, dmg: 22, dtype: 'chop', air: false, aura: true, sticky: 2,
   desc: 'Grinds and gums up all ground food in reach.', next: [] };
 
 T.tipjar  = { name: 'Tip Jar', tree: 'service', tier: 1, cost: 70, icon: '💰', range: 2.0, rate: 0, dmg: 0, income: 20, buff: 0.10, next: ['tipjar2'] };
 T.tipjar2 = { name: 'Bus Station', tree: 'service', tier: 2, cost: 110, icon: '💰', range: 2.2, rate: 0, dmg: 0, income: 35, buff: 0.15, next: ['tipjar3'] };
-T.tipjar3 = { name: 'Head Waiter', tree: 'service', tier: 3, req: 1, cost: 170, icon: '🛎️', range: 2.4, rate: 0, dmg: 0, income: 50, buff: 0.22, haste: 0.08, next: ['waiter', 'register'] };
-T.waiter   = { name: 'Waiter Station', tree: 'service', tier: 4, req: 2, cost: 320, icon: '🛎️', range: 2.8, rate: 0, dmg: 0, income: 55, buff: 0.38, haste: 0.18,
+T.tipjar3 = { name: 'Head Waiter', tree: 'service', tier: 3, req: 2, cost: 170, icon: '🛎️', range: 2.4, rate: 0, dmg: 0, income: 50, buff: 0.22, haste: 0.08, next: ['waiter', 'register'] };
+T.waiter   = { name: 'Waiter Station', tree: 'service', tier: 4, req: 3, cost: 320, icon: '🛎️', range: 2.8, rate: 0, dmg: 0, income: 55, buff: 0.38, haste: 0.18,
   desc: 'Big damage and speed boost for other trees nearby.', next: [] };
-T.register = { name: 'Cash Register', tree: 'service', tier: 4, req: 2, cost: 340, icon: '💵', range: 2.0, rate: 0, dmg: 0, income: 70, teamIncome: 45, buff: 0.15,
+T.register = { name: 'Cash Register', tree: 'service', tier: 4, req: 3, cost: 340, icon: '💵', range: 2.0, rate: 0, dmg: 0, income: 70, teamIncome: 45, buff: 0.15,
   desc: 'Pays you, and every teammate, each wave.', next: [] };
 
 for (const [id, t] of Object.entries(T)) { t.id = id; t.ground = true; }
@@ -215,15 +231,15 @@ export const BOSS_INTRO = {
 export function teamScale(n) {
   n = Math.max(1, n);
   return {
-    count: n === 1 ? 0.8 : 0.25 + 0.75 * n,     // enemy numbers (and boss hp)
-    bossHp: n === 1 ? 0.55 : 0.4 + 0.6 * n,  // boss (and boss-spawn) toughness
+    count: n === 1 ? 1.25 : 0.25 + 0.75 * n,     // enemy numbers (and boss hp)
+    bossHp: n === 1 ? 1.0 : 0.4 + 0.6 * n,  // boss (and boss-spawn) toughness
     families: n === 1 ? 1 : n <= 4 ? 2 : 3,     // distinct families per wave, before wave bonuses
     adapt: n === 1 ? 0.25 : n <= 4 ? 1 : 1.6,   // how hard the food reacts to a monoculture
-    pay: n === 1 ? 1.3 : 1.05 / (0.25 + 0.75 * n), // per-player share of each bounty
+    pay: n === 1 ? 1.05 : 1.05 / (0.25 + 0.75 * n), // per-player share of each bounty
   };
 }
 export const waveBudget = w => (26 + 9 * w) * Math.pow(1.085, w) * (w <= 3 ? 0.8 : 1);
-export const waveHpMult = w => 1 + Math.max(0, w - 12) * 0.045 + Math.max(0, w - WAVES) * 0.08;
+export const waveHpMult = w => 1 + Math.max(0, w - 8) * 0.05 + Math.max(0, w - WAVES) * 0.08;
 
 export const START_GOLD = 220;
 export const WAVE_BONUS = w => 40 + 4 * w;
