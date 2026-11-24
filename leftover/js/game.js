@@ -9,7 +9,7 @@
 import {
   TOWERS, ENEMIES, DIFFICULTY, PATH_GEO, WAVES, START_GOLD, WAVE_BONUS, BUILD_TIME, EARLY_BONUS,
   MAX_TOWERS, SELL_BACK, TREE_IDS, MASTERY_DISCOUNT, MAX_MASTERY, SP_START, SP_PER_WAVE, SP_BOSS_BONUS, skillCost, masteryLevel, buildable,
-  pathPoint, teamScale, waveHpMult, doorsFor,
+  pathPoint, teamScale, waveHpMult, doorsFor, PRESSURE, pressureTarget,
 } from './data.js';
 import { planWave } from './director.js';
 
@@ -29,7 +29,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     diff, wave: 0, phase: 'build', buildT: BUILD_TIME(1), lives: D.lives, maxLives: D.lives,
     endless: false, speed: 1, enemies: [], towers: new Map(), players: P, events: [],
     plan: null, waveT: 0, spawnI: 0, lastFams: [], towersVer: 1, playersVer: 1, nextId: 1,
-    warn: null, fams: [], time: 0, seen: new Set(), next: null, preview: null,
+    warn: null, fams: [], time: 0, push: 1, far: 0, leaked: false, seen: new Set(), next: null, preview: null,
   };
   const n = () => P.size;
   const ev = e => g.events.push(e);
@@ -220,6 +220,13 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
 
   function waveCleared() {
     const w = g.wave;
+    // Pressure: a team that held this wave too comfortably gets tougher food
+    // from now on. Close calls and leaks ease that extra back off (never below
+    // the normal curve).
+    const target = pressureTarget(w, D.press);
+    if (g.leaked || g.far > target + 0.05) g.push = Math.max(1, g.push * PRESSURE.down);
+    else if (g.far < target - PRESSURE.slack) g.push = Math.min(PRESSURE.max, g.push * PRESSURE.up);
+    g.far = 0; g.leaked = false;
     const bonus = WAVE_BONUS(w) * D.gold;
     const incomeOf = t => (TOWERS[t.kind].income || 0) * (t.lvl >= 1 ? 1.1 : 1) * (t.lvl >= 4 ? 1.5 : 1);
     let team = 0;
@@ -249,7 +256,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     const def = ENEMIES[type];
     const sc = teamScale(n());
     // Bosses climb on a gentler ramp: they're already built to be a team's big test.
-    let hp = def.hp * D.hp * (def.fam === 'boss' ? waveHpMult(g.wave, D.ramp * 0.5, D.late * 0.5) : waveHpMult(g.wave, D.ramp, D.late));
+    let hp = def.hp * D.hp * (def.fam === 'boss' ? waveHpMult(g.wave, D.ramp * 0.5, D.late * 0.5) * Math.sqrt(g.push) : waveHpMult(g.wave, D.ramp, D.late) * g.push);
     if (def.boss || def.fam === 'boss') hp *= sc.bossHp;
     const e = {
       id: g.nextId++, type, path, d, hp, maxHp: hp,
@@ -398,9 +405,11 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
       if (e.freezeT > 0) { e.freezeT -= dt; f = 0; }
       if (e.stunT > 0) { e.stunT -= dt; f = 0; }
       e.d += def.speed * f * dt;
+      const prog = e.d / PATH_GEO[e.path].total;
+      if (prog > g.far) g.far = prog;
       if (e.d >= PATH_GEO[e.path].total) {
         e.dead = true; e.leaked = true;
-        g.lives -= def.leak;
+        g.lives -= def.leak; g.leaked = true;
         ev({ t: 'leak', type: e.type, lives: def.leak });
         if (g.lives <= 0) { g.lives = 0; g.phase = 'lost'; ev({ t: 'lost', n: g.wave }); }
       }

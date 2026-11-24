@@ -80,6 +80,11 @@ stands in for a skilled player; plain AI cooks are the lobby teammates.
   so the climb comes mostly from toughness.
 - Solo starts lighter and grows (`soloCurve`); bosses climb on half the ramp.
 - Counter food resists rather than being immune, so no wave is a wall.
+- Pressure: each difficulty has a target "closest call" that rises from wave 1
+  to wave 30 (`press`). After each wave, if the team held it more comfortably
+  than that, regular food gets ~7% tougher from then on (bosses half as much);
+  a leak or a close call eases that extra back off. It never drops below the
+  base curve, so it only pushes strong players.
 
 `node leftover/tools/curve.mjs 6 normal 1 eco` prints, per wave, the average
 lives lost and the "closest call" (how far along the path the furthest food

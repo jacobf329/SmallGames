@@ -12,10 +12,13 @@ export const COLORS = ['#ff5a5f', '#3fa7ff', '#ffd23f', '#3ddc84', '#c77dff', '#
 // ramp: how much tougher each food gets every wave (compounding, from wave 1),
 // so the difficulty climbs steadily instead of in jumps. late: the ramp from
 // wave LATE_FROM on, when the team's top towers and skills come online.
+// press: the pressure the game aims for, wave 1 -> wave 30, as how far along
+// the path the furthest food gets. A team that beats the food more easily
+// than that gets tougher food (see PRESSURE); it never gets easier.
 export const DIFFICULTY = {
-  easy:   { label: 'Easy',   hp: 0.8,  lives: 40, gold: 1.15, ramp: 0.075, late: 0.125 },
-  normal: { label: 'Normal', hp: 1.0,  lives: 30, gold: 1.0,  ramp: 0.10,  late: 0.14 },
-  hard:   { label: 'Hard',   hp: 1.15, lives: 20, gold: 0.92, ramp: 0.12,  late: 0.17 },
+  easy:   { label: 'Easy',   hp: 0.8,  lives: 40, gold: 1.15, ramp: 0.08,  late: 0.135, press: [0.35, 0.70] },
+  normal: { label: 'Normal', hp: 1.0,  lives: 30, gold: 1.0,  ramp: 0.105, late: 0.155, press: [0.50, 0.90] },
+  hard:   { label: 'Hard',   hp: 1.15, lives: 20, gold: 0.92, ramp: 0.125, late: 0.185, press: [0.60, 0.95] },
 };
 
 // ------------------------------------------------------------------ map ----
@@ -237,7 +240,7 @@ export function teamScale(n) {
   n = Math.max(1, n);
   return {
     count: n === 1 ? 1.0 : 0.25 + 0.75 * n,      // enemy numbers vs solo (solo also grows over the game: soloCurve)
-    bossHp: n === 1 ? 0.8 : 0.3 + 0.45 * n,  // boss (and boss-spawn) toughness
+    bossHp: n === 1 ? 0.65 : 0.3 + 0.45 * n,  // boss (and boss-spawn) toughness
     families: n === 1 ? 1 : n <= 4 ? 2 : 3,     // distinct families per wave, before wave bonuses
     adapt: n === 1 ? 0.25 : n <= 4 ? 1 : 1.6,   // how hard the food reacts to a monoculture
     pay: n === 1 ? 1.05 : 1.05 / (0.25 + 0.75 * n), // per-player share of each bounty
@@ -245,10 +248,13 @@ export function teamScale(n) {
 }
 // Solo has no teammates' towers to lean on late, and no one to share the
 // opening with: lighter early, heavier late.
-export const soloCurve = w => 0.8 + 0.035 * w;
-export const waveBudget = w => (24 + 9 * w) * Math.pow(1.03, w) * (w <= 6 ? 0.55 + w * 0.06 : 1);
+export const soloCurve = w => 0.62 + 0.045 * w;
+// Waves fill out gradually over the first ten, so the opening climbs instead of spiking.
+export const waveBudget = w => (24 + 9 * w) * Math.pow(1.03, w) * (w <= 10 ? 0.45 + w * 0.055 : 1);
 // Toughness compounds every wave (it pays no extra gold, unlike more food).
 export const LATE_FROM = 12;
+export const PRESSURE = { up: 1.07, down: 0.95, max: 2.5, slack: 0.08 };
+export const pressureTarget = (w, press) => press[0] + (press[1] - press[0]) * Math.min(1, (w - 1) / 29);
 export const waveHpMult = (w, ramp = 0.10, late = ramp) =>
   Math.pow(1 + ramp, Math.min(w, LATE_FROM) - 1) * Math.pow(1 + late, Math.max(0, w - LATE_FROM)) * (1 + Math.max(0, w - WAVES) * 0.08);
 
