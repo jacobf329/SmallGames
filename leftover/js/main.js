@@ -22,7 +22,7 @@ const DT_NAMES = { basic: 'Plain', heat: 'Heat', chop: 'Chop', cold: 'Cold', sti
 const G = window.LU = {
   id: null, code: '', hosting: false, practice: false, name: '', lobby: null, inGame: false,
   players: [], towers: new Map(), snaps: [], view: [], wave: 0, phase: 'build', bt: 0, lives: 0, maxLives: 0,
-  fams: [], sel: null, showRanges: false, endless: false,
+  fams: [], sel: null, skillsOpen: false, showRanges: false, endless: false, spd: 1,
 };
 const net = new Net();
 document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS }));
@@ -154,6 +154,7 @@ net.on('start', () => {
   $('#results').classList.add('hidden');
   show('game');
   renderSheet();
+  setTimeout(() => toast('Tap an empty floor tile to build. Tap a tower to upgrade it.', '', 5000), 400);
 });
 net.on('towers', m => {
   G.towers = new Map(m.list.map(([id, x, y, kind, owner, mode, dmg, buff, spent]) => [id, { id, x, y, kind, owner, mode, dmg, buff, spent }]));
@@ -171,7 +172,7 @@ net.on('players', m => {
 net.on('nope', m => { toast(m.msg, 'warn'); sfx.nope(); });
 net.on('snap', m => {
   const prevPhase = G.phase;
-  Object.assign(G, { wave: m.w, phase: m.ph, bt: m.bt, lives: m.lv, maxLives: m.ml, fams: m.fams, endless: m.endless });
+  Object.assign(G, { wave: m.w, phase: m.ph, bt: m.bt, lives: m.lv, maxLives: m.ml, fams: m.fams, endless: m.endless, spd: m.spd || 1 });
   G.snaps.push({ at: performance.now(), en: new Map(m.en.map(([id, type, path, d, hp, fl, lat]) => [id, { id, type, path, d, hp, fl, lat }])) });
   if (G.snaps.length > 6) G.snaps.shift();
   for (const e of m.ev) onEvent(e);
@@ -204,6 +205,7 @@ function onEvent(e) {
     }
     case 'cleared': sfx.coin(); toast(`Wave ${e.n} cleared: +${e.bonus} gold${e.team ? ` (+${e.team} from registers)` : ''}, +${e.sp} skill point${e.sp > 1 ? 's' : ''}`, 'good'); break;
     case 'skill': if (e.by === G.id) sfx.combo(); break;
+    case 'speed': toast(e.speed === 2 ? '⏩ Double speed: everyone agreed' : `▶ Back to normal speed (${nameOf(e.by)})`); break;
   }
 }
 
@@ -228,6 +230,10 @@ function renderHud() {
   $('#h-lives').textContent = G.lives;
   $('#h-gold').textContent = p ? p.gold : 0;
   $('#h-skills').dataset.n = p?.sp || 0;
+  const humansAll = G.players.filter(q => !q.ai), fastN = humansAll.filter(q => q.fast).length, fb = $('#h-fast');
+  fb.classList.toggle('on', G.spd === 2);
+  fb.classList.toggle('half', !!p?.fast && G.spd !== 2);
+  fb.querySelector('small').textContent = G.spd === 2 ? '2× on' : humansAll.length > 1 ? `2× ${fastN}/${humansAll.length}` : '2×';
   const go = $('#h-go');
   if (G.phase === 'build') {
     const humans = G.players.filter(q => !q.ai), ready = humans.filter(q => q.ready).length;
@@ -240,13 +246,16 @@ function renderHud() {
   }
 }
 $('#h-go').addEventListener('click', () => { sfx.unlock(); net.send({ t: 'ready' }); });
-$('#h-skills').addEventListener('click', () => { G.sel = null; renderSheet(); });
+$('#h-skills').addEventListener('click', () => { G.sel = null; G.skillsOpen = !G.skillsOpen; renderSheet(); });
+$('#h-fast').addEventListener('click', () => { sfx.unlock(); net.send({ t: 'fast' }); });
+$('#sheet-x').addEventListener('click', () => { G.sel = null; G.skillsOpen = false; renderSheet(); });
 
 // ============================ tap on the kitchen =========================
 $('#view').addEventListener('pointerup', e => {
   sfx.unlock();
   const r = $('#view').getBoundingClientRect();
   const tile = renderer.tileAt(e.clientX - r.left, e.clientY - r.top);
+  G.skillsOpen = false;
   if (!tile) { G.sel = null; renderSheet(); return; }
   const t = towerAt(tile.x, tile.y);
   if (t) G.sel = G.sel?.tower === t.id ? null : { tower: t.id };
@@ -286,19 +295,22 @@ function setHtml(node, html) { if (node._html === html) return false; node._html
 function renderSheet() {
   const p = me();
   const body = $('#sheet-body');
+  const open = !!(G.sel || G.skillsOpen);
+  $('#sheet').classList.toggle('open', open);
+  if (!open) return;
   if (!p) { setHtml(body, '<p class="hint">Joining…</p>'); return; }
   if (G.sel?.tile) {
     const c = costFor('prep'), mine = [...G.towers.values()].filter(t => t.owner === G.id).length, cap = MAX_TOWERS(G.players.length);
     if (!setHtml(body, `<h3>🍽️ Prep Station</h3><p class="sub">${TOWERS.prep.desc} ${statLine(TOWERS.prep)}</p>
       <div class="tools"><button class="btn" id="do-build" ${p.gold < c || mine >= cap ? 'disabled' : ''}>BUILD · ${c} gold</button>
       <span class="hint">Your towers: ${mine}/${cap}. Tip: tap the same tile twice to build.</span></div>`)) return;
-    $('#do-build').onclick = () => net.send({ t: 'build', x: G.sel.tile.x, y: G.sel.tile.y });
+    $('#do-build').onclick = () => { const tl = G.sel?.tile; if (tl) net.send({ t: 'build', x: tl.x, y: tl.y }); };
     return;
   }
   const t = G.sel?.tower && G.towers.get(G.sel.tower);
   if (t) {
     const def = TOWERS[t.kind], mineT = t.owner === G.id, owner = G.players.find(q => q.id === t.owner);
-    let html = `<h3>${def.icon} ${def.name} <small class="hint">${def.tree ? TREES[def.tree].name + ' tier ' + def.tier : 'blank'}</small></h3>
+    let html = `<h3 data-tid="${t.id}">${def.icon} ${def.name} <small class="hint">${def.tree ? TREES[def.tree].name + ' tier ' + def.tier : 'blank'}</small></h3>
       <p class="sub">${mineT ? 'Yours' : `<span style="color:${owner?.color}">${esc(owner?.name || '?')}</span>'s`} · ${statLine(def)} · ${t.dmg} damage dealt${t.buff ? ` · boosted +${Math.round(t.buff * 100)}%` : ''}</p>`;
     if (mineT) {
       if (def.next.length) {

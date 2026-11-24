@@ -69,12 +69,16 @@
     <div class="stat" title="Lives"><small>LIVES</small><b id="h-lives">30</b></div>
     <div class="stat gold" title="Your gold"><small>GOLD</small><b id="h-gold">0</b></div>
     <button id="h-go" class="btn small">NEXT WAVE</button>
-    <button id="h-skills" class="iconbtn sk-badge" title="Skill tree" data-n="0">📖</button>
-    <button id="h-team" class="iconbtn" title="Team">👥</button>
     <button id="h-menu" class="iconbtn" title="Menu">☰</button>
   </header>
-  <div id="stage"><canvas id="view"></canvas><div id="toasts"></div></div>
-  <div id="sheet" class="sheet"><div id="sheet-body"><p class="hint">Tap an empty floor tile to build. Tap a tower to upgrade it.</p></div></div>
+  <div id="stage"><canvas id="view"></canvas><div id="toasts"></div>
+    <div class="fabs">
+      <button id="h-fast" class="fab" title="Double speed: on when every cook agrees">⏩<small>1×</small></button>
+      <button id="h-skills" class="fab sk-badge" title="Skill tree" data-n="0">📖<small>skills</small></button>
+      <button id="h-team" class="fab" title="Team">👥<small>team</small></button>
+    </div>
+    <div id="sheet" class="sheet"><button class="sheet-x" id="sheet-x" title="Close">✕</button><div id="sheet-body"></div></div>
+  </div>
 </section>
 
 <!-- ======================== TEAM / MENU PANELS ===================== -->

@@ -61,13 +61,13 @@ export function createServer({ code = 'SOLO' } = {}) {
   }
   function playersMsg() {
     return { t: 'players', list: [...game.players.values()].map(p => ({
-      id: p.id, name: p.name, color: p.color, ai: p.ai, gold: Math.floor(p.gold), sp: p.sp, ready: p.ready,
+      id: p.id, name: p.name, color: p.color, ai: p.ai, gold: Math.floor(p.gold), sp: p.sp, ready: p.ready, fast: !!p.fast,
       m: p.mastery, st: { dmg: Math.round(p.stats.dmg), kills: p.stats.kills, combos: p.stats.combos },
     })) };
   }
   function snapMsg() {
     return { t: 'snap', w: game.wave, ph: game.phase, bt: Math.max(0, Math.ceil(game.buildT)), lv: game.lives, ml: game.maxLives,
-      fams: game.fams, endless: game.endless,
+      fams: game.fams, endless: game.endless, spd: game.speed,
       en: game.enemies.map(e => {
         const fl = (e.burnT > 0 ? 1 : 0) | (e.slowT > 0 ? 2 : 0) | (e.freezeT > 0 ? 4 : 0) | (e.stickyT > 0 ? 8 : 0) | (e.stunT > 0 ? 16 : 0);
         return [e.id, e.type, e.path, r2(e.d), Math.max(1, Math.round(100 * e.hp / e.maxHp)), fl, r2(e.lat)];
@@ -130,11 +130,11 @@ export function createServer({ code = 'SOLO' } = {}) {
           case 'go':          // host: start the next wave now
             if (me && me.id === hostId && game) game.startNow();
             break;
-          case 'build': case 'up': case 'sell': case 'mode': case 'gift': case 'ready': case 'skill': {
+          case 'build': case 'up': case 'sell': case 'mode': case 'gift': case 'ready': case 'skill': case 'fast': {
             if (!me || !game) return;
             const err = game.act(me.id, m);
             if (err) send(conn, { t: 'nope', msg: err });
-            else if (m.t !== 'ready' && m.t !== 'mode') { broadcast(towersMsg()); sentTowers = game.towersVer; broadcast(playersMsg()); sentPlayers = game.playersVer; }
+            else if (m.t !== 'ready' && m.t !== 'mode' && m.t !== 'fast') { broadcast(towersMsg()); sentTowers = game.towersVer; broadcast(playersMsg()); sentPlayers = game.playersVer; }
             break;
           }
           case 'ping':
@@ -162,8 +162,7 @@ export function createServer({ code = 'SOLO' } = {}) {
     while (acc >= DT && steps < 8) {
       acc -= DT; steps++;
       if (state !== 'playing' || !game) continue;
-      for (const c of cooks) c.step(DT);
-      game.step(DT);
+      for (let k = 0; k < game.speed; k++) { for (const c of cooks) c.step(DT); game.step(DT); }
       tickN++;
       if (tickN % SNAP_EVERY === 0) sendSnapshot();
     }

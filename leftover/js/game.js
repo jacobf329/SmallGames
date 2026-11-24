@@ -27,7 +27,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
   }
   const g = {
     diff, wave: 0, phase: 'build', buildT: BUILD_TIME(1), lives: D.lives, maxLives: D.lives,
-    endless: false, enemies: [], towers: new Map(), players: P, events: [],
+    endless: false, speed: 1, enemies: [], towers: new Map(), players: P, events: [],
     plan: null, waveT: 0, spawnI: 0, lastFams: [], towersVer: 1, playersVer: 1, nextId: 1,
     warn: null, fams: [], time: 0,
   };
@@ -141,6 +141,14 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
         ev({ t: 'skill', by: pid, tree: m.tree, lvl: lvl + 1 });
         return null;
       }
+      case 'fast': {
+        // Double speed only while every human cook wants it.
+        p.fast = !p.fast; g.playersVer++;
+        const before = g.speed;
+        g.speed = speedNow();
+        if (g.speed !== before) ev({ t: 'speed', speed: g.speed, by: pid });
+        return null;
+      }
       case 'ready': {
         if (g.phase !== 'build') return 'wave already running';
         p.ready = !p.ready; g.playersVer++;
@@ -150,6 +158,10 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     return 'unknown';
   };
 
+  function speedNow() {
+    const humans = [...P.values()].filter(p => !p.ai);
+    return humans.length && humans.every(p => p.fast) ? 2 : 1;
+  }
   // Cooks leave mid-game: their towers keep cooking and their gold is shared out.
   g.removePlayer = pid => {
     const p = P.get(pid);
@@ -160,6 +172,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     const heir = rest[0];
     for (const t of g.towers.values()) if (t.owner === pid) { if (heir) t.owner = heir.id; else g.towers.delete(t.id); }
     recomputeBuffs();
+    g.speed = speedNow();
     g.playersVer++;
   };
   g.addPlayer = p => {

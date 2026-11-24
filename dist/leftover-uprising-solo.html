@@ -90,7 +90,20 @@ input:focus { border-color: var(--a); }
 .toast.good { border-color: var(--good); }
 @keyframes pop { from { transform: translateY(-8px); opacity: 0; } }
 
-.sheet { flex: none; background: var(--bg2); border-top: 1px solid var(--line); padding: 10px 12px calc(10px + var(--safe-b)); height: 34vh; overflow-y: auto; }
+/* The kitchen fills the screen; the build/upgrade menu is an overlay. */
+.fabs { position: absolute; right: 6px; bottom: calc(70px + var(--safe-b)); display: flex; flex-direction: column; gap: 8px; z-index: 2; }
+.fab { width: 50px; height: 50px; border-radius: 16px; background: rgba(42, 29, 22, .92); border: 1px solid var(--line); font-size: 1.3rem;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+.fab small { font-size: .58rem; color: var(--dim); margin-top: 3px; letter-spacing: .04em; }
+.fab.on { background: var(--good); } .fab.on small { color: #10240f; }
+.fab.half { box-shadow: 0 0 0 2px var(--good) inset, 0 6px 18px rgba(0,0,0,.35); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 62%; overflow-y: auto; z-index: 3;
+  background: var(--bg2); border: 1px solid var(--line); border-bottom: 0; border-radius: 20px 20px 0 0;
+  padding: 14px 12px calc(12px + var(--safe-b)); box-shadow: 0 -12px 40px rgba(0,0,0,.5);
+  transform: translateY(105%); transition: transform .18s ease-out; }
+.sheet.open { transform: none; }
+.sheet-x { position: sticky; top: 0; float: right; margin: -4px -2px 0 8px; width: 34px; height: 34px; border-radius: 10px;
+  background: var(--card); border: 1px solid var(--line); font-size: 1rem; cursor: pointer; z-index: 1; }
 .sheet h3 { margin: 0 0 2px; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
 .sheet .sub { color: var(--mute); font-size: .82rem; margin: 0 0 8px; }
 .opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
@@ -113,14 +126,10 @@ input:focus { border-color: var(--a); }
 
 .overlay { position: fixed; inset: 0; background: rgba(10, 6, 4, .7); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
 
-/* Landscape phones / desktop: sheet moves to the right. */
+/* Landscape / desktop: the overlay slides in from the right instead. */
 @media (orientation: landscape) and (min-width: 700px) {
-  #game { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: auto 1fr; }
-  #game:not(.active) { display: none; }
-  #hud { grid-column: 1 / 3; }
-  #stage { grid-column: 1; grid-row: 2; }
-  .sheet { grid-column: 2; grid-row: 2; height: auto; border-top: 0; border-left: 1px solid var(--line); }
-  .opts { grid-template-columns: 1fr; }
+  .sheet { left: auto; top: 0; width: 340px; max-height: none; border-radius: 20px 0 0 20px; border-bottom: 1px solid var(--line); transform: translateX(105%); }
+  .sheet.open { transform: none; }
 }
 
 </style>
@@ -184,12 +193,16 @@ input:focus { border-color: var(--a); }
     <div class="stat" title="Lives"><small>LIVES</small><b id="h-lives">30</b></div>
     <div class="stat gold" title="Your gold"><small>GOLD</small><b id="h-gold">0</b></div>
     <button id="h-go" class="btn small">NEXT WAVE</button>
-    <button id="h-skills" class="iconbtn sk-badge" title="Skill tree" data-n="0">📖</button>
-    <button id="h-team" class="iconbtn" title="Team">👥</button>
     <button id="h-menu" class="iconbtn" title="Menu">☰</button>
   </header>
-  <div id="stage"><canvas id="view"></canvas><div id="toasts"></div></div>
-  <div id="sheet" class="sheet"><div id="sheet-body"><p class="hint">Tap an empty floor tile to build. Tap a tower to upgrade it.</p></div></div>
+  <div id="stage"><canvas id="view"></canvas><div id="toasts"></div>
+    <div class="fabs">
+      <button id="h-fast" class="fab" title="Double speed: on when every cook agrees">⏩<small>1×</small></button>
+      <button id="h-skills" class="fab sk-badge" title="Skill tree" data-n="0">📖<small>skills</small></button>
+      <button id="h-team" class="fab" title="Team">👥<small>team</small></button>
+    </div>
+    <div id="sheet" class="sheet"><button class="sheet-x" id="sheet-x" title="Close">✕</button><div id="sheet-body"></div></div>
+  </div>
 </section>
 
 <!-- ======================== TEAM / MENU PANELS ===================== -->
@@ -670,7 +683,7 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
   }
   const g = {
     diff, wave: 0, phase: 'build', buildT: BUILD_TIME(1), lives: D.lives, maxLives: D.lives,
-    endless: false, enemies: [], towers: new Map(), players: P, events: [],
+    endless: false, speed: 1, enemies: [], towers: new Map(), players: P, events: [],
     plan: null, waveT: 0, spawnI: 0, lastFams: [], towersVer: 1, playersVer: 1, nextId: 1,
     warn: null, fams: [], time: 0,
   };
@@ -784,6 +797,14 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
         ev({ t: 'skill', by: pid, tree: m.tree, lvl: lvl + 1 });
         return null;
       }
+      case 'fast': {
+        // Double speed only while every human cook wants it.
+        p.fast = !p.fast; g.playersVer++;
+        const before = g.speed;
+        g.speed = speedNow();
+        if (g.speed !== before) ev({ t: 'speed', speed: g.speed, by: pid });
+        return null;
+      }
       case 'ready': {
         if (g.phase !== 'build') return 'wave already running';
         p.ready = !p.ready; g.playersVer++;
@@ -793,6 +814,10 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     return 'unknown';
   };
 
+  function speedNow() {
+    const humans = [...P.values()].filter(p => !p.ai);
+    return humans.length && humans.every(p => p.fast) ? 2 : 1;
+  }
   // Cooks leave mid-game: their towers keep cooking and their gold is shared out.
   g.removePlayer = pid => {
     const p = P.get(pid);
@@ -803,6 +828,7 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     const heir = rest[0];
     for (const t of g.towers.values()) if (t.owner === pid) { if (heir) t.owner = heir.id; else g.towers.delete(t.id); }
     recomputeBuffs();
+    g.speed = speedNow();
     g.playersVer++;
   };
   g.addPlayer = p => {
@@ -1231,13 +1257,13 @@ function createServer({ code = 'SOLO' } = {}) {
   }
   function playersMsg() {
     return { t: 'players', list: [...game.players.values()].map(p => ({
-      id: p.id, name: p.name, color: p.color, ai: p.ai, gold: Math.floor(p.gold), sp: p.sp, ready: p.ready,
+      id: p.id, name: p.name, color: p.color, ai: p.ai, gold: Math.floor(p.gold), sp: p.sp, ready: p.ready, fast: !!p.fast,
       m: p.mastery, st: { dmg: Math.round(p.stats.dmg), kills: p.stats.kills, combos: p.stats.combos },
     })) };
   }
   function snapMsg() {
     return { t: 'snap', w: game.wave, ph: game.phase, bt: Math.max(0, Math.ceil(game.buildT)), lv: game.lives, ml: game.maxLives,
-      fams: game.fams, endless: game.endless,
+      fams: game.fams, endless: game.endless, spd: game.speed,
       en: game.enemies.map(e => {
         const fl = (e.burnT > 0 ? 1 : 0) | (e.slowT > 0 ? 2 : 0) | (e.freezeT > 0 ? 4 : 0) | (e.stickyT > 0 ? 8 : 0) | (e.stunT > 0 ? 16 : 0);
         return [e.id, e.type, e.path, r2(e.d), Math.max(1, Math.round(100 * e.hp / e.maxHp)), fl, r2(e.lat)];
@@ -1300,11 +1326,11 @@ function createServer({ code = 'SOLO' } = {}) {
           case 'go':          // host: start the next wave now
             if (me && me.id === hostId && game) game.startNow();
             break;
-          case 'build': case 'up': case 'sell': case 'mode': case 'gift': case 'ready': case 'skill': {
+          case 'build': case 'up': case 'sell': case 'mode': case 'gift': case 'ready': case 'skill': case 'fast': {
             if (!me || !game) return;
             const err = game.act(me.id, m);
             if (err) send(conn, { t: 'nope', msg: err });
-            else if (m.t !== 'ready' && m.t !== 'mode') { broadcast(towersMsg()); sentTowers = game.towersVer; broadcast(playersMsg()); sentPlayers = game.playersVer; }
+            else if (m.t !== 'ready' && m.t !== 'mode' && m.t !== 'fast') { broadcast(towersMsg()); sentTowers = game.towersVer; broadcast(playersMsg()); sentPlayers = game.playersVer; }
             break;
           }
           case 'ping':
@@ -1332,8 +1358,7 @@ function createServer({ code = 'SOLO' } = {}) {
     while (acc >= DT && steps < 8) {
       acc -= DT; steps++;
       if (state !== 'playing' || !game) continue;
-      for (const c of cooks) c.step(DT);
-      game.step(DT);
+      for (let k = 0; k < game.speed; k++) { for (const c of cooks) c.step(DT); game.step(DT); }
       tickN++;
       if (tickN % SNAP_EVERY === 0) sendSnapshot();
     }
@@ -2116,7 +2141,7 @@ const DT_NAMES = { basic: 'Plain', heat: 'Heat', chop: 'Chop', cold: 'Cold', sti
 const G = window.LU = {
   id: null, code: '', hosting: false, practice: false, name: '', lobby: null, inGame: false,
   players: [], towers: new Map(), snaps: [], view: [], wave: 0, phase: 'build', bt: 0, lives: 0, maxLives: 0,
-  fams: [], sel: null, showRanges: false, endless: false,
+  fams: [], sel: null, skillsOpen: false, showRanges: false, endless: false, spd: 1,
 };
 const net = new Net();
 document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS }));
@@ -2248,6 +2273,7 @@ net.on('start', () => {
   $('#results').classList.add('hidden');
   show('game');
   renderSheet();
+  setTimeout(() => toast('Tap an empty floor tile to build. Tap a tower to upgrade it.', '', 5000), 400);
 });
 net.on('towers', m => {
   G.towers = new Map(m.list.map(([id, x, y, kind, owner, mode, dmg, buff, spent]) => [id, { id, x, y, kind, owner, mode, dmg, buff, spent }]));
@@ -2265,7 +2291,7 @@ net.on('players', m => {
 net.on('nope', m => { toast(m.msg, 'warn'); sfx.nope(); });
 net.on('snap', m => {
   const prevPhase = G.phase;
-  Object.assign(G, { wave: m.w, phase: m.ph, bt: m.bt, lives: m.lv, maxLives: m.ml, fams: m.fams, endless: m.endless });
+  Object.assign(G, { wave: m.w, phase: m.ph, bt: m.bt, lives: m.lv, maxLives: m.ml, fams: m.fams, endless: m.endless, spd: m.spd || 1 });
   G.snaps.push({ at: performance.now(), en: new Map(m.en.map(([id, type, path, d, hp, fl, lat]) => [id, { id, type, path, d, hp, fl, lat }])) });
   if (G.snaps.length > 6) G.snaps.shift();
   for (const e of m.ev) onEvent(e);
@@ -2298,6 +2324,7 @@ function onEvent(e) {
     }
     case 'cleared': sfx.coin(); toast(`Wave ${e.n} cleared: +${e.bonus} gold${e.team ? ` (+${e.team} from registers)` : ''}, +${e.sp} skill point${e.sp > 1 ? 's' : ''}`, 'good'); break;
     case 'skill': if (e.by === G.id) sfx.combo(); break;
+    case 'speed': toast(e.speed === 2 ? '⏩ Double speed: everyone agreed' : `▶ Back to normal speed (${nameOf(e.by)})`); break;
   }
 }
 
@@ -2322,6 +2349,10 @@ function renderHud() {
   $('#h-lives').textContent = G.lives;
   $('#h-gold').textContent = p ? p.gold : 0;
   $('#h-skills').dataset.n = p?.sp || 0;
+  const humansAll = G.players.filter(q => !q.ai), fastN = humansAll.filter(q => q.fast).length, fb = $('#h-fast');
+  fb.classList.toggle('on', G.spd === 2);
+  fb.classList.toggle('half', !!p?.fast && G.spd !== 2);
+  fb.querySelector('small').textContent = G.spd === 2 ? '2× on' : humansAll.length > 1 ? `2× ${fastN}/${humansAll.length}` : '2×';
   const go = $('#h-go');
   if (G.phase === 'build') {
     const humans = G.players.filter(q => !q.ai), ready = humans.filter(q => q.ready).length;
@@ -2334,13 +2365,16 @@ function renderHud() {
   }
 }
 $('#h-go').addEventListener('click', () => { sfx.unlock(); net.send({ t: 'ready' }); });
-$('#h-skills').addEventListener('click', () => { G.sel = null; renderSheet(); });
+$('#h-skills').addEventListener('click', () => { G.sel = null; G.skillsOpen = !G.skillsOpen; renderSheet(); });
+$('#h-fast').addEventListener('click', () => { sfx.unlock(); net.send({ t: 'fast' }); });
+$('#sheet-x').addEventListener('click', () => { G.sel = null; G.skillsOpen = false; renderSheet(); });
 
 // ============================ tap on the kitchen =========================
 $('#view').addEventListener('pointerup', e => {
   sfx.unlock();
   const r = $('#view').getBoundingClientRect();
   const tile = renderer.tileAt(e.clientX - r.left, e.clientY - r.top);
+  G.skillsOpen = false;
   if (!tile) { G.sel = null; renderSheet(); return; }
   const t = towerAt(tile.x, tile.y);
   if (t) G.sel = G.sel?.tower === t.id ? null : { tower: t.id };
@@ -2380,19 +2414,22 @@ function setHtml(node, html) { if (node._html === html) return false; node._html
 function renderSheet() {
   const p = me();
   const body = $('#sheet-body');
+  const open = !!(G.sel || G.skillsOpen);
+  $('#sheet').classList.toggle('open', open);
+  if (!open) return;
   if (!p) { setHtml(body, '<p class="hint">Joining…</p>'); return; }
   if (G.sel?.tile) {
     const c = costFor('prep'), mine = [...G.towers.values()].filter(t => t.owner === G.id).length, cap = MAX_TOWERS(G.players.length);
     if (!setHtml(body, `<h3>🍽️ Prep Station</h3><p class="sub">${TOWERS.prep.desc} ${statLine(TOWERS.prep)}</p>
       <div class="tools"><button class="btn" id="do-build" ${p.gold < c || mine >= cap ? 'disabled' : ''}>BUILD · ${c} gold</button>
       <span class="hint">Your towers: ${mine}/${cap}. Tip: tap the same tile twice to build.</span></div>`)) return;
-    $('#do-build').onclick = () => net.send({ t: 'build', x: G.sel.tile.x, y: G.sel.tile.y });
+    $('#do-build').onclick = () => { const tl = G.sel?.tile; if (tl) net.send({ t: 'build', x: tl.x, y: tl.y }); };
     return;
   }
   const t = G.sel?.tower && G.towers.get(G.sel.tower);
   if (t) {
     const def = TOWERS[t.kind], mineT = t.owner === G.id, owner = G.players.find(q => q.id === t.owner);
-    let html = `<h3>${def.icon} ${def.name} <small class="hint">${def.tree ? TREES[def.tree].name + ' tier ' + def.tier : 'blank'}</small></h3>
+    let html = `<h3 data-tid="${t.id}">${def.icon} ${def.name} <small class="hint">${def.tree ? TREES[def.tree].name + ' tier ' + def.tier : 'blank'}</small></h3>
       <p class="sub">${mineT ? 'Yours' : `<span style="color:${owner?.color}">${esc(owner?.name || '?')}</span>'s`} · ${statLine(def)} · ${t.dmg} damage dealt${t.buff ? ` · boosted +${Math.round(t.buff * 100)}%` : ''}</p>`;
     if (mineT) {
       if (def.next.length) {
