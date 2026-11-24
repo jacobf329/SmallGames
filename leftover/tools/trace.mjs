@@ -6,7 +6,7 @@ import { COLORS, TOWERS } from '../js/data.js';
 const n = +process.argv[2] || 1, mono = process.argv[3] && process.argv[3] !== '-' ? process.argv[3] : null, diff = process.argv[4] || 'normal';
 const players = Array.from({ length: n }, (_, i) => ({ id: 'p' + i, name: 'Cook' + i, color: COLORS[i], ai: true }));
 const g = createGame({ players, diff });
-const cooks = players.map(p => createCook(g, p.id, { tree: mono }));
+const cooks = players.map(p => createCook(g, p.id, { tree: mono, expert: process.env.EXPERT === '1' }));
 let leaks = {}, combos = {};
 while (g.phase !== 'won' && g.phase !== 'lost' && g.time < 5000) {
   for (const c of cooks) c.step(1 / 30);

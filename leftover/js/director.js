@@ -9,7 +9,7 @@
 
 import {
   ENEMIES, TOWERS, FAMILIES, FAMILY_LATE, MEMBER_FROM, COUNTERS, BOSSES, BOSS_INTRO, WAVES,
-  teamScale, waveBudget, doorsFor,
+  teamScale, waveBudget, soloCurve, doorsFor,
 } from './data.js';
 
 // Rough damage per second a tower puts out (for judging the team's mix).
@@ -120,7 +120,7 @@ export function planWave({ w, n, towers, lastFams = [], rng = Math.random }) {
   }
 
   // Spend the budget.
-  let budget = waveBudget(w) * sc.count * (boss ? 0.5 : 1);
+  let budget = waveBudget(w) * sc.count * (n === 1 ? soloCurve(w) : 1) * (boss ? 0.5 : 1);
   const groups = [];
   const per = budget / fams.length;
   for (const f of fams) {

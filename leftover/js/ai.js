@@ -23,14 +23,19 @@ function spotScores(n) {
       const seg = PATH_GEO[p.pi].segs.find(sg => p.d <= sg.at + sg.len) || PATH_GEO[p.pi].segs.at(-1);
       const f = Math.min(1, (p.d - seg.at) / seg.len);
       const px = seg.ax + (seg.bx - seg.ax) * f, py = seg.ay + (seg.by - seg.ay) * f;
-      if (Math.hypot(px - x - 0.5, py - y - 0.5) <= 2.2) s += 1 + p.d / p.total;   // later path counts more
+      if (Math.hypot(px - x - 0.5, py - y - 0.5) <= 2.3) s += 1 + 0.15 * p.d / p.total;   // path in reach; a little extra near the end
     }
     out.push({ x, y, s });
   }
   return out.sort((a, b) => b.s - a.s);
 }
 
-export function createCook(game, pid, { tree = null, seed = Math.random() } = {}) {
+// expert: plays the way a good human does (a complementary pair of trees,
+// best spots first, saves for big upgrades). The balance test uses it to
+// stand in for a skilled player; lobby AI cooks use the plain version.
+const PAIRS = [['heat', 'chop'], ['chop', 'cold'], ['heat', 'sticky'], ['cold', 'chop'], ['heat', 'cold']];
+export function createCook(game, pid, { tree = null, seed = Math.random(), expert = false } = {}) {
+  if (expert) return createExpert(game, pid, { tree, seed });
   let main = tree, backup = null, think = seed * 1.5, spots = null, spotsN = 0, forkPick = seed < 0.5 ? 0 : 1;
   const me = () => game.players.get(pid);
 
@@ -111,4 +116,59 @@ export function createCook(game, pid, { tree = null, seed = Math.random() } = {}
     if (p.gold > 400 || p.mastery[tree] < 3) build();
   }
   return { step, get tree() { return main; } };
+}
+
+function createExpert(game, pid, { tree = null, seed = Math.random() } = {}) {
+  const pair = tree === 'eco' ? ['heat', 'service'] : tree ? [tree, tree] : PAIRS[Math.floor(seed * PAIRS.length) % PAIRS.length];
+  const skillPlan = [0, 0, 0, 1, 1, 1, 0, 0, 1, 1];      // which of the pair gets each level
+  let think = seed, spots = null, spotsN = 0, built = 0;
+  const me = () => game.players.get(pid);
+  const score = new Map();                                // "x,y" -> spot score
+  return { step, get tree() { return pair[0]; } };
+
+  function step(dt) {
+    if (game.phase !== 'build' && game.phase !== 'wave') return;
+    think -= dt;
+    if (think > 0) return;
+    think = 0.5;
+    const p = me(); if (!p) return;
+    if (spotsN !== game.players.size) { spots = spotScores(game.players.size); spotsN = game.players.size; for (const s of spots) score.set(s.x + ',' + s.y, s.s); }
+    // Skills, following the plan.
+    for (let i = 0; i < 4; i++) {
+      const lv = pair.map(t => p.mastery[t]);
+      const k = skillPlan.findIndex((which, j) => lv[which] < skillPlan.slice(0, j + 1).filter(x => x === which).length);
+      if (k < 0) break;
+      const t = pair[skillPlan[k]];
+      if (p.sp < skillCost(p.mastery[t]) || game.act(pid, { t: 'skill', tree: t })) break;
+    }
+    const mine = [...game.towers.values()].filter(t => t.owner === pid);
+    const taken = new Set([...game.towers.values()].map(t => t.x + ',' + t.y));
+    const build = () => {
+      if (mine.length >= MAX_TOWERS(game.players.size)) return false;
+      const pick = spots.find(s => !taken.has(s.x + ',' + s.y));
+      if (pick && !game.act(pid, { t: 'build', x: pick.x, y: pick.y })) { built++; return true; }
+      return false;
+    };
+    // Cover the path first (plain stations are cheap damage), then specialise.
+    if (mine.length < 4 + game.wave * 0.35 && build()) return;
+    // Fresh stations: two of every three go to the main tree, best spots first.
+    const fresh = mine.filter(t => t.kind === 'prep').sort((a, b) => (score.get(b.x + ',' + b.y) || 0) - (score.get(a.x + ',' + a.y) || 0));
+    for (const t of fresh) {
+      const tr = pair[(t.id % 3 === 2) ? 1 : 0];
+      if (!game.act(pid, { t: 'up', id: t.id, to: FIRST[tr] })) return;
+      return;                                             // save for it
+    }
+    // Upgrade the best-placed tower that can still grow; save up for it.
+    const ups = mine.filter(t => TOWERS[t.kind].next.length && TOWERS[t.kind].tree)
+      .sort((a, b) => (score.get(b.x + ',' + b.y) || 0) - (score.get(a.x + ',' + a.y) || 0));
+    for (const t of ups) {
+      const def = TOWERS[t.kind];
+      const opts = def.tier === 3 ? [FORK[def.tree][(t.x + t.y) % 2], FORK[def.tree][1 - (t.x + t.y) % 2]] : def.next;
+      const can = opts.filter(o => !TOWERS[o].req || p.mastery[TOWERS[o].tree] >= TOWERS[o].req);
+      if (!can.length) continue;                          // blocked on skills: look further down
+      if (!game.act(pid, { t: 'up', id: t.id, to: can[0] })) return;
+      if (p.gold < 320) return;                           // saving for this one
+    }
+    if (p.gold > 160) build();
+  }
 }

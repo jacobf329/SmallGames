@@ -11,7 +11,7 @@ function play(n, mono) {
   const players = Array.from({ length: n }, (_, i) => ({ id: 'p' + i, name: 'Cook' + i, color: COLORS[i], ai: true }));
   const g = createGame({ players, diff: DIFF });
   const monoTree = mono ? ['heat', 'chop'][Math.floor(Math.random() * 2)] : null;
-  const cooks = players.map(p => createCook(g, p.id, { tree: monoTree }));
+  const cooks = players.map(p => createCook(g, p.id, { tree: process.env.TREE || monoTree, expert: process.env.EXPERT === '1' }));
   const dt = 1 / 30;
   let warns = 0, combos = 0;
   while (g.phase !== 'won' && g.phase !== 'lost' && g.time < 9000) {

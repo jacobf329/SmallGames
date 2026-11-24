@@ -69,14 +69,20 @@ tools/trace.mjs     one game wave by wave
 tools/sessiontest.mjs  two fake phones against a host
 ```
 
-## Balance snapshot (AI cooks, Normal, `node leftover/tools/simtest.mjs 5`)
+## Balance
 
-| Team | Mixed trees | Everyone on one tree |
-| --- | --- | --- |
-| 1 cook | reaches wave ~24, wins some | n/a |
-| 2 cooks | reaches wave 30 | dies ~wave 11 |
-| 4 cooks | wins | dies ~wave 11 |
-| 6 cooks | reaches wave 30, wins some | dies ~wave 7 |
-| 8 cooks | reaches wave 30 (Pizza) | dies ~wave 8 |
+Difficulty is tuned against an "expert" AI (`createCook(..., { expert: true })`:
+a complementary pair of trees, best spots first, saves for big upgrades) that
+stands in for a skilled player; plain AI cooks are the lobby teammates.
 
-The AI cooks are simple; people should do better. Tune in `js/data.js`.
+- Food toughness compounds every wave from wave 1 (`ramp`), faster from wave
+  12 (`late`), per difficulty. More food pays more gold, tougher food doesn't,
+  so the climb comes mostly from toughness.
+- Solo starts lighter and grows (`soloCurve`); bosses climb on half the ramp.
+- Counter food resists rather than being immune, so no wave is a wall.
+
+`node leftover/tools/curve.mjs 6 normal 1 eco` prints, per wave, the average
+lives lost and the "closest call" (how far along the path the furthest food
+got). A steady game keeps that around 50-90% without long runs of zeros.
+Other tools: `simtest.mjs` (win rates, diverse vs one-tree teams; EXPERT=1 for
+the expert), `trace.mjs` (one game wave by wave).

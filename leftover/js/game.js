@@ -248,7 +248,8 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
   function spawn(type, path, d = 0) {
     const def = ENEMIES[type];
     const sc = teamScale(n());
-    let hp = def.hp * D.hp * waveHpMult(g.wave);
+    // Bosses climb on a gentler ramp: they're already built to be a team's big test.
+    let hp = def.hp * D.hp * (def.fam === 'boss' ? waveHpMult(g.wave, D.ramp * 0.5, D.late * 0.5) : waveHpMult(g.wave, D.ramp, D.late));
     if (def.boss || def.fam === 'boss') hp *= sc.bossHp;
     const e = {
       id: g.nextId++, type, path, d, hp, maxHp: hp,

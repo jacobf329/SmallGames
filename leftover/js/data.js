@@ -9,10 +9,13 @@ export const MAX_PLAYERS = 8;
 export const WAVES = 30;             // the "campaign"; endless after that
 export const COLORS = ['#ff5a5f', '#3fa7ff', '#ffd23f', '#3ddc84', '#c77dff', '#ff9f1c', '#2ec4b6', '#f15bb5'];
 
+// ramp: how much tougher each food gets every wave (compounding, from wave 1),
+// so the difficulty climbs steadily instead of in jumps. late: the ramp from
+// wave LATE_FROM on, when the team's top towers and skills come online.
 export const DIFFICULTY = {
-  easy:   { label: 'Easy',   hp: 0.75, lives: 40, gold: 1.2 },
-  normal: { label: 'Normal', hp: 1.0,  lives: 30, gold: 1.0 },
-  hard:   { label: 'Hard',   hp: 1.3,  lives: 20, gold: 0.9 },
+  easy:   { label: 'Easy',   hp: 0.8,  lives: 40, gold: 1.15, ramp: 0.075, late: 0.125 },
+  normal: { label: 'Normal', hp: 1.0,  lives: 30, gold: 1.0,  ramp: 0.10,  late: 0.14 },
+  hard:   { label: 'Hard',   hp: 1.15, lives: 20, gold: 0.92, ramp: 0.12,  late: 0.17 },
 };
 
 // ------------------------------------------------------------------ map ----
@@ -172,22 +175,22 @@ E.celery     = { name: 'Celery',         icon: '🥬', size: 0.5,  hp: 150, spee
 E.coconut    = { name: 'Coconut',        icon: '🥥', size: 0.58, hp: 280, speed: 0.6,  bounty: 14, leak: 2, fam: 'armoured', armour: 18, res: { chop: 1.2 }, cost: 24 };
 E.popcorn    = { name: 'Popcorn',        icon: '🍿', size: 0.38, hp: 36,  speed: 1.6,  bounty: 3,  leak: 1, fam: 'flying', air: true, res: { heat: 1.4 }, cost: 4 };
 E.cottoncandy= { name: 'Cotton Candy',   icon: '🍭', size: 0.5,  hp: 130, speed: 1.0,  bounty: 7,  leak: 1, fam: 'flying', air: true, res: { cold: 0.5, heat: 1.3 }, cost: 12 };
-E.icecream   = { name: 'Ice Cream',      icon: '🍨', size: 0.5,  hp: 160, speed: 0.9,  bounty: 7,  leak: 1, fam: 'frozen', frozen: true, res: { cold: 0, heat: 2, chop: 0.8 }, cost: 12 };
-E.frozenpeas = { name: 'Frozen Peas',    icon: '🧊', size: 0.36, hp: 34,  speed: 1.3,  bounty: 2,  leak: 1, fam: 'frozen', frozen: true, res: { cold: 0, heat: 1.6 }, cost: 3 };
+E.icecream   = { name: 'Ice Cream',      icon: '🍨', size: 0.5,  hp: 160, speed: 0.9,  bounty: 7,  leak: 1, fam: 'frozen', frozen: true, res: { cold: 0.25, heat: 2, chop: 0.8 }, cost: 12 };
+E.frozenpeas = { name: 'Frozen Peas',    icon: '🧊', size: 0.36, hp: 34,  speed: 1.3,  bounty: 2,  leak: 1, fam: 'frozen', frozen: true, res: { cold: 0.25, heat: 1.6 }, cost: 3 };
 E.jelly      = { name: 'Jelly',          icon: '🍮', size: 0.5,  hp: 170, speed: 0.85, bounty: 7,  leak: 1, fam: 'regen', regen: 20, res: { chop: 0.55, basic: 0.7 }, cost: 13 };
 E.sourdough  = { name: 'Sourdough',      icon: '🍞', size: 0.6,  hp: 400, speed: 0.6,  bounty: 15, leak: 2, fam: 'regen', regen: 32, res: { chop: 0.7 }, cost: 24 };
-E.chili      = { name: 'Chili',          icon: '🌶️', size: 0.42, hp: 75,  speed: 2.2,  bounty: 5,  leak: 1, fam: 'heatproof', res: { heat: 0.1, cold: 1.4 }, cost: 8 };
+E.chili      = { name: 'Chili',          icon: '🌶️', size: 0.42, hp: 75,  speed: 2.2,  bounty: 5,  leak: 1, fam: 'heatproof', res: { heat: 0.3, cold: 1.4 }, cost: 8 };
 E.watermelon = { name: 'Watermelon',     icon: '🍉', size: 0.62, hp: 380, speed: 0.6,  bounty: 12, leak: 2, fam: 'heatproof', armour: 10, res: { heat: 0.35 }, split: { into: 'melonslice', n: 3 }, cost: 30 };
 E.melonslice = { name: 'Melon Slice',    icon: '🍉', size: 0.36, hp: 60,  speed: 1.2,  bounty: 2,  leak: 1, fam: 'heatproof', res: { heat: 0.5 }, cost: 4 };
-E.bacon      = { name: 'Bacon',          icon: '🥓', size: 0.48, hp: 115, speed: 1.4,  bounty: 6,  leak: 1, fam: 'greasy', greasy: true, res: { heat: 1.3, sticky: 0 }, cost: 10 };
+E.bacon      = { name: 'Bacon',          icon: '🥓', size: 0.48, hp: 115, speed: 1.4,  bounty: 6,  leak: 1, fam: 'greasy', greasy: true, res: { heat: 1.3, sticky: 0.3 }, cost: 10 };
 // Bosses
-E.cake       = { name: 'Wedding Cake',   icon: '🎂', size: 0.95, hp: 5200, speed: 0.38, bounty: 120, leak: 8, fam: 'boss', boss: true, armour: 6, split: { into: 'cake2', n: 2 }, cost: 0 };
-E.cake2      = { name: 'Cake Tier',      icon: '🍰', size: 0.7,  hp: 1300, speed: 0.5, bounty: 30, leak: 4, fam: 'boss', armour: 4, split: { into: 'cupcake', n: 3 }, cost: 0 };
-E.cupcake    = { name: 'Cupcake',        icon: '🧁', size: 0.42, hp: 160,  speed: 1.1, bounty: 4,  leak: 1, fam: 'boss', cost: 0 };
-E.turkey     = { name: 'Roast Turkey',   icon: '🦃', size: 1.0,  hp: 14000, speed: 0.32, bounty: 250, leak: 12, fam: 'boss', boss: true, armour: 22, regen: 45, res: { heat: 0.2 }, cost: 0 };
-E.pizza      = { name: 'Giant Pizza',    icon: '🍕', size: 1.1,  hp: 16000, speed: 0.3, bounty: 400, leak: 20, fam: 'boss', boss: true, armour: 12, split: { into: 'slice', n: 8 }, cost: 0 };
-E.slice      = { name: 'Pizza Slice',    icon: '🍕', size: 0.55, hp: 700, speed: 0.75, bounty: 20, leak: 3, fam: 'boss', armour: 6, split: { into: 'crust', n: 2 }, cost: 0 };
-E.crust      = { name: 'Crust',          icon: '🥖', size: 0.4,  hp: 220,  speed: 1.1, bounty: 4,  leak: 1, fam: 'boss', cost: 0 };
+E.cake       = { name: 'Wedding Cake',   icon: '🎂', size: 0.95, hp: 2200, speed: 0.38, bounty: 120, leak: 8, fam: 'boss', boss: true, armour: 3, split: { into: 'cake2', n: 2 }, cost: 0 };
+E.cake2      = { name: 'Cake Tier',      icon: '🍰', size: 0.7,  hp: 600, speed: 0.5, bounty: 30, leak: 4, fam: 'boss', armour: 4, split: { into: 'cupcake', n: 3 }, cost: 0 };
+E.cupcake    = { name: 'Cupcake',        icon: '🧁', size: 0.42, hp: 140,  speed: 1.1, bounty: 4,  leak: 1, fam: 'boss', cost: 0 };
+E.turkey     = { name: 'Roast Turkey',   icon: '🦃', size: 1.0,  hp: 4800, speed: 0.32, bounty: 250, leak: 12, fam: 'boss', boss: true, armour: 14, regen: 20, res: { heat: 0.2 }, cost: 0 };
+E.pizza      = { name: 'Giant Pizza',    icon: '🍕', size: 1.1,  hp: 7000, speed: 0.3, bounty: 400, leak: 20, fam: 'boss', boss: true, armour: 8, split: { into: 'slice', n: 8 }, cost: 0 };
+E.slice      = { name: 'Pizza Slice',    icon: '🍕', size: 0.55, hp: 380, speed: 0.75, bounty: 20, leak: 3, fam: 'boss', armour: 6, split: { into: 'crust', n: 2 }, cost: 0 };
+E.crust      = { name: 'Crust',          icon: '🥖', size: 0.4,  hp: 140,  speed: 1.1, bounty: 4,  leak: 1, fam: 'boss', cost: 0 };
 for (const [id, e] of Object.entries(E)) { e.id = id; e.res = e.res || {}; e.armour = e.armour || 0; }
 export const ENEMIES = E;
 export const ENEMY_IDS = Object.keys(E);
@@ -233,15 +236,21 @@ export const BOSS_INTRO = {
 export function teamScale(n) {
   n = Math.max(1, n);
   return {
-    count: n === 1 ? 1.25 : 0.25 + 0.75 * n,     // enemy numbers (and boss hp)
-    bossHp: n === 1 ? 1.0 : 0.4 + 0.6 * n,  // boss (and boss-spawn) toughness
+    count: n === 1 ? 1.0 : 0.25 + 0.75 * n,      // enemy numbers vs solo (solo also grows over the game: soloCurve)
+    bossHp: n === 1 ? 0.8 : 0.3 + 0.45 * n,  // boss (and boss-spawn) toughness
     families: n === 1 ? 1 : n <= 4 ? 2 : 3,     // distinct families per wave, before wave bonuses
     adapt: n === 1 ? 0.25 : n <= 4 ? 1 : 1.6,   // how hard the food reacts to a monoculture
     pay: n === 1 ? 1.05 : 1.05 / (0.25 + 0.75 * n), // per-player share of each bounty
   };
 }
-export const waveBudget = w => (26 + 9 * w) * Math.pow(1.085, w) * (w <= 3 ? 0.8 : 1);
-export const waveHpMult = w => 1 + Math.max(0, w - 8) * 0.05 + Math.max(0, w - WAVES) * 0.08;
+// Solo has no teammates' towers to lean on late, and no one to share the
+// opening with: lighter early, heavier late.
+export const soloCurve = w => 0.8 + 0.035 * w;
+export const waveBudget = w => (24 + 9 * w) * Math.pow(1.03, w) * (w <= 6 ? 0.55 + w * 0.06 : 1);
+// Toughness compounds every wave (it pays no extra gold, unlike more food).
+export const LATE_FROM = 12;
+export const waveHpMult = (w, ramp = 0.10, late = ramp) =>
+  Math.pow(1 + ramp, Math.min(w, LATE_FROM) - 1) * Math.pow(1 + late, Math.max(0, w - LATE_FROM)) * (1 + Math.max(0, w - WAVES) * 0.08);
 
 export const START_GOLD = 220;
 export const WAVE_BONUS = w => 40 + 4 * w;
