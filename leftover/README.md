@@ -29,6 +29,16 @@ music and a polish pass come next.
 - 30 waves, bosses at 10 (Wedding Cake), 20 (Roast Turkey), 30 (Giant Pizza),
   then endless.
 
+## Where it lives
+
+- **Party Pad** (jteef.com, the TV + phones platform) is the main way to play
+  with friends: `public/js/games/leftover.js` in the JTEEF repo runs this
+  engine on the TV and turns phones into controllers. The engine files there
+  (`public/games/leftover/js/`) are copies of `leftover/js/` here: change them
+  here, run the balance test, then copy them across.
+- **jteef.com/play/leftover** is the solo practice build:
+  `node leftover/tools/bundle.mjs --solo` -> `dist/leftover-uprising-solo.html`.
+
 ## Play
 
 - `node leftover/tools/bundle.mjs` builds `dist/leftover-uprising.html`, one

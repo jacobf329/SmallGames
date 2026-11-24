@@ -1769,8 +1769,11 @@ __mods.render = (() => {
 const { COLS, ROWS, PATHS, PATH_TILES, TOWERS, TREES, ENEMIES, pathPoint, doorsFor } = __mods.data;
 
 class Renderer {
-  constructor(canvas) {
+  // rotate: on a wide screen (a TV), turn the kitchen on its side so it fills
+  // the width: food then marches left to right instead of top to bottom.
+  constructor(canvas, { rotate = false } = {}) {
     this.c = canvas;
+    this.allowRotate = rotate;
     this.x = canvas.getContext('2d');
     this.fx = [];
     this.resize();
@@ -1783,17 +1786,23 @@ class Renderer {
     this.c.width = Math.max(1, r.width * this.dpr);
     this.c.height = Math.max(1, r.height * this.dpr);
     this.w = r.width; this.h = r.height;
-    this.s = Math.floor(Math.min(this.w / COLS, this.h / ROWS) * 100) / 100;
-    this.ox = (this.w - this.s * COLS) / 2;
-    this.oy = (this.h - this.s * ROWS) / 2;
+    this.rot = this.allowRotate && this.w > this.h * 1.15;
+    const gw = this.rot ? ROWS : COLS, gh = this.rot ? COLS : ROWS;
+    this.s = Math.floor(Math.min(this.w / gw, this.h / gh) * 100) / 100;
+    this.ox = (this.w - this.s * gw) / 2;
+    this.oy = (this.h - this.s * gh) / 2;
     this.bg = null;
   }
   // Screen point -> tile.
   tileAt(px, py) {
-    const x = Math.floor((px - this.ox) / this.s), y = Math.floor((py - this.oy) / this.s);
+    const a = Math.floor((px - this.ox) / this.s), b = Math.floor((py - this.oy) / this.s);
+    const x = this.rot ? COLS - 1 - b : a, y = this.rot ? a : b;
     return x >= 0 && y >= 0 && x < COLS && y < ROWS ? { x, y } : null;
   }
-  P(tx, ty) { return [this.ox + tx * this.s, this.oy + ty * this.s]; }
+  // Kitchen point (in tiles) -> screen.
+  P(tx, ty) { return this.rot ? [this.ox + ty * this.s, this.oy + (COLS - tx) * this.s] : [this.ox + tx * this.s, this.oy + ty * this.s]; }
+  // Top-left corner on screen of tile (tx, ty).
+  T(tx, ty) { return this.rot ? this.P(tx + 1, ty) : this.P(tx, ty); }
 
   // The floor never changes, so draw it once per size.
   drawFloor(nPlayers) {
@@ -1805,7 +1814,7 @@ class Renderer {
     x.scale(this.dpr, this.dpr);
     const s = this.s;
     for (let ty = 0; ty < ROWS; ty++) for (let tx = 0; tx < COLS; tx++) {
-      const [px, py] = this.P(tx, ty);
+      const [px, py] = this.T(tx, ty);
       const path = PATH_TILES.has(tx + ',' + ty);
       x.fillStyle = path ? ((tx + ty) % 2 ? '#5b4636' : '#634c3b') : ((tx + ty) % 2 ? '#e9dcc6' : '#f3e8d5');
       x.fillRect(px, py, s + 0.5, s + 0.5);
@@ -1814,10 +1823,16 @@ class Renderer {
     x.strokeStyle = 'rgba(0,0,0,.18)'; x.lineWidth = 1;
     for (const k of PATH_TILES) {
       const [tx, ty] = k.split(',').map(Number);
-      const [px, py] = this.P(tx, ty);
+      const [px, py] = this.T(tx, ty);
       x.strokeRect(px + 0.5, py + 0.5, s - 1, s - 1);
     }
-    // Doors
+    // Doors. Labels are kept inside the kitchen even when they sit on its edge.
+    const gw = (this.rot ? ROWS : COLS) * s, gh = (this.rot ? COLS : ROWS) * s;
+    const label = (text, px, py) => {
+      const w = x.measureText(text).width / 2 + 4;
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(text, Math.min(this.ox + gw - w, Math.max(this.ox + w, px)), Math.min(this.oy + gh - 8, Math.max(this.oy + 8, py)));
+    };
     const open = new Set(doorsFor(nPlayers));
     PATHS.forEach((p, i) => {
       const [sx, sy] = p.pts[0];
@@ -1826,13 +1841,12 @@ class Renderer {
       x.font = `800 ${Math.max(9, s * 0.3)}px system-ui`;
       x.textAlign = 'center'; x.textBaseline = 'middle';
       x.fillStyle = open.has(i) ? '#ffd23f' : 'rgba(255,255,255,.35)';
-      x.fillText(open.has(i) ? p.door.toUpperCase() : '🔒', px, py);
+      label(open.has(i) ? p.door.toUpperCase() : '🔒', px, py);
     });
     const [ex, ey] = this.P(6.5, ROWS - 0.5);
     x.fillStyle = '#ff5a5f';
     x.font = `900 ${Math.max(9, s * 0.3)}px system-ui`;
-    x.textAlign = 'center';
-    x.fillText('BACK DOOR', ex, ey);
+    label('BACK DOOR', ex, ey);
     this.bg = cv; this.bgKey = key;
     return cv;
   }
@@ -1849,7 +1863,7 @@ class Renderer {
 
     // Selected tile
     if (G.sel?.tile) {
-      const [px, py] = this.P(G.sel.tile.x, G.sel.tile.y);
+      const [px, py] = this.T(G.sel.tile.x, G.sel.tile.y);
       x.strokeStyle = '#ffd23f'; x.lineWidth = 3;
       x.strokeRect(px + 2, py + 2, s - 4, s - 4);
       const prep = TOWERS.prep;
@@ -1883,7 +1897,7 @@ class Renderer {
 
   tower(t, owner, selected, showRange) {
     const x = this.x, s = this.s, def = TOWERS[t.kind];
-    const [px, py] = this.P(t.x, t.y);
+    const [px, py] = this.T(t.x, t.y);
     const pad = s * 0.08;
     if (selected || showRange) this.ring(t.x + 0.5, t.y + 0.5, def.range, selected ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.18)');
     x.fillStyle = def.tree ? TREES[def.tree].color : '#b9a58c';

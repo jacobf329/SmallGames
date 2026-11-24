@@ -30,7 +30,14 @@ html = html.replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${read('styl
 html = html.replace(/<script type="module"[^>]*><\/script>/,
   () => `<script>\n(() => {\n"use strict";\nconst __mods = {};\n${ORDER.map(wrap).join('\n')}\n})();\n</script>`);
 
-const dest = path.join(ROOT, '..', 'dist', 'leftover-uprising.html');
+// --solo: practice-only build for jteef.com/play (multiplayer lives in Party Pad).
+const SOLO = process.argv.includes('--solo');
+if (SOLO) {
+  html = html.replace('<div id="online">', '<div id="online" class="hidden">');
+  html = html.replace('<p id="status" class="status"></p>', '<p class="hint" style="text-align:center">Playing with friends? Start a Party Pad room at <a href="/" style="color:inherit">jteef.com</a> and pick Leftover Uprising: the kitchen goes on the TV and everyone builds from their phone.</p>\n    <p id="status" class="status"></p>');
+  html = html.replace('<button id="btn-practice" class="btn big">PLAY SOLO</button>', '<button id="btn-practice" class="btn big">PRACTICE SOLO</button>');
+}
+const dest = path.join(ROOT, '..', 'dist', SOLO ? 'leftover-uprising-solo.html' : 'leftover-uprising.html');
 fs.mkdirSync(path.dirname(dest), { recursive: true });
 fs.writeFileSync(dest, html);
 console.log(`wrote ${path.relative(process.cwd(), dest)}  (${(html.length / 1024).toFixed(0)} KB)`);
