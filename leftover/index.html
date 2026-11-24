@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leftover Uprising</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1d1410">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥦</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============================ CONNECT ============================ -->
+<section id="connect" class="screen menu active">
+  <div class="panel">
+    <h1 class="logo">LEFTOVER<span>UPRISING</span></h1>
+    <p class="tag">The food has come alive and it wants out. Hold the kitchen together: solo, or with up to 8 cooks.</p>
+    <label class="field"><span>Your name</span><input id="in-name" maxlength="14" autocomplete="off" spellcheck="false" placeholder="Cook"></label>
+    <button id="btn-practice" class="btn big">PLAY SOLO</button>
+    <div id="online">
+      <button id="btn-host" class="btn">HOST ONLINE KITCHEN</button>
+      <div class="join-row"><input id="in-code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE"><button id="btn-join" class="btn">JOIN</button></div>
+    </div>
+    <p id="status" class="status"></p>
+    <button id="btn-retry" class="btn hidden">TRY AGAIN</button>
+    <details class="howto">
+      <summary>How to play</summary>
+      <ul>
+        <li>Food marches from the doors to the <b>back door</b>. Every one that escapes costs lives.</li>
+        <li><b>Tap an empty floor tile</b> to build a <b>Prep Station</b>. Everyone starts with the same blank counter.</li>
+        <li><b>Tap your tower</b> to upgrade it into a tree: <b>🔥 Heat</b>, <b>🔪 Chop</b>, <b>❄️ Cold</b>, <b>🍯 Sticky</b> or <b>💰 Service</b>.</li>
+        <li>Gold you spend in a tree builds your <b>mastery</b> in it: cheaper, stronger towers, and the top tier unlocks.</li>
+        <li>Nobody can master everything, and the food adapts: if the team leans on one tree, the next waves bring food that shrugs it off. Split up.</li>
+        <li><b>Combos</b> need two trees: freeze then Chop to <b>Shatter</b>, syrup then Heat to <b>Caramelize</b>. Service towers only boost other trees.</li>
+        <li>More cooks means more doors, more food and more kinds at once. Solo, the food stays beatable with one strategy.</li>
+        <li>Bosses at waves 10, 20 and 30. Survive wave 30 to win, then keep going in endless.</li>
+      </ul>
+    </details>
+  </div>
+</section>
+
+<!-- ============================== LOBBY ============================ -->
+<section id="lobby" class="screen menu">
+  <div class="panel">
+    <div class="head"><h2 id="lobby-title">KITCHEN</h2><span id="lobby-count" class="pill"></span></div>
+    <div id="lobby-share" class="share hidden">
+      <p>Friends open this page and enter the code under JOIN. Your phone runs the kitchen: keep this screen on.</p>
+      <button id="btn-share" class="btn small">SHARE INVITE LINK</button>
+    </div>
+    <div id="lobby-players" class="players"></div>
+    <div id="host-ctl" class="hidden">
+      <div class="row"><span>AI cooks</span><div class="stepper"><button id="cooks-minus">−</button><b id="cooks-n">0</b><button id="cooks-plus">+</button></div></div>
+      <div class="row"><span>Difficulty</span><div class="seg" id="seg-diff"><button data-v="easy">Easy</button><button data-v="normal">Normal</button><button data-v="hard">Hard</button></div></div>
+      <p class="hint" id="team-hint"></p>
+    </div>
+    <button id="btn-start" class="btn big hidden">START</button>
+    <p id="lobby-wait" class="status">Waiting for the host to start…</p>
+    <a href="#" class="link" data-leave>Leave</a>
+  </div>
+</section>
+
+<!-- ============================== GAME ============================= -->
+<section id="game" class="screen">
+  <header id="hud">
+    <div class="stat" title="Wave"><small>WAVE</small><b id="h-wave">0</b></div>
+    <div class="stat" title="Lives"><small>LIVES</small><b id="h-lives">30</b></div>
+    <div class="stat gold" title="Your gold"><small>GOLD</small><b id="h-gold">0</b></div>
+    <button id="h-go" class="btn small">NEXT WAVE</button>
+    <button id="h-team" class="iconbtn" title="Team">👥</button>
+    <button id="h-menu" class="iconbtn" title="Menu">☰</button>
+  </header>
+  <div id="stage"><canvas id="view"></canvas><div id="toasts"></div></div>
+  <div id="sheet" class="sheet"><div id="sheet-body"><p class="hint">Tap an empty floor tile to build. Tap a tower to upgrade it.</p></div></div>
+</section>
+
+<!-- ======================== TEAM / MENU PANELS ===================== -->
+<div id="team" class="overlay hidden"><div class="panel">
+  <div class="head"><h2>TEAM</h2><button class="iconbtn" data-close>✕</button></div>
+  <p class="hint">Mastery shows where each cook has put their gold. Split the trees between you.</p>
+  <div id="team-list"></div>
+</div></div>
+
+<div id="menu" class="overlay hidden"><div class="panel">
+  <div class="head"><h2>PAUSED? NOPE.</h2><button class="iconbtn" data-close>✕</button></div>
+  <p class="hint">The food keeps marching while this is open.</p>
+  <label class="check"><input type="checkbox" id="opt-sound" checked> Sound</label>
+  <label class="check"><input type="checkbox" id="opt-ranges"> Show all tower ranges</label>
+  <a href="#" class="btn ghost" data-leave>LEAVE KITCHEN</a>
+</div></div>
+
+<div id="results" class="overlay hidden"><div class="panel">
+  <h2 id="res-title">KITCHEN SAVED</h2>
+  <p id="res-sub" class="tag"></p>
+  <div id="res-rows" class="players"></div>
+  <button id="btn-endless" class="btn big hidden">KEEP GOING (ENDLESS)</button>
+  <button id="btn-again" class="btn hidden">BACK TO LOBBY</button>
+  <a href="#" class="link" data-leave>Leave</a>
+</div></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -3,6 +3,7 @@
 | Game | What it is | Play |
 | --- | --- | --- |
 | **Turbo Surfers** | LAN multiplayer endless-runner kart racer (this page) | `node server/index.js` |
+| **[Leftover Uprising](leftover/README.md)** | Co-op tower defense for 1-8 phones: food invades the kitchen, everyone starts with the same blank towers and specialises with mastery; the waves adapt to team size and to what you build | `node leftover/tools/bundle.mjs`, open `dist/leftover-uprising.html` |
 | **[Skyline Hustle](skyline/README.md)** | 3D city business tycoon: live land auctions, colour sets, simulated citizens, eras from the 1930s, AI rivals, LAN multiplayer for up to 4 | `node skyline/server.mjs` or open `dist/skyline-hustle.html` (single-player) |
 
 ---
