@@ -4,6 +4,30 @@
 
 import { COLS, ROWS, PATHS, PATH_TILES, TOWERS, TREES, ENEMIES, pathPoint, doorsFor } from './data.js';
 
+// ── Sprites (art/<name>.webp). Until one loads, or if it can't, the emoji
+// placeholder is drawn instead, so the game never waits on art.
+// The page sets globalThis.LU_ART_BASE when the art lives elsewhere.
+const SPR = new Map(), spriteListeners = new Set();
+export function sprite(name) {
+  if (typeof Image === 'undefined') return null;
+  let im = SPR.get(name);
+  if (!im) {
+    im = new Image();
+    im.onload = () => { im.ok = true; for (const f of spriteListeners) f(name); };
+    im.onerror = () => { im.bad = true; };
+    im.src = (globalThis.LU_ART_BASE ?? 'art/') + name + '.webp';
+    SPR.set(name, im);
+  }
+  return im.ok ? im : null;
+}
+// A pattern of a texture, scaled so one copy covers `px` pixels.
+function scaledPattern(ctx, im, px) {
+  const c = document.createElement('canvas');
+  c.width = c.height = Math.max(8, Math.round(px));
+  c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  return ctx.createPattern(c, 'repeat');
+}
+
 export class Renderer {
   // rotate: on a wide screen (a TV), turn the kitchen on its side so it fills
   // the width: food then marches left to right instead of top to bottom.
@@ -12,6 +36,9 @@ export class Renderer {
     this.allowRotate = rotate;
     this.x = canvas.getContext('2d');
     this.fx = [];
+    // Floor art arriving late: redraw the background once it's in.
+    spriteListeners.add(name => { if (name.startsWith('tex_') || name.startsWith('door_')) this.bg = null; });
+    for (const n of ['tex_floor', 'tex_path', 'door_fridge', 'door_pantry', 'door_side', 'door_back']) sprite(n);
     this.resize();
     addEventListener('resize', () => this.resize());
     if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => this.resize()).observe(canvas);
@@ -49,11 +76,20 @@ export class Renderer {
     const x = cv.getContext('2d');
     x.scale(this.dpr, this.dpr);
     const s = this.s;
+    const floorTex = sprite('tex_floor'), pathTex = sprite('tex_path');
+    const floorPat = floorTex && scaledPattern(x, floorTex, s * 7), pathPat = pathTex && scaledPattern(x, pathTex, s * 3);
     for (let ty = 0; ty < ROWS; ty++) for (let tx = 0; tx < COLS; tx++) {
       const [px, py] = this.T(tx, ty);
       const path = PATH_TILES.has(tx + ',' + ty);
-      x.fillStyle = path ? ((tx + ty) % 2 ? '#5b4636' : '#634c3b') : ((tx + ty) % 2 ? '#e9dcc6' : '#f3e8d5');
-      x.fillRect(px, py, s + 0.5, s + 0.5);
+      const pat = path ? pathPat : floorPat;
+      if (pat) {
+        x.save(); x.translate(this.ox, this.oy); x.fillStyle = pat; x.fillRect(px - this.ox, py - this.oy, s + 0.5, s + 0.5); x.restore();
+        // Soften the floor so the food and towers stand out from it.
+        if (!path) { x.fillStyle = 'rgba(246,236,218,.45)'; x.fillRect(px, py, s + 0.5, s + 0.5); }
+      }
+      else { x.fillStyle = path ? ((tx + ty) % 2 ? '#5b4636' : '#634c3b') : ((tx + ty) % 2 ? '#e9dcc6' : '#f3e8d5'); x.fillRect(px, py, s + 0.5, s + 0.5); }
+      // A faint grid on the floor, so it's clear where a tower would go.
+      if (!path && pat) { x.strokeStyle = 'rgba(80,50,20,.10)'; x.lineWidth = 1; x.strokeRect(px + 0.5, py + 0.5, s - 1, s - 1); }
     }
     // Path edging so the route reads at a glance.
     x.strokeStyle = 'rgba(0,0,0,.18)'; x.lineWidth = 1;
@@ -70,19 +106,43 @@ export class Renderer {
       x.fillText(text, Math.min(this.ox + gw - w, Math.max(this.ox + w, px)), Math.min(this.oy + gh - 8, Math.max(this.oy + 8, py)));
     };
     const open = new Set(doorsFor(nPlayers));
+    const DOOR_ART = ['door_fridge', 'door_pantry', 'door_side'];
+    const doorArt = (name, cx, cy, on) => {
+      const im = sprite(name); if (!im) return false;
+      const [px, py] = this.P(cx, cy), w = s * 1.45;
+      x.globalAlpha = on ? 1 : 0.35;
+      x.drawImage(im, px - w / 2, py - w / 2, w, w);
+      x.globalAlpha = 1;
+      return true;
+    };
     PATHS.forEach((p, i) => {
       const [sx, sy] = p.pts[0];
       const ax = Math.max(0, sx), ay = Math.max(0, sy);
       const [px, py] = this.P(ax + 0.5, ay + 0.5);
+      if (doorArt(DOOR_ART[i], ax + 0.5, ay + 0.5, open.has(i))) {
+        x.font = `800 ${Math.max(9, s * 0.26)}px system-ui`;
+        x.lineWidth = 3; x.strokeStyle = 'rgba(29,20,16,.85)';
+        x.fillStyle = open.has(i) ? '#ffd23f' : 'rgba(255,255,255,.7)';
+        const t = open.has(i) ? p.door.toUpperCase() : '🔒';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.strokeText(t, px, py + s * 0.55); x.fillText(t, px, py + s * 0.55);
+        return;
+      }
       x.font = `800 ${Math.max(9, s * 0.3)}px system-ui`;
       x.textAlign = 'center'; x.textBaseline = 'middle';
       x.fillStyle = open.has(i) ? '#ffd23f' : 'rgba(255,255,255,.35)';
       label(open.has(i) ? p.door.toUpperCase() : '🔒', px, py);
     });
     const [ex, ey] = this.P(6.5, ROWS - 0.5);
+    const backArt = doorArt('door_back', 6.5, ROWS - 0.5, true);
     x.fillStyle = '#ff5a5f';
     x.font = `900 ${Math.max(9, s * 0.3)}px system-ui`;
-    label('BACK DOOR', ex, ey);
+    if (backArt) {
+      // Over the door art, a label with an outline, set just above it.
+      x.lineWidth = 3; x.strokeStyle = 'rgba(29,20,16,.85)'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      const [lx, ly] = this.P(this.rot ? 6.5 : 6.5, ROWS - 1.25);
+      x.strokeText('BACK DOOR', lx, ly); x.fillText('BACK DOOR', lx, ly);
+    } else label('BACK DOOR', ex, ey);
     this.bg = cv; this.bgKey = key;
     return cv;
   }
@@ -142,6 +202,21 @@ export class Renderer {
     const [px, py] = this.T(t.x, t.y);
     const pad = s * 0.08;
     if (selected || showRange) this.ring(t.x + 0.5, t.y + 0.5, def.range, selected ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.18)');
+    const im = sprite('tower_' + t.kind);
+    if (im) {
+      // Owner's colour as a disc under the station, then the station itself.
+      x.beginPath(); x.ellipse(px + s / 2, py + s * 0.7, s * 0.52, s * 0.3, 0, 0, Math.PI * 2);
+      x.fillStyle = owner?.color || '#888'; x.fill();
+      x.lineWidth = Math.max(2, s * 0.09); x.strokeStyle = owner?.color || '#888'; x.stroke();
+      x.lineWidth = 1.2; x.strokeStyle = 'rgba(29,20,16,.8)'; x.stroke();
+      x.drawImage(im, px - s * 0.1, py - s * 0.18, s * 1.2, s * 1.2);
+      for (let i = 0; i < def.tier; i++) {
+        x.fillStyle = '#ffd23f'; x.strokeStyle = '#1d1410'; x.lineWidth = 1.2;
+        x.beginPath(); x.arc(px + s * 0.2 + i * s * 0.17, py + s * 0.9, s * 0.07, 0, Math.PI * 2); x.fill(); x.stroke();
+      }
+      if (t.buff > 0) { x.fillStyle = '#7ee081'; x.font = `${s * 0.3}px system-ui`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('✦', px + s * 0.88, py + s * 0.12); }
+      return;
+    }
     x.fillStyle = def.tree ? TREES[def.tree].color : '#b9a58c';
     roundRect(x, px + pad, py + pad, s - pad * 2, s - pad * 2, s * 0.18);
     x.fill();
@@ -177,7 +252,11 @@ export class Renderer {
     if (fl & 8) { x.fillStyle = 'rgba(224,160,64,.5)'; x.beginPath(); x.ellipse(px, py + r * 0.6, r * 1.1, r * 0.4, 0, 0, Math.PI * 2); x.fill(); }
     if (fl & 1) { x.strokeStyle = 'rgba(255,107,53,.9)'; x.lineWidth = 2; x.beginPath(); x.arc(px, py + lift, r * 1.05, 0, Math.PI * 2); x.stroke(); }
     if (fl & 2 && !(fl & 4)) { x.strokeStyle = 'rgba(111,211,255,.9)'; x.lineWidth = 2; x.beginPath(); x.arc(px, py + lift, r * 0.95, 0, Math.PI * 2); x.stroke(); }
-    if (def.icon === '🟢') {
+    const im = sprite(e.type);
+    if (im) {
+      const w = r * 2.7;
+      x.drawImage(im, px - w / 2, py + lift - w / 2, w, w);
+    } else if (def.icon === '🟢') {
       x.fillStyle = '#6cc04a'; x.beginPath(); x.arc(px, py + lift, r * 0.8, 0, Math.PI * 2); x.fill();
       x.strokeStyle = '#3d7a25'; x.lineWidth = 1.5; x.stroke();
     } else {
