@@ -147,6 +147,8 @@ export class Renderer {
     return cv;
   }
 
+  shake(amp = 6, ms = 500) { this.shakeAmp = amp; this.shakeDur = ms; this.shakeUntil = performance.now() + ms; }
+  kick(id) { (this.kicks ||= new Map()).set(id, performance.now()); }
   addFx(f) {
     f.t0 = performance.now();
     // At most three bubbles on screen: the oldest makes way.
@@ -156,11 +158,15 @@ export class Renderer {
 
   draw(G, now) {
     const x = this.x, s = this.s;
+    this.now = now;
     x.setTransform(1, 0, 0, 1, 0, 0);
     x.fillStyle = '#1d1410';
     x.fillRect(0, 0, this.c.width, this.c.height);
-    x.drawImage(this.drawFloor(G.players.length || 1), 0, 0);
-    x.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    // Screen shake (bosses arriving, big escapes): a few pixels, quickly fading.
+    let sx = 0, sy = 0;
+    if (this.shakeUntil > now) { const a = this.shakeAmp * (this.shakeUntil - now) / this.shakeDur; sx = (Math.random() * 2 - 1) * a; sy = (Math.random() * 2 - 1) * a; }
+    x.drawImage(this.drawFloor(G.players.length || 1), sx * this.dpr, sy * this.dpr);
+    x.setTransform(this.dpr, 0, 0, this.dpr, sx * this.dpr, sy * this.dpr);
 
     // Selected tile
     if (G.sel?.tile) {
@@ -209,7 +215,10 @@ export class Renderer {
       x.fillStyle = owner?.color || '#888'; x.fill();
       x.lineWidth = Math.max(2, s * 0.09); x.strokeStyle = owner?.color || '#888'; x.stroke();
       x.lineWidth = 1.2; x.strokeStyle = 'rgba(29,20,16,.8)'; x.stroke();
-      x.drawImage(im, px - s * 0.1, py - s * 0.18, s * 1.2, s * 1.2);
+      // Recoil when it fires: a quick squash towards its base.
+      const k = Math.max(0, 1 - ((this.now || 0) - (this.kicks?.get(t.id) ?? -1e9)) / 130);
+      const sw = s * 1.2 * (1 + 0.06 * k), sh = s * 1.2 * (1 - 0.12 * k);
+      x.drawImage(im, px + s / 2 - sw / 2, py - s * 0.18 + (s * 1.2 - sh), sw, sh);
       for (let i = 0; i < def.tier; i++) {
         x.fillStyle = '#ffd23f'; x.strokeStyle = '#1d1410'; x.lineWidth = 1.2;
         x.beginPath(); x.arc(px + s * 0.2 + i * s * 0.17, py + s * 0.9, s * 0.07, 0, Math.PI * 2); x.fill(); x.stroke();
@@ -254,8 +263,26 @@ export class Renderer {
     if (fl & 2 && !(fl & 4)) { x.strokeStyle = 'rgba(111,211,255,.9)'; x.lineWidth = 2; x.beginPath(); x.arc(px, py + lift, r * 0.95, 0, Math.PI * 2); x.stroke(); }
     const im = sprite(e.type);
     if (im) {
+      // Waddle while walking (fliers float), squash when hit; frozen or
+      // stunned food stands still.
+      const now = this.now || 0, t = now / 1000, ph = (e.id % 97) * 0.7;
+      const still = fl & (4 | 16);
+      let bob = 0, rot = 0;
+      if (!still) {
+        if (def.air) bob = Math.sin(t * 3 + ph) * r * 0.18;
+        else { const w8 = t * (def.speed > 1.5 ? 13 : 9) + ph; bob = -Math.abs(Math.sin(w8)) * r * 0.22; rot = Math.sin(w8) * 0.09; }
+      }
+      const hits = (this.hitT ||= new Map()), prev = (this.prevHp ||= new Map());
+      if (prev.has(e.id) && e.hp < prev.get(e.id)) hits.set(e.id, now);
+      prev.set(e.id, e.hp);
+      const k = Math.max(0, 1 - (now - (hits.get(e.id) || -1e9)) / 140);
       const w = r * 2.7;
-      x.drawImage(im, px - w / 2, py + lift - w / 2, w, w);
+      x.save();
+      x.translate(px, py + lift + bob);
+      x.rotate(rot);
+      x.scale(1 + 0.2 * k, 1 - 0.18 * k);
+      x.drawImage(im, -w / 2, -w / 2, w, w);
+      x.restore();
     } else if (def.icon === '🟢') {
       x.fillStyle = '#6cc04a'; x.beginPath(); x.arc(px, py + lift, r * 0.8, 0, Math.PI * 2); x.fill();
       x.strokeStyle = '#3d7a25'; x.lineWidth = 1.5; x.stroke();
@@ -279,12 +306,38 @@ export class Renderer {
     const x = this.x, s = this.s;
     if (f.k === 'bubble') return this.bubble(f, age);
     if (f.k === 'shot') {
-      const [ax, ay] = this.P(f.fx + 0.5, f.fy + 0.5), [bx, by] = this.P(f.x, f.y);
-      const k = age / 0.12;
-      if (k > 1) return;
-      x.strokeStyle = f.color; x.lineWidth = Math.max(2, s * 0.08); x.lineCap = 'round';
-      x.globalAlpha = 1 - k;
-      x.beginPath(); x.moveTo(ax + (bx - ax) * k * 0.6, ay + (by - ay) * k * 0.6); x.lineTo(bx, by); x.stroke();
+      // Each tree throws its own thing: fireballs, knives, snowflakes, syrup.
+      const [ax, ay] = this.P(f.fx + 0.5, f.fy + 0.3), [bx, by] = this.P(f.x, f.y);
+      const k = Math.min(1, age / (f.life * 0.85));
+      const arc = f.tree === 'sticky' ? Math.sin(k * Math.PI) * s * 0.8 : 0;
+      const qx = ax + (bx - ax) * k, qy = ay + (by - ay) * k - arc;
+      x.strokeStyle = f.color; x.globalAlpha = 0.35 * (1 - k); x.lineWidth = Math.max(2, s * 0.06); x.lineCap = 'round';
+      x.beginPath(); x.moveTo(ax + (bx - ax) * Math.max(0, k - 0.35), ay + (by - ay) * Math.max(0, k - 0.35)); x.lineTo(qx, qy); x.stroke();
+      x.globalAlpha = 1;
+      const glyph = SHOT_GLYPH[f.tree];
+      if (glyph) {
+        x.save(); x.translate(qx, qy);
+        if (f.tree === 'chop') x.rotate(k * 12); else if (f.tree === 'cold') x.rotate(k * 4);
+        x.font = `${s * 0.38}px system-ui, "Apple Color Emoji", "Segoe UI Emoji"`; x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(glyph, 0, 0); x.restore();
+      } else { x.fillStyle = f.color; x.beginPath(); x.arc(qx, qy, s * 0.1, 0, Math.PI * 2); x.fill(); }
+    } else if (f.k === 'crumbs') {
+      // A burst of bits in the food's colours.
+      const [px, py] = this.P(f.x, f.y);
+      f.parts ||= Array.from({ length: f.big ? 18 : 10 }, () => ({ a: Math.random() * Math.PI * 2, v: 0.6 + Math.random() * 1.2, r: 0.04 + Math.random() * 0.06, c: f.colors[Math.floor(Math.random() * f.colors.length)] }));
+      x.globalAlpha = Math.max(0, 1 - age / f.life);
+      for (const q of f.parts) {
+        const d = q.v * age * s * 2.2;
+        x.fillStyle = q.c;
+        x.beginPath(); x.arc(px + Math.cos(q.a) * d, py + Math.sin(q.a) * d + 3 * s * age * age, q.r * s * (f.big ? 1.6 : 1), 0, Math.PI * 2); x.fill();
+      }
+      x.globalAlpha = 1;
+    } else if (f.k === 'escape') {
+      // The escapee's victory hop out of the back door.
+      const im = sprite(f.type); if (!im) return;
+      const [px, py] = this.P(f.x, f.y), w = s * 0.9;
+      x.globalAlpha = Math.max(0, 1 - age / f.life);
+      x.drawImage(im, px - w / 2, py - w / 2 - Math.abs(Math.sin(age * 9)) * s * 0.5 - age * s * 0.6, w, w);
       x.globalAlpha = 1;
     } else if (f.k === 'aura') {
       const [px, py] = this.P(f.x + 0.5, f.y + 0.5);
@@ -303,6 +356,17 @@ export class Renderer {
     }
   }
 }
+
+const SHOT_GLYPH = { heat: '🔥', chop: '🔪', cold: '❄️' };
+// Crumb colours for each food's pop.
+export const CRUMBS = {
+  pea: ['#6cc04a', '#3d7a25'], grape: ['#7b3fa0', '#b07ad0'], meatball: ['#7a4a2a', '#c0392b'], drumstick: ['#c06a2a', '#f0c070'],
+  broccoli: ['#3f8f2f', '#8fcf5a'], floret: ['#3f8f2f', '#8fcf5a'], celery: ['#8fcf5a', '#d8f0a0'], coconut: ['#6b4a2b', '#f5f0e0'],
+  popcorn: ['#fff2b0', '#ffd23f'], cottoncandy: ['#ff9ad5', '#ffd0ea'], icecream: ['#ffe0f0', '#9fe6ff', '#ff8fc0'], frozenpeas: ['#9fe0d0', '#e0fff8'],
+  jelly: ['#e0303a', '#ff7a80'], sourdough: ['#d49a5a', '#f0d8a8'], chili: ['#e02a1a', '#ff8a3d'], watermelon: ['#e8404f', '#3f8f2f', '#1d1410'],
+  melonslice: ['#e8404f', '#1d1410'], bacon: ['#c0503a', '#f0c0a0'], cake: ['#ffffff', '#ffd0ea', '#ffd23f'], cake2: ['#ffffff', '#ffd0ea'],
+  cupcake: ['#ff8fc0', '#ffd23f', '#7ee0ff'], turkey: ['#c8782a', '#f0c070'], pizza: ['#f0b040', '#c0392b', '#fff2b0'], slice: ['#f0b040', '#c0392b'], crust: ['#d8a050', '#f0d090'],
+};
 
 // A speech bubble that follows its food (and stays put once the food is gone).
 Renderer.prototype.bubble = function (f, age) {

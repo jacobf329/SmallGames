@@ -2,7 +2,7 @@
 // (food smoothed between the host's snapshots), building and upgrading,
 // the team panel and the HUD.
 
-import { TICK, TOWERS, TREES, MAX_TOWERS, SELL_BACK, MASTERY_DISCOUNT,
+import { TICK, TOWERS, TREES, ENEMIES, PATH_GEO, pathPoint, MAX_TOWERS, SELL_BACK, MASTERY_DISCOUNT,
   masteryLevel, buildable, doorsFor } from './data.js';
 import { chipsHtml, skillsHtml, SKILL_CSS } from './skillsui.js';
 import { newFoodHtml, FOOD_CSS } from './foodinfo.js';
@@ -10,7 +10,7 @@ import { showBanner, BANNER_CSS } from './banner.js';
 import { createServer } from './session.js';
 import { Host, LocalTransport, RtcTransport, normCode, onlineSupported } from './rtc.js';
 import { Net } from './net.js';
-import { Renderer } from './render.js';
+import { Renderer, CRUMBS } from './render.js';
 import { sfx } from './audio.js';
 
 const $ = s => document.querySelector(s);
@@ -41,6 +41,9 @@ sfx.enabled = store.get('lu.sound', '1') === '1';
 $('#opt-sound').checked = sfx.enabled;
 $('#opt-sound').addEventListener('change', e => { sfx.enabled = e.target.checked; store.set('lu.sound', e.target.checked ? '1' : '0'); });
 $('#opt-ranges').addEventListener('change', e => { G.showRanges = e.target.checked; });
+sfx.musicEnabled = store.get('lu.music', '1') === '1';
+$('#opt-music').checked = sfx.musicEnabled;
+$('#opt-music').addEventListener('change', e => { sfx.musicEnabled = e.target.checked; store.set('lu.music', e.target.checked ? '1' : '0'); });
 
 // ================================= hosting ===============================
 let hostSession = null, loop = null;
@@ -153,6 +156,7 @@ net.on('lobby', m => {
 });
 net.on('start', () => {
   G.inGame = true; G.towers = new Map(); G.snaps = []; G.sel = null; G.resultsShown = false;
+  sfx.music('calm');
   $('#results').classList.add('hidden');
   show('game');
   renderSheet();
@@ -190,16 +194,30 @@ const towerAt = (x, y) => { for (const t of G.towers.values()) if (t.x === x && 
 function onEvent(e) {
   const t = G.towers.get(e.id);
   switch (e.t) {
-    case 'shot': if (t) { const def = TOWERS[t.kind]; renderer.addFx({ k: 'shot', fx: t.x, fy: t.y, x: e.x, y: e.y, color: def.tree ? TREES[def.tree].color : '#fff', life: 0.12 }); sfx.shot(def.tree); } break;
-    case 'aura': if (t) { const def = TOWERS[t.kind]; renderer.addFx({ k: 'aura', x: t.x, y: t.y, r: def.range, color: TREES[def.tree]?.color || '#fff', life: 0.35 }); sfx.shot(def.tree); } break;
-    case 'pop': sfx.pop(); if (e.gold >= 4) renderer.addFx({ k: 'text', x: e.x, y: e.y, text: `+${e.gold}`, color: '#ffd23f', size: 0.32, life: 0.7 }); break;
+    case 'shot': if (t) { const def = TOWERS[t.kind]; renderer.addFx({ k: 'shot', fx: t.x, fy: t.y, x: e.x, y: e.y, tree: def.tree, color: def.tree ? TREES[def.tree].color : '#fff', life: def.tree === 'sticky' ? 0.28 : 0.18 }); renderer.kick(t.id); sfx.shot(def.tree); } break;
+    case 'aura': if (t) { const def = TOWERS[t.kind]; renderer.addFx({ k: 'aura', x: t.x, y: t.y, r: def.range, color: TREES[def.tree]?.color || '#fff', life: 0.35 }); renderer.kick(t.id); sfx.shot(def.tree); } break;
+    case 'pop':
+      sfx.pop(e.type);
+      renderer.addFx({ k: 'crumbs', x: e.x, y: e.y, colors: CRUMBS[e.type] || ['#fff'], big: !!ENEMIES[e.type]?.boss, life: 0.6 });
+      if (e.gold >= 4) renderer.addFx({ k: 'text', x: e.x, y: e.y, text: `+${e.gold}`, color: '#ffd23f', size: 0.32, life: 0.7 }); break;
     case 'combo': sfx.combo(); renderer.addFx({ k: 'text', x: e.x, y: e.y - 0.3, text: e.name, color: e.name === 'Shatter!' ? '#9fe6ff' : '#ffb347', size: 0.42, life: 0.9 }); break;
-    case 'leak': sfx.leak(); flash(); break;
-    case 'built': case 'upgraded': if (e.by === G.id) sfx.build(); break;
+    case 'leak': {
+      sfx.leak(); flash();
+      const [ex, ey] = pathPoint(0, PATH_GEO[0].total);          // every path ends at the back door
+      renderer.addFx({ k: 'escape', type: e.type, x: ex, y: ey - 0.4, life: 0.9 });
+      renderer.shake(ENEMIES[e.type]?.boss ? 10 : 3, ENEMIES[e.type]?.boss ? 700 : 220);
+      break;
+    }
+    case 'boss': renderer.shake(8, 700); break;
+    case 'built': if (e.by === G.id) sfx.build(); break;
+    case 'upgraded': if (e.by === G.id) sfx.upgrade(); break;
+    case 'won': sfx.music(null); sfx.victory(); break;
+    case 'lost': sfx.music(null); sfx.defeat(); break;
     case 'gift': if (e.to === G.id) toast(`${nameOf(e.from)} sent you ${e.amt} gold`, 'good'); break;
     case 'early': toast(`Early start: +${e.gold} gold each`, 'good'); break;
     case 'wave': {
       sfx.wave();
+      sfx.music(e.bossCard ? 'boss' : 'calm');
       if (e.bossCard) { sfx.boss(); showBanner($('#stage'), { kicker: `WAVE ${e.n} · BOSS`, title: e.bossCard.name, sub: e.bossCard.line, boss: true, ms: 5000 }); }
       else showBanner($('#stage'), { kicker: `WAVE ${e.n}`, title: e.title || `Wave ${e.n}`, sub: e.fams.map(f => FAM_NAMES[f] || f).join(' · ') });
       break;
@@ -212,8 +230,8 @@ function onEvent(e) {
       if (e.newFoods?.length) showNewFood(e.newFoods, e.n);
       break;
     }
-    case 'cleared': sfx.coin(); toast(`Wave ${e.n} cleared: +${e.bonus} gold${e.team ? ` (+${e.team} from registers)` : ''}, +${e.sp} skill point${e.sp > 1 ? 's' : ''}`, 'good'); break;
-    case 'skill': if (e.by === G.id) sfx.combo(); break;
+    case 'cleared': sfx.coin(); sfx.music('calm'); toast(`Wave ${e.n} cleared: +${e.bonus} gold${e.team ? ` (+${e.team} from registers)` : ''}, +${e.sp} skill point${e.sp > 1 ? 's' : ''}`, 'good'); break;
+    case 'skill': if (e.by === G.id) sfx.skill(); break;
     case 'speed': toast(e.speed === 2 ? '⏩ Double speed: everyone agreed' : `▶ Back to normal speed (${nameOf(e.by)})`); break;
   }
 }

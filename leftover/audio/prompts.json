@@ -1,0 +1,23 @@
+{
+  "pop_soft": ["cartoon squishy pop, a small juicy grape being squished", 0.6],
+  "crunch": ["cartoon crunch, snapping a crisp celery stick", 0.6],
+  "splat": ["cartoon wet splat, a wobbly jelly dessert splattering", 0.7],
+  "poof": ["cartoon popcorn kernel popping, light puff", 0.5],
+  "thud": ["cartoon soft squishy thud, a meatball dropping on a table", 0.6],
+  "shot_heat": ["short small fireball whoosh with a sizzle", 0.6],
+  "shot_chop": ["quick knife swish with a bright metallic shing", 0.5],
+  "shot_cold": ["short icy blast whoosh with tinkling ice crystals", 0.6],
+  "shot_sticky": ["short gloopy syrup squirt, comedic blorp", 0.5],
+  "shot_basic": ["light ceramic plate clink", 0.4],
+  "build": ["wooden thunk of a heavy cutting board set down on a counter", 0.5],
+  "upgrade": ["cheerful kitchen ding with a sparkle chime, upgrade complete", 1.0],
+  "coin": ["cash register cha-ching", 0.9],
+  "leak": ["comedic sad trombone wah wah wah", 1.6],
+  "wave": ["restaurant service bell ding ding, order up", 1.0],
+  "boss": ["dramatic comedic orchestral sting, timpani hit and brass, a villain arrives", 2.5],
+  "combo": ["satisfying magical combo chime with a whoosh", 0.8],
+  "skill": ["magical level up sparkle chime", 1.0],
+  "nope": ["soft cartoon error boop", 0.4],
+  "victory": ["short triumphant cartoon fanfare", 3.0],
+  "defeat": ["comedic sad descending tuba, game over", 2.5]
+}

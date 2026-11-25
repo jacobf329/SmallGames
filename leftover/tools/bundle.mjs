@@ -39,7 +39,9 @@ const SOLO = process.argv.includes('--solo');
 // by default, the repo's leftover/art next to dist/.
 const artArg = process.argv.find(a => a.startsWith('--art-base='));
 const ART_BASE = artArg ? artArg.slice(11) : '../leftover/art/';
-html = html.replace('<script>\n(() => {', () => `<script>globalThis.LU_ART_BASE = ${JSON.stringify(ART_BASE)};</script>\n<script>\n(() => {`);
+const audioArg = process.argv.find(a => a.startsWith('--audio-base='));
+const AUDIO_BASE = audioArg ? audioArg.slice(13) : '../leftover/audio/';
+html = html.replace('<script>\n(() => {', () => `<script>globalThis.LU_ART_BASE = ${JSON.stringify(ART_BASE)}; globalThis.LU_AUDIO_BASE = ${JSON.stringify(AUDIO_BASE)};</script>\n<script>\n(() => {`);
 if (SOLO) {
   html = html.replace('<div id="online">', '<div id="online" class="hidden">');
   html = html.replace('<p id="status" class="status"></p>', '<p class="hint" style="text-align:center">Playing with friends? Start a Party Pad room at <a href="/" style="color:inherit">jteef.com</a> and pick Leftover Uprising: the kitchen goes on the TV and everyone builds from their phone.</p>\n    <p id="status" class="status"></p>');
