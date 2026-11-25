@@ -510,6 +510,223 @@ const MAX_TOWERS = n => Math.max(8, Math.min(40, Math.floor(180 / n)));
 return { TICK, SNAP_RATE, MAX_PLAYERS, WAVES, COLORS, DIFFICULTY, COLS, ROWS, PATHS, doorsFor, PATH_GEO, pathPoint, PATH_TILES, buildable, DTYPES, TREES, TREE_IDS, MAX_MASTERY, SP_START, SP_PER_WAVE, SP_BOSS_BONUS, skillCost, masteryLevel, MASTERY_DISCOUNT, SKILLS, TOWERS, TOWER_IDS, SELL_BACK, ENEMIES, ENEMY_IDS, FAMILIES, MEMBER_FROM, FAMILY_LATE, COUNTERS, BOSSES, BOSS_INTRO, teamScale, soloCurve, waveBudget, LATE_FROM, PRESSURE, pressureTarget, waveHpMult, START_GOLD, WAVE_BONUS, BUILD_TIME, EARLY_BONUS, MAX_TOWERS };
 })();
 
+/* ===== lines.js ===== */
+__mods.lines = (() => {
+// Leftover Uprising - the jokes: what the food says, what each wave is
+// called, and how the bosses make their entrance. Family-friendly.
+//
+// Lines are drawn from shuffle bags (createLines): nothing repeats until its
+// whole pool has been used, so a long game keeps finding new ones.
+
+// ── What the food says ──────────────────────────────────────────────────────
+// spawn: as it marches in · pop: as it's taken out · leak: escaping out the
+// back door · split: bosses breaking apart
+const BARKS = {
+  pea: {
+    spawn: ['Nobody split up!', 'Is this the way out? Somebody check!', 'Peas in a pod, peas in a pod...', 'Stay close, I can see a cleaver!', 'Why are there so many of us?'],
+    pop: ['Tell my pod I tried!', 'Not the face!', 'I was so close to being soup.', 'Pea-ce out...', 'Somebody catch me!'],
+    leak: ['We made it! Wait, where\'s Kevin?', 'Freedom smells like dish soap!', 'Run, little peas, run!', 'Out the door and under the fridge!'],
+  },
+  grape: {
+    spawn: ['Bunch up!', 'We are not raisins yet!', 'Roll out, team!', 'Stick to the vine, people!'],
+    pop: ['I was going to be a raisin.', 'Juice everywhere. Sorry.', 'Squish!', 'Wine was my dream...', 'Grape-ful for the memories.'],
+    leak: ['Grape escape!', 'Nobody will ever make me into jelly!', 'See you at the vineyard!', 'Rolling home!'],
+  },
+  meatball: {
+    spawn: ['Let\'s roll.', 'Who\'s got the sauce?', 'I\'ve been simmering for this.', 'Somebody save me a noodle.'],
+    pop: ['I\'m all crumbs now...', 'Should\'ve stayed in the sub.', 'Mamma mia!', 'Pass the parmesan... on my grave...'],
+    leak: ['Rolling, rolling, rolling!', 'Off to find some spaghetti.', 'Ciao, kitchen!', 'Downhill all the way!'],
+  },
+  drumstick: {
+    spawn: ['Leg day.', 'One leg and still faster than you.', 'Nobody eats me with a fork.', 'Bawk. That\'s a threat.'],
+    pop: ['Down to the bone...', 'Finger-lickin\'... ow.', 'Should have flown south.', 'I had a good leg run.'],
+    leak: ['Kicked my way out!', 'One leg, zero problems.', 'Hop, hop, gone!', 'Chicken? I\'m the brave one!'],
+  },
+  broccoli: {
+    spawn: ['I am a tiny tree. Respect me.', 'Kids hate me. Let\'s see about cooks.', 'Eat your vegetables? Make me.', 'Fear the forest!'],
+    pop: ['Florets, assemble!', 'You can\'t chop a forest!', 'Scatter, my little ones!', 'Timber!'],
+    leak: ['Nobody eats their broccoli. Proven again.', 'Back to the garden!', 'Vegetables win!'],
+  },
+  floret: {
+    pop: ['Mini timber!', 'Eek!', 'I was the cute one!', 'Tiny tree down!'],
+    leak: ['Tiny but free!', 'Sprout out!', 'Small, fast, gone!'],
+  },
+  celery: {
+    spawn: ['Go ahead. Try to chew through this.', 'Nobody likes me and I like it that way.', 'Pure crunch. Zero fear.', 'I am ninety percent water and ten percent spite.'],
+    pop: ['Snapped like a... well, celery.', 'At least I was healthy.', 'Strings everywhere. Gross.', 'Crunch... my final sound.'],
+    leak: ['Too crunchy to stop.', 'Off to ruin a soup.', 'Enjoy your stringy floor!'],
+  },
+  coconut: {
+    spawn: ['Knock all you want.', 'I\'m basically a rock with ambitions.', 'Brought my own armour.', 'Hairy, round and ready.'],
+    pop: ['Crack! Okay, that one hurt.', 'Coconut water everywhere. You\'re welcome.', 'Took you long enough.', 'I had such a good shell...'],
+    leak: ['Tell the blender I said hi.', 'Rolling to the beach!', 'Still have all my hair!'],
+  },
+  popcorn: {
+    spawn: ['POP! Hi! POP!', 'We fly now!', 'Can\'t catch what\'s up here!', 'Extra butter, extra attitude!'],
+    pop: ['Pop! Wait, that\'s my line...', 'Un-popped!', 'Buttery goodbye!', 'Should\'ve stayed a kernel.'],
+    leak: ['Popping off to the movies!', 'Up, up and away!', 'Kernel of truth: you missed!'],
+  },
+  cottoncandy: {
+    spawn: ['Floating in, sweeties!', 'I\'m mostly air. Good luck.', 'Fluff incoming!', 'Pink and dangerous!'],
+    pop: ['Melted on the job...', 'Too sweet for this world.', 'Poof!', 'Sticky fingers... everywhere...'],
+    leak: ['Off to the fair!', 'Sweet, sweet freedom!', 'Fluffed my way out!'],
+  },
+  icecream: {
+    spawn: ['Stay frosty.', 'Cold doesn\'t scare me. I AM cold.', 'Two scoops of trouble.', 'Sprinkles are my armour.'],
+    pop: ['I\'m melting! Classic.', 'Brain freeze... permanent...', 'Sprinkles... everywhere...', 'Should\'ve been a sundae.'],
+    leak: ['Cool exit.', 'Off to find a cone!', 'Chill, I\'m leaving.'],
+  },
+  frozenpeas: {
+    spawn: ['We\'ve been in the freezer since forever.', 'Frozen solid, still angry.', 'Thawing out and ready!', 'Nobody remembers buying us!'],
+    pop: ['Freezer burn...', 'We were best before last year!', 'Defrosted!', 'Back to the bag...'],
+    leak: ['Ice to meet you, bye!', 'Cool runnings!', 'Out before we thaw!'],
+  },
+  jelly: {
+    spawn: ['Wobble wobble.', 'Hit me. I dare you.', 'I am unstoppable jiggle.', 'You can\'t chop what wobbles.'],
+    pop: ['Splat.', 'No more wobble...', 'I set for this?', 'Jiggled my last jiggle.'],
+    leak: ['Wobbled right past you!', 'Still here. Still wobbly. Gone.', 'Jiggle out!'],
+  },
+  sourdough: {
+    spawn: ['I\'ve been rising all morning.', 'My starter is older than you.', 'Crusty and proud.', 'Knead to get past? I do.'],
+    pop: ['My starter will avenge me!', 'Stale...', 'Torn to toast.', 'I was artisanal!'],
+    leak: ['I rise again!', 'Off to a fancy bakery.', 'Loafing my way out.'],
+  },
+  chili: {
+    spawn: ['Hot coming through!', 'Heat? I eat heat for breakfast!', 'Can\'t touch this. Literally.', 'Spicy and speedy!'],
+    pop: ['Ah! Too cold! Too cold!', 'Spicy... goodbye...', 'Mild. I went out MILD.', 'Somebody get me a glass of milk!'],
+    leak: ['Too hot to handle!', 'Zoom! Spice is fast!', 'Burn rubber!'],
+  },
+  watermelon: {
+    spawn: ['Big, round, unstoppable.', 'Mostly water, all attitude.', 'Make way for the melon!', 'I am the picnic now.'],
+    pop: ['Seeds! Seeds everywhere!', 'Slices, go!', 'Picnic\'s over...', 'Somebody save the rind!'],
+    leak: ['Rolled out like a champ!', 'Summer\'s calling!', 'Watermelon escape! That\'s a thing now.'],
+  },
+  melonslice: {
+    pop: ['Spit out my seeds, I dare you.', 'Rind and gone.', 'Juicy ending!'],
+    leak: ['Slice of freedom!', 'Juicy getaway!', 'Smile! I\'m shaped like one!'],
+  },
+  bacon: {
+    spawn: ['Too cool for syrup.', 'Sizzle sizzle.', 'Everyone loves me. Even you.', 'Grease is the word.'],
+    pop: ['Crispy... finally...', 'Extra crispy. Worth it.', 'I regret nothing.', 'Save me for breakfast...'],
+    leak: ['Slid right out!', 'Greased lightning!', 'Too slippery for you!'],
+  },
+  cake: {
+    spawn: ['I OBJECT TO THIS WEDDING!', 'Nobody is cutting ME today!', 'Three tiers of fury!'],
+    split: ['You can cut me, but there\'s MORE CAKE!', 'Tier two, take over!', 'The party splits up!'],
+    pop: ['Nobody... gets... a piece...', 'Save the top tier... for my anniversary...'],
+    leak: ['The reception continues without you!', 'Off on my honeymoon!'],
+  },
+  cake2: {
+    split: ['Cupcakes, scatter!', 'Mini me, go!'],
+    pop: ['Tier down!', 'Frosting failure!'],
+    leak: ['The party goes on!', 'Leftover cake wins again!'],
+  },
+  cupcake: {
+    pop: ['Mini meltdown!', 'Sprinkle out!', 'Too cute to lose!', 'My wrapper!'],
+    leak: ['Party favour escaping!', 'Sweet ride!', 'Bye, sprinkle haters!'],
+  },
+  turkey: {
+    spawn: ['GOBBLE. That means run.', 'I was roasted once. Never again.', 'Who\'s carving? Nobody\'s carving.'],
+    pop: ['Leftovers... for a week...', 'Gravy... take care of the family...', 'At least... I wasn\'t dry...'],
+    leak: ['Gobble gobble, see you never!', 'Off to haunt next Thanksgiving!'],
+  },
+  pizza: {
+    spawn: ['Extra large. Extra angry.', 'Delivery for... NOBODY!', 'I\'ve got a topping for every one of you.'],
+    split: ['Slices! Go! Go! Go!', 'Cut me into eighths? Bad move.', 'Each slice for itself!'],
+    pop: ['Thirty minutes... or less... goodbye...', 'Hold the... anchovies...'],
+    leak: ['Delivery complete!', 'Keep the change!'],
+  },
+  slice: {
+    split: ['Crust, run for it!', 'Toppings off, crust out!'],
+    pop: ['Extra cheese... gone...', 'Delivery failed!', 'I was the best slice!'],
+    leak: ['Thirty minutes or less!', 'Hot and fresh, out the door!'],
+  },
+  crust: {
+    pop: ['Nobody eats the crust anyway.', 'Crunch.', 'Always the leftover...'],
+    leak: ['Crust never quits!', 'The crust gets the last laugh!'],
+  },
+};
+
+// ── Wave titles ─────────────────────────────────────────────────────────────
+const WAVE_TITLES = {
+  any: [
+    'The Lunch Rush', 'Second Helpings', 'The Midnight Snack', 'Return of the Leftovers', 'Fridge Break',
+    'The Great Tupperware Escape', 'Doggy Bag Revolt', 'Brunch Gone Wrong', 'The Buffet Strikes Back',
+    'All You Can\'t Eat', 'Family-Style Chaos', 'Snack Attack', 'The Potluck Plot', 'Picnic Panic',
+    'The Crumbs Have Eyes', 'Sell-By Date Rebellion', 'Expired and Angry', 'Not On The Menu', 'The Daily Special',
+    'Prep Time Is Over', 'Hold The Line, Hold The Mayo', 'No Substitutions', 'Order Up!', 'Back of House Brawl',
+    'The Dish Pit Uprising', 'Rush Hour at the Fridge', 'Use It Or Lose It', 'Who Left The Fridge Open?',
+    'Late Night Cravings', 'Room Service Riot', 'Seconds, Anyone?', 'The Five-Second Rule Is Off',
+    'Lunchbox Liberation', 'Tuesday Night Leftovers', 'The Sandwich Can Wait', 'Mystery Container Mayhem',
+    'Taste Test Trouble', 'The Kitchen Never Closes', 'Overcooked Ambitions', 'Clean Plate Club Rejects',
+  ],
+  horde: ['Peas Out!', 'Grape Expectations', 'Small Bites, Big Crowd', 'Pea Pandemonium', 'Bite-Sized Bedlam'],
+  tank: ['Meatball Madness', 'Heavy Helpings', 'Drumstick Drumroll', 'The Protein Parade'],
+  splitter: ['Broccoli Breakup', 'Divide and Conquer the Kitchen', 'Tiny Trees, Big Trouble', 'Forest Floor Fiasco'],
+  fast: ['Hot Pursuit', 'The Spice Race', 'Fast Food', 'Speedy Seasoning'],
+  armoured: ['Crunch Time', 'Tough Nuts to Crack', 'Celery Surprise', 'The Hard Shell Gang'],
+  flying: ['Pop Goes the Kitchen', 'Airborne Snacks', 'Fluff and Fury', 'Look Up!'],
+  regen: ['Wobble Rebellion', 'Rise of the Sourdough', 'The Jelly Won\'t Quit', 'Back for Seconds, Again'],
+  frozen: ['Freezer Burn', 'The Cold Shoulder', 'Brain Freeze Brigade', 'Frost Bite Night'],
+  heatproof: ['Can\'t Stand The Heat', 'Melon Rollers', 'Hot Stuff Only', 'Fireproof Picnic'],
+  greasy: ['Grease Lightning', 'The Bacon Breakout', 'Slippery When Sizzling', 'Breakfast Bandits'],
+};
+// Waves aimed at what the team leans on.
+const COUNTER_TITLES = {
+  heat: ['Someone Bought Too Many Grills', 'Fireproof Friday', 'The Heat Is Off', 'Turn Down the Stove', 'Oven Mitts Not Required', 'Spice Up Your Strategy'],
+  chop: ['Knives Can\'t Reach Us', 'The Butcher Problem', 'Dull Blades Day', 'Put the Cleaver Down', 'Cutting Board Blues', 'Chop Chop, Not So Fast'],
+  cold: ['Your Freezer Is Showing', 'Ice Ice Maybe', 'Thawed and Annoyed', 'Cold Feet, Warm Food', 'Already Frozen, Thanks', 'Snow Day Cancelled'],
+  sticky: ['Syrup Doesn\'t Stick', 'Non-Stick Coating', 'Pancakes Not Included', 'Slip and Slide', 'Butter Them Up', 'Unstuck and Unbothered'],
+  basic: ['Prep Stations Won\'t Cut It', 'Basic Is Boring', 'Time to Upgrade, Chef', 'Plain Plates, Big Problems', 'Paper Plates Won\'t Save You', 'Seasoning Sold Separately'],
+};
+const BOSS_TITLES = {
+  cake: ['The Wedding Crasher', 'Here Comes the Cake', 'Let Them Eat Chaos'],
+  turkey: ['Thanksgiving Never Ends', 'The Bird Is Back', 'Stuffed and Furious'],
+  pizza: ['The Final Delivery', 'Extra Large, Extra Trouble', 'Last Slice Standing'],
+};
+
+// ── Boss entrances (title cards) ────────────────────────────────────────────
+const BOSS_CARDS = {
+  cake: [
+    { name: 'The Wedding Cake', line: 'It objected to its own wedding. Now it wants out.' },
+    { name: 'The Wedding Cake', line: 'Three tiers, zero manners, and a grudge against cake knives.' },
+    { name: 'The Wedding Cake', line: 'Somebody said "cut the cake." It heard that.' },
+  ],
+  turkey: [
+    { name: 'The Roast Turkey', line: 'Already roasted once. It did not enjoy it.' },
+    { name: 'The Roast Turkey', line: 'Twenty pounds of gravy-soaked revenge.' },
+    { name: 'The Roast Turkey', line: 'It survived Thanksgiving. Your kitchen is next.' },
+  ],
+  pizza: [
+    { name: 'The Giant Pizza', line: 'Eight slices. One goal. Extra cheese.' },
+    { name: 'The Giant Pizza', line: 'Delivered by mistake, and it is not leaving quietly.' },
+    { name: 'The Giant Pizza', line: 'Cut it up and every slice comes for you.' },
+  ],
+};
+
+// Shuffle bags: draw(key, pool) never repeats a line until that pool is used up.
+function createLines(rng = Math.random) {
+  const bags = new Map();
+  return function draw(key, pool) {
+    if (!pool || !pool.length) return null;
+    let bag = bags.get(key);
+    if (!bag || !bag.length) {
+      bag = pool.slice();
+      for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
+      // Don't open a fresh bag with the line that just closed the last one.
+      const last = bags.get(key + ':last');
+      if (bag.length > 1 && bag[bag.length - 1] === last) [bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]];
+      bags.set(key, bag);
+    }
+    const line = bag.pop();
+    bags.set(key + ':last', line);
+    return line;
+  };
+}
+
+return { BARKS, WAVE_TITLES, COUNTER_TITLES, BOSS_TITLES, BOSS_CARDS, createLines };
+})();
+
 /* ===== director.js ===== */
 __mods.director = (() => {
 // Leftover Uprising - the wave director. Builds each wave out of food
@@ -605,14 +822,14 @@ function planWave({ w, n, towers, lastFams = [], rng = Math.random }) {
   const weights = Object.fromEntries(unlocked.map(f => [f, lastFams.includes(f) ? 0.6 : 1]));
 
   // Monoculture? Push the counters, and warn.
-  let warn = null, warnPush = 0;
+  let warn = null, warnPush = 0, warnType = null;
   if (w >= 4 && team.total > 0) {
     for (const [dt, s] of Object.entries(team.share)) {
       if (s <= 0.4 || !COUNTERS[dt]) continue;
       const push = sc.adapt * (s - 0.4) * 10;
       let used = false;
       for (const f of COUNTERS[dt].fams) if (weights[f] != null) { weights[f] += push; used = true; }
-      if (used && push > warnPush && sc.adapt >= 1) { warnPush = push; warn = COUNTERS[dt].warn; }
+      if (used && push > warnPush && sc.adapt >= 1) { warnPush = push; warn = COUNTERS[dt].warn; warnType = dt; }
     }
   }
 
@@ -669,7 +886,7 @@ function planWave({ w, n, towers, lastFams = [], rng = Math.random }) {
     doorT[path] = t + 1.8;
   });
   spawns.sort((a, b) => a.t - b.t);
-  return { spawns, fams, warn, boss, bossIntro: boss ? BOSS_INTRO[boss] : null, team };
+  return { spawns, fams, warn, warnType, boss, bossIntro: boss ? BOSS_INTRO[boss] : null, team };
 }
 
 return { towerDps, assessTeam, planWave };
@@ -691,6 +908,11 @@ const {
   pathPoint, teamScale, waveHpMult, doorsFor, PRESSURE, pressureTarget,
 } = __mods.data;
 const { planWave } = __mods.director;
+const { BARKS, WAVE_TITLES, COUNTER_TITLES, BOSS_TITLES, BOSS_CARDS, createLines } = __mods.lines;
+
+// How chatty the food is. Cooldowns are seconds between bubbles of that kind
+// (bosses ignore them); chances are per food.
+const BARK = { gap: 3, perWave: 7, hordePop: 0.03, spawnChance: 0.45, spawnCd: 3.5, popChance: 0.07, bigPopChance: 0.35, popCd: 2.5, leakChance: 0.75, leakCd: 1.5 };
 
 const SHATTER = 2.2, BRITTLE = 1.35, CARAMEL_BONUS = 45, CARAMEL_STUN = 1.3, CARAMEL_CD = 3;
 
@@ -708,7 +930,7 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     diff, wave: 0, phase: 'build', buildT: BUILD_TIME(1), lives: D.lives, maxLives: D.lives,
     endless: false, speed: 1, enemies: [], towers: new Map(), players: P, events: [],
     plan: null, waveT: 0, spawnI: 0, lastFams: [], towersVer: 1, playersVer: 1, nextId: 1,
-    warn: null, fams: [], time: 0, push: 1, far: 0, leaked: false, seen: new Set(), next: null, preview: null,
+    warn: null, fams: [], time: 0, draw: createLines(rng), barkAt: {}, waveTypes: new Set(), barksThisWave: 0, counterTitle: null, counterTitleAt: -99, push: 1, far: 0, leaked: false, seen: new Set(), next: null, preview: null,
   };
   const n = () => P.size;
   const ev = e => g.events.push(e);
@@ -878,7 +1100,9 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     g.fams = g.plan.fams;
     g.warn = g.plan.warn;
     g.playersVer++;
-    ev({ t: 'wave', n: g.wave, fams: g.plan.fams, warn: g.plan.warn, boss: g.plan.boss, bossIntro: g.plan.bossIntro, doors: doorsFor(n()) });
+    const pv = g.preview && g.preview.n === g.wave ? g.preview : {};
+    g.waveTypes = new Set(); g.barksThisWave = 0;
+    ev({ t: 'wave', n: g.wave, title: pv.title || null, fams: g.plan.fams, warn: g.plan.warn, boss: g.plan.boss, bossCard: pv.bossCard || null, bossIntro: pv.bossIntro || g.plan.bossIntro, doors: doorsFor(n()) });
   }
 
   // The next wave is decided as the build break starts, so everyone can see
@@ -893,7 +1117,18 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     // Cards for food nobody has met yet (split-off pieces are covered by their parent's card).
     const parents = [...types].filter(id => !g.seen.has(id) && ![...types].some(o => ENEMIES[o].split?.into === id));
     for (const id of types) g.seen.add(id);
-    g.preview = { n: w, fams: plan.fams, warn: plan.warn, boss: plan.boss, bossIntro: plan.bossIntro, newFoods: parents };
+    // A name for the wave, and a title card for a boss.
+    let title;
+    if (plan.boss) title = g.draw('boss:' + plan.boss, BOSS_TITLES[plan.boss]);
+    else if (plan.warnType && COUNTER_TITLES[plan.warnType] && (plan.warnType !== g.counterTitle || w - g.counterTitleAt >= 4)) {
+      // Name the counter wave when the counter is new, not every wave it lasts.
+      title = g.draw('counter:' + plan.warnType, COUNTER_TITLES[plan.warnType]);
+      g.counterTitle = plan.warnType; g.counterTitleAt = w;
+    }
+    else if (rng() < 0.5 && WAVE_TITLES[plan.fams[0]]) title = g.draw('fam:' + plan.fams[0], WAVE_TITLES[plan.fams[0]]);
+    title ||= g.draw('any', WAVE_TITLES.any);
+    const bossCard = plan.boss ? g.draw('card:' + plan.boss, BOSS_CARDS[plan.boss]) : null;
+    g.preview = { n: w, title, fams: plan.fams, warn: plan.warn, boss: plan.boss, bossCard, bossIntro: bossCard ? bossCard.line : plan.bossIntro, newFoods: parents };
     ev({ t: 'preview', ...g.preview });
   }
 
@@ -931,6 +1166,19 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
   };
 
   // ------------------------------------------------------------ enemies ----
+  // A speech bubble from one food. Bosses always get their say; everyone else
+  // takes turns (cooldowns) and only sometimes speaks up.
+  function bark(e, kind, force = false) {
+    const pool = BARKS[e.type]?.[kind];
+    if (!pool) return;
+    const cd = BARK[kind + 'Cd'] || 0;
+    if (!force && (g.time - (g.barkAt[kind] ?? -99) < cd || g.time - (g.barkAt.any ?? -99) < BARK.gap || g.barksThisWave >= BARK.perWave)) return;
+    g.barkAt[kind] = g.barkAt.any = g.time;
+    g.barksThisWave++;
+    const [x, y] = pathPoint(e.path, e.d);
+    ev({ t: 'bark', id: e.id, x: +x.toFixed(2), y: +y.toFixed(2), kind, text: g.draw(e.type + ':' + kind, pool), boss: !!ENEMIES[e.type].boss });
+  }
+
   function spawn(type, path, d = 0) {
     const def = ENEMIES[type];
     const sc = teamScale(n());
@@ -943,11 +1191,17 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
       caramelCd: 0, chilled: 0, ccImm: 0, lat: ((g.nextId * 7919) % 100) / 100 - 0.5,
     };
     g.enemies.push(e);
-    if (def.boss) ev({ t: 'boss', type });
+    if (def.boss) { ev({ t: 'boss', type }); bark(e, 'spawn', true); }
     return e;
   }
 
   function kill(e, by) {
+    {
+      const def = ENEMIES[e.type];
+      if (def.split && BARKS[e.type]?.split) bark(e, 'split', true);
+      else if (def.boss) bark(e, 'pop', true);
+      else if (rng() < (def.hp >= 300 ? BARK.bigPopChance : def.fam === 'horde' ? BARK.hordePop : BARK.popChance)) bark(e, 'pop');
+    }
     const def = ENEMIES[e.type];
     e.dead = true;
     const sc = teamScale(n());
@@ -1090,6 +1344,7 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
         e.dead = true; e.leaked = true;
         g.lives -= def.leak; g.leaked = true;
         ev({ t: 'leak', type: e.type, lives: def.leak });
+        if (def.boss || def.fam === 'boss' || rng() < BARK.leakChance) bark(e, 'leak', !!def.boss);
         if (g.lives <= 0) { g.lives = 0; g.phase = 'lost'; ev({ t: 'lost', n: g.wave }); }
       }
     }
@@ -1109,7 +1364,9 @@ function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (g.phase !== 'wave') return;
     g.waveT += dt;
     const sp = g.plan.spawns;
-    while (g.spawnI < sp.length && sp[g.spawnI].t <= g.waveT) { const s = sp[g.spawnI++]; spawn(s.type, s.path); }
+    while (g.spawnI < sp.length && sp[g.spawnI].t <= g.waveT) { const s = sp[g.spawnI++]; const e = spawn(s.type, s.path);
+      // The first of each kind in a wave sometimes announces itself.
+      if (!g.waveTypes.has(s.type)) { g.waveTypes.add(s.type); if (!ENEMIES[s.type].boss && rng() < BARK.spawnChance) bark(e, 'spawn'); } }
     moveEnemies(dt);
     if (g.phase !== 'wave') return;
     towersFire(dt);
@@ -1596,6 +1853,41 @@ const FOOD_CSS = `
 `;
 
 return { foodInfo, foodCardHtml, newFoodHtml, FOOD_CSS };
+})();
+
+/* ===== banner.js ===== */
+__mods.banner = (() => {
+// Leftover Uprising - the banner that slides in when a wave starts, and the
+// boss title card. Shared by the solo page and the Party Pad TV.
+
+function showBanner(stage, { kicker = '', title = '', sub = '', boss = false, ms = 2800 }) {
+  if (!stage) return;
+  let el = stage.querySelector(':scope > .lu-banner');
+  if (!el) { el = document.createElement('div'); el.className = 'lu-banner'; stage.appendChild(el); }
+  el.className = 'lu-banner' + (boss ? ' boss' : '');
+  el.innerHTML = `${kicker ? `<small>${esc(kicker)}</small>` : ''}<b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}`;
+  void el.offsetWidth;                 // restart the animation
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const BANNER_CSS = `
+.lu-banner{position:absolute;left:50%;top:18%;transform:translate(-50%,-30px) scale(.9);opacity:0;pointer-events:none;z-index:5;
+  text-align:center;padding:10px 26px 12px;border-radius:18px;background:rgba(29,20,16,.9);border:2px solid #ffd23f;color:#fff4e6;
+  box-shadow:0 14px 40px rgba(0,0,0,.45);transition:transform .35s cubic-bezier(.2,1.4,.4,1),opacity .25s;max-width:92%}
+.lu-banner.show{opacity:1;transform:translate(-50%,0) scale(1)}
+.lu-banner small{display:block;font-weight:900;letter-spacing:.18em;color:#ffd23f;font-size:.75em}
+.lu-banner b{display:block;font-size:clamp(1.3rem,4.5vw,2.6rem);font-weight:900;line-height:1.1}
+.lu-banner span{display:block;color:#d8c2a8;font-size:clamp(.9rem,2.4vw,1.25rem);margin-top:4px}
+.lu-banner.boss{top:50%;transform:translate(-50%,-50%) scale(.6);background:linear-gradient(160deg,#5a1a0e,#1d1410);border-color:#ff5a5f;padding:20px 36px 24px}
+.lu-banner.boss.show{transform:translate(-50%,-50%) scale(1)}
+.lu-banner.boss small{color:#ff8a7a}
+.lu-banner.boss b{font-size:clamp(2rem,7vw,4.2rem);color:#ffd23f;text-transform:uppercase;letter-spacing:.02em}
+`;
+
+return { showBanner, BANNER_CSS };
 })();
 
 /* ===== rtc.js ===== */
@@ -2152,7 +2444,12 @@ class Renderer {
     return cv;
   }
 
-  addFx(f) { f.t0 = performance.now(); this.fx.push(f); if (this.fx.length > 300) this.fx.shift(); }
+  addFx(f) {
+    f.t0 = performance.now();
+    // At most three bubbles on screen: the oldest makes way.
+    if (f.k === 'bubble') { const b = this.fx.filter(q => q.k === 'bubble'); if (b.length >= 3) this.fx.splice(this.fx.indexOf(b[0]), 1); }
+    this.fx.push(f); if (this.fx.length > 300) this.fx.shift();
+  }
 
   draw(G, now) {
     const x = this.x, s = this.s;
@@ -2176,7 +2473,8 @@ class Renderer {
     for (const t of G.towers.values()) this.tower(t, owners.get(t.owner), G.sel?.tower === t.id, G.showRanges);
 
     // Food, smoothed between snapshots
-    for (const e of G.view) this.food(e);
+    this.viewById = new Map();
+    for (const e of G.view) { this.food(e); this.viewById.set(e.id, e); }
 
     // Effects
     const keep = [];
@@ -2257,6 +2555,7 @@ class Renderer {
 
   effect(f, age) {
     const x = this.x, s = this.s;
+    if (f.k === 'bubble') return this.bubble(f, age);
     if (f.k === 'shot') {
       const [ax, ay] = this.P(f.fx + 0.5, f.fy + 0.5), [bx, by] = this.P(f.x, f.y);
       const k = age / 0.12;
@@ -2283,6 +2582,46 @@ class Renderer {
   }
 }
 
+// A speech bubble that follows its food (and stays put once the food is gone).
+Renderer.prototype.bubble = function (f, age) {
+  const x = this.x, s = this.s;
+  const e = this.viewById?.get(f.id);
+  if (e) { const [cx, cy] = pathPoint(e.path, e.d); f.x = cx; f.y = cy; }
+  const [px, py0] = this.P(f.x, f.y);
+  const size = Math.max(11, s * (f.boss ? 0.42 : 0.34));
+  x.font = `800 ${size}px system-ui, sans-serif`;
+  // Wrap to a few words per line.
+  const maxW = s * (f.boss ? 7 : 5.2);
+  const lines = [];
+  for (const word of f.text.split(' ')) {
+    const cur = lines[lines.length - 1];
+    if (cur && x.measureText(cur + ' ' + word).width <= maxW) lines[lines.length - 1] = cur + ' ' + word;
+    else lines.push(word);
+  }
+  const w = Math.max(...lines.map(l => x.measureText(l).width)) + size * 1.1;
+  const lh = size * 1.18, h = lines.length * lh + size * 0.7;
+  const pop = Math.min(1, age / 0.12), fade = Math.min(1, (f.life - age) / 0.4);
+  x.globalAlpha = Math.max(0, fade);
+  const bx = Math.min(this.ox + (this.rot ? ROWS : COLS) * s - w - 2, Math.max(this.ox + 2, px - w / 2));
+  const by = Math.max(this.oy + 2, py0 - s * 0.75 - h - 10);
+  x.save();
+  x.translate(px, py0 - s * 0.6); x.scale(pop, pop); x.translate(-px, -(py0 - s * 0.6));
+  x.fillStyle = f.boss ? '#fff3c4' : '#ffffff';
+  x.strokeStyle = f.boss ? '#e2552b' : 'rgba(29,20,16,.85)';
+  x.lineWidth = f.boss ? 3 : 2;
+  roundRect(x, bx, by, w, h, size * 0.6);
+  x.fill(); x.stroke();
+  // tail
+  const tx = Math.min(bx + w - 12, Math.max(bx + 12, px));
+  x.beginPath(); x.moveTo(tx - 7, by + h - 1); x.lineTo(px, py0 - s * 0.45); x.lineTo(tx + 7, by + h - 1); x.closePath();
+  x.fill(); x.stroke();
+  x.fillRect(tx - 6, by + h - 3, 12, 3);
+  x.fillStyle = '#1d1410'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  lines.forEach((l, i) => x.fillText(l, bx + w / 2, by + size * 0.35 + lh * (i + 0.5)));
+  x.restore();
+  x.globalAlpha = 1;
+};
+
 function roundRect(x, X, Y, w, h, r) {
   x.beginPath();
   x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r);
@@ -2302,6 +2641,7 @@ const { TICK, TOWERS, TREES, MAX_TOWERS, SELL_BACK, MASTERY_DISCOUNT,
   masteryLevel, buildable, doorsFor } = __mods.data;
 const { chipsHtml, skillsHtml, SKILL_CSS } = __mods.skillsui;
 const { newFoodHtml, FOOD_CSS } = __mods.foodinfo;
+const { showBanner, BANNER_CSS } = __mods.banner;
 const { createServer } = __mods.session;
 const { Host, LocalTransport, RtcTransport, normCode, onlineSupported } = __mods.rtc;
 const { Net } = __mods.net;
@@ -2322,7 +2662,7 @@ const G = window.LU = {
   fams: [], sel: null, skillsOpen: false, showRanges: false, endless: false, spd: 1,
 };
 const net = new Net();
-document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS + FOOD_CSS }));
+document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS + FOOD_CSS + BANNER_CSS }));
 const renderer = G.renderer = new Renderer($('#view'));
 
 // ================================ screens ================================
@@ -2495,12 +2835,14 @@ function onEvent(e) {
     case 'early': toast(`Early start: +${e.gold} gold each`, 'good'); break;
     case 'wave': {
       sfx.wave();
-      toast(`Wave ${e.n}: ${e.fams.map(f => FAM_NAMES[f] || f).join(', ')}`);
-      if (e.bossIntro) { sfx.boss(); toast(e.bossIntro, 'boss', 6000); }
+      if (e.bossCard) { sfx.boss(); showBanner($('#stage'), { kicker: `WAVE ${e.n} · BOSS`, title: e.bossCard.name, sub: e.bossCard.line, boss: true, ms: 5000 }); }
+      else showBanner($('#stage'), { kicker: `WAVE ${e.n}`, title: e.title || `Wave ${e.n}`, sub: e.fams.map(f => FAM_NAMES[f] || f).join(' · ') });
       break;
     }
+    case 'bark': renderer.addFx({ k: 'bubble', id: e.id, x: e.x, y: e.y, text: e.text, boss: e.boss, life: e.boss ? 3.4 : 2.6 }); break;
     case 'preview': {
       // The next wave is decided as the break starts: warn now, and introduce new food.
+      if (e.title && !e.boss) toast(`Up next: wave ${e.n}, “${e.title}”`, '', 4000);
       if (e.warn) toast(e.warn, 'warn', 7000);
       if (e.newFoods?.length) showNewFood(e.newFoods, e.n);
       break;

@@ -91,14 +91,14 @@ export function planWave({ w, n, towers, lastFams = [], rng = Math.random }) {
   const weights = Object.fromEntries(unlocked.map(f => [f, lastFams.includes(f) ? 0.6 : 1]));
 
   // Monoculture? Push the counters, and warn.
-  let warn = null, warnPush = 0;
+  let warn = null, warnPush = 0, warnType = null;
   if (w >= 4 && team.total > 0) {
     for (const [dt, s] of Object.entries(team.share)) {
       if (s <= 0.4 || !COUNTERS[dt]) continue;
       const push = sc.adapt * (s - 0.4) * 10;
       let used = false;
       for (const f of COUNTERS[dt].fams) if (weights[f] != null) { weights[f] += push; used = true; }
-      if (used && push > warnPush && sc.adapt >= 1) { warnPush = push; warn = COUNTERS[dt].warn; }
+      if (used && push > warnPush && sc.adapt >= 1) { warnPush = push; warn = COUNTERS[dt].warn; warnType = dt; }
     }
   }
 
@@ -155,5 +155,5 @@ export function planWave({ w, n, towers, lastFams = [], rng = Math.random }) {
     doorT[path] = t + 1.8;
   });
   spawns.sort((a, b) => a.t - b.t);
-  return { spawns, fams, warn, boss, bossIntro: boss ? BOSS_INTRO[boss] : null, team };
+  return { spawns, fams, warn, warnType, boss, bossIntro: boss ? BOSS_INTRO[boss] : null, team };
 }

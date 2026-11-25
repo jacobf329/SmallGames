@@ -87,7 +87,12 @@ export class Renderer {
     return cv;
   }
 
-  addFx(f) { f.t0 = performance.now(); this.fx.push(f); if (this.fx.length > 300) this.fx.shift(); }
+  addFx(f) {
+    f.t0 = performance.now();
+    // At most three bubbles on screen: the oldest makes way.
+    if (f.k === 'bubble') { const b = this.fx.filter(q => q.k === 'bubble'); if (b.length >= 3) this.fx.splice(this.fx.indexOf(b[0]), 1); }
+    this.fx.push(f); if (this.fx.length > 300) this.fx.shift();
+  }
 
   draw(G, now) {
     const x = this.x, s = this.s;
@@ -111,7 +116,8 @@ export class Renderer {
     for (const t of G.towers.values()) this.tower(t, owners.get(t.owner), G.sel?.tower === t.id, G.showRanges);
 
     // Food, smoothed between snapshots
-    for (const e of G.view) this.food(e);
+    this.viewById = new Map();
+    for (const e of G.view) { this.food(e); this.viewById.set(e.id, e); }
 
     // Effects
     const keep = [];
@@ -192,6 +198,7 @@ export class Renderer {
 
   effect(f, age) {
     const x = this.x, s = this.s;
+    if (f.k === 'bubble') return this.bubble(f, age);
     if (f.k === 'shot') {
       const [ax, ay] = this.P(f.fx + 0.5, f.fy + 0.5), [bx, by] = this.P(f.x, f.y);
       const k = age / 0.12;
@@ -217,6 +224,46 @@ export class Renderer {
     }
   }
 }
+
+// A speech bubble that follows its food (and stays put once the food is gone).
+Renderer.prototype.bubble = function (f, age) {
+  const x = this.x, s = this.s;
+  const e = this.viewById?.get(f.id);
+  if (e) { const [cx, cy] = pathPoint(e.path, e.d); f.x = cx; f.y = cy; }
+  const [px, py0] = this.P(f.x, f.y);
+  const size = Math.max(11, s * (f.boss ? 0.42 : 0.34));
+  x.font = `800 ${size}px system-ui, sans-serif`;
+  // Wrap to a few words per line.
+  const maxW = s * (f.boss ? 7 : 5.2);
+  const lines = [];
+  for (const word of f.text.split(' ')) {
+    const cur = lines[lines.length - 1];
+    if (cur && x.measureText(cur + ' ' + word).width <= maxW) lines[lines.length - 1] = cur + ' ' + word;
+    else lines.push(word);
+  }
+  const w = Math.max(...lines.map(l => x.measureText(l).width)) + size * 1.1;
+  const lh = size * 1.18, h = lines.length * lh + size * 0.7;
+  const pop = Math.min(1, age / 0.12), fade = Math.min(1, (f.life - age) / 0.4);
+  x.globalAlpha = Math.max(0, fade);
+  const bx = Math.min(this.ox + (this.rot ? ROWS : COLS) * s - w - 2, Math.max(this.ox + 2, px - w / 2));
+  const by = Math.max(this.oy + 2, py0 - s * 0.75 - h - 10);
+  x.save();
+  x.translate(px, py0 - s * 0.6); x.scale(pop, pop); x.translate(-px, -(py0 - s * 0.6));
+  x.fillStyle = f.boss ? '#fff3c4' : '#ffffff';
+  x.strokeStyle = f.boss ? '#e2552b' : 'rgba(29,20,16,.85)';
+  x.lineWidth = f.boss ? 3 : 2;
+  roundRect(x, bx, by, w, h, size * 0.6);
+  x.fill(); x.stroke();
+  // tail
+  const tx = Math.min(bx + w - 12, Math.max(bx + 12, px));
+  x.beginPath(); x.moveTo(tx - 7, by + h - 1); x.lineTo(px, py0 - s * 0.45); x.lineTo(tx + 7, by + h - 1); x.closePath();
+  x.fill(); x.stroke();
+  x.fillRect(tx - 6, by + h - 3, 12, 3);
+  x.fillStyle = '#1d1410'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  lines.forEach((l, i) => x.fillText(l, bx + w / 2, by + size * 0.35 + lh * (i + 0.5)));
+  x.restore();
+  x.globalAlpha = 1;
+};
 
 function roundRect(x, X, Y, w, h, r) {
   x.beginPath();

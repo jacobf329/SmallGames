@@ -6,6 +6,7 @@ import { TICK, TOWERS, TREES, MAX_TOWERS, SELL_BACK, MASTERY_DISCOUNT,
   masteryLevel, buildable, doorsFor } from './data.js';
 import { chipsHtml, skillsHtml, SKILL_CSS } from './skillsui.js';
 import { newFoodHtml, FOOD_CSS } from './foodinfo.js';
+import { showBanner, BANNER_CSS } from './banner.js';
 import { createServer } from './session.js';
 import { Host, LocalTransport, RtcTransport, normCode, onlineSupported } from './rtc.js';
 import { Net } from './net.js';
@@ -26,7 +27,7 @@ const G = window.LU = {
   fams: [], sel: null, skillsOpen: false, showRanges: false, endless: false, spd: 1,
 };
 const net = new Net();
-document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS + FOOD_CSS }));
+document.head.appendChild(Object.assign(document.createElement('style'), { textContent: SKILL_CSS + FOOD_CSS + BANNER_CSS }));
 const renderer = G.renderer = new Renderer($('#view'));
 
 // ================================ screens ================================
@@ -199,12 +200,14 @@ function onEvent(e) {
     case 'early': toast(`Early start: +${e.gold} gold each`, 'good'); break;
     case 'wave': {
       sfx.wave();
-      toast(`Wave ${e.n}: ${e.fams.map(f => FAM_NAMES[f] || f).join(', ')}`);
-      if (e.bossIntro) { sfx.boss(); toast(e.bossIntro, 'boss', 6000); }
+      if (e.bossCard) { sfx.boss(); showBanner($('#stage'), { kicker: `WAVE ${e.n} · BOSS`, title: e.bossCard.name, sub: e.bossCard.line, boss: true, ms: 5000 }); }
+      else showBanner($('#stage'), { kicker: `WAVE ${e.n}`, title: e.title || `Wave ${e.n}`, sub: e.fams.map(f => FAM_NAMES[f] || f).join(' · ') });
       break;
     }
+    case 'bark': renderer.addFx({ k: 'bubble', id: e.id, x: e.x, y: e.y, text: e.text, boss: e.boss, life: e.boss ? 3.4 : 2.6 }); break;
     case 'preview': {
       // The next wave is decided as the break starts: warn now, and introduce new food.
+      if (e.title && !e.boss) toast(`Up next: wave ${e.n}, “${e.title}”`, '', 4000);
       if (e.warn) toast(e.warn, 'warn', 7000);
       if (e.newFoods?.length) showNewFood(e.newFoods, e.n);
       break;

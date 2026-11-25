@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
-const ORDER = ['data', 'director', 'game', 'ai', 'session', 'skillsui', 'foodinfo', 'rtc', 'net', 'audio', 'render', 'main'];
+const ORDER = ['data', 'lines', 'director', 'game', 'ai', 'session', 'skillsui', 'foodinfo', 'banner', 'rtc', 'net', 'audio', 'render', 'main'];
 
 function wrap(name) {
   let src = read(`js/${name}.js`);

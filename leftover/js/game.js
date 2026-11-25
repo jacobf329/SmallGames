@@ -12,6 +12,11 @@ import {
   pathPoint, teamScale, waveHpMult, doorsFor, PRESSURE, pressureTarget,
 } from './data.js';
 import { planWave } from './director.js';
+import { BARKS, WAVE_TITLES, COUNTER_TITLES, BOSS_TITLES, BOSS_CARDS, createLines } from './lines.js';
+
+// How chatty the food is. Cooldowns are seconds between bubbles of that kind
+// (bosses ignore them); chances are per food.
+const BARK = { gap: 3, perWave: 7, hordePop: 0.03, spawnChance: 0.45, spawnCd: 3.5, popChance: 0.07, bigPopChance: 0.35, popCd: 2.5, leakChance: 0.75, leakCd: 1.5 };
 
 const SHATTER = 2.2, BRITTLE = 1.35, CARAMEL_BONUS = 45, CARAMEL_STUN = 1.3, CARAMEL_CD = 3;
 
@@ -29,7 +34,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     diff, wave: 0, phase: 'build', buildT: BUILD_TIME(1), lives: D.lives, maxLives: D.lives,
     endless: false, speed: 1, enemies: [], towers: new Map(), players: P, events: [],
     plan: null, waveT: 0, spawnI: 0, lastFams: [], towersVer: 1, playersVer: 1, nextId: 1,
-    warn: null, fams: [], time: 0, push: 1, far: 0, leaked: false, seen: new Set(), next: null, preview: null,
+    warn: null, fams: [], time: 0, draw: createLines(rng), barkAt: {}, waveTypes: new Set(), barksThisWave: 0, counterTitle: null, counterTitleAt: -99, push: 1, far: 0, leaked: false, seen: new Set(), next: null, preview: null,
   };
   const n = () => P.size;
   const ev = e => g.events.push(e);
@@ -199,7 +204,9 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     g.fams = g.plan.fams;
     g.warn = g.plan.warn;
     g.playersVer++;
-    ev({ t: 'wave', n: g.wave, fams: g.plan.fams, warn: g.plan.warn, boss: g.plan.boss, bossIntro: g.plan.bossIntro, doors: doorsFor(n()) });
+    const pv = g.preview && g.preview.n === g.wave ? g.preview : {};
+    g.waveTypes = new Set(); g.barksThisWave = 0;
+    ev({ t: 'wave', n: g.wave, title: pv.title || null, fams: g.plan.fams, warn: g.plan.warn, boss: g.plan.boss, bossCard: pv.bossCard || null, bossIntro: pv.bossIntro || g.plan.bossIntro, doors: doorsFor(n()) });
   }
 
   // The next wave is decided as the build break starts, so everyone can see
@@ -214,7 +221,18 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     // Cards for food nobody has met yet (split-off pieces are covered by their parent's card).
     const parents = [...types].filter(id => !g.seen.has(id) && ![...types].some(o => ENEMIES[o].split?.into === id));
     for (const id of types) g.seen.add(id);
-    g.preview = { n: w, fams: plan.fams, warn: plan.warn, boss: plan.boss, bossIntro: plan.bossIntro, newFoods: parents };
+    // A name for the wave, and a title card for a boss.
+    let title;
+    if (plan.boss) title = g.draw('boss:' + plan.boss, BOSS_TITLES[plan.boss]);
+    else if (plan.warnType && COUNTER_TITLES[plan.warnType] && (plan.warnType !== g.counterTitle || w - g.counterTitleAt >= 4)) {
+      // Name the counter wave when the counter is new, not every wave it lasts.
+      title = g.draw('counter:' + plan.warnType, COUNTER_TITLES[plan.warnType]);
+      g.counterTitle = plan.warnType; g.counterTitleAt = w;
+    }
+    else if (rng() < 0.5 && WAVE_TITLES[plan.fams[0]]) title = g.draw('fam:' + plan.fams[0], WAVE_TITLES[plan.fams[0]]);
+    title ||= g.draw('any', WAVE_TITLES.any);
+    const bossCard = plan.boss ? g.draw('card:' + plan.boss, BOSS_CARDS[plan.boss]) : null;
+    g.preview = { n: w, title, fams: plan.fams, warn: plan.warn, boss: plan.boss, bossCard, bossIntro: bossCard ? bossCard.line : plan.bossIntro, newFoods: parents };
     ev({ t: 'preview', ...g.preview });
   }
 
@@ -252,6 +270,19 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
   };
 
   // ------------------------------------------------------------ enemies ----
+  // A speech bubble from one food. Bosses always get their say; everyone else
+  // takes turns (cooldowns) and only sometimes speaks up.
+  function bark(e, kind, force = false) {
+    const pool = BARKS[e.type]?.[kind];
+    if (!pool) return;
+    const cd = BARK[kind + 'Cd'] || 0;
+    if (!force && (g.time - (g.barkAt[kind] ?? -99) < cd || g.time - (g.barkAt.any ?? -99) < BARK.gap || g.barksThisWave >= BARK.perWave)) return;
+    g.barkAt[kind] = g.barkAt.any = g.time;
+    g.barksThisWave++;
+    const [x, y] = pathPoint(e.path, e.d);
+    ev({ t: 'bark', id: e.id, x: +x.toFixed(2), y: +y.toFixed(2), kind, text: g.draw(e.type + ':' + kind, pool), boss: !!ENEMIES[e.type].boss });
+  }
+
   function spawn(type, path, d = 0) {
     const def = ENEMIES[type];
     const sc = teamScale(n());
@@ -264,11 +295,17 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
       caramelCd: 0, chilled: 0, ccImm: 0, lat: ((g.nextId * 7919) % 100) / 100 - 0.5,
     };
     g.enemies.push(e);
-    if (def.boss) ev({ t: 'boss', type });
+    if (def.boss) { ev({ t: 'boss', type }); bark(e, 'spawn', true); }
     return e;
   }
 
   function kill(e, by) {
+    {
+      const def = ENEMIES[e.type];
+      if (def.split && BARKS[e.type]?.split) bark(e, 'split', true);
+      else if (def.boss) bark(e, 'pop', true);
+      else if (rng() < (def.hp >= 300 ? BARK.bigPopChance : def.fam === 'horde' ? BARK.hordePop : BARK.popChance)) bark(e, 'pop');
+    }
     const def = ENEMIES[e.type];
     e.dead = true;
     const sc = teamScale(n());
@@ -411,6 +448,7 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
         e.dead = true; e.leaked = true;
         g.lives -= def.leak; g.leaked = true;
         ev({ t: 'leak', type: e.type, lives: def.leak });
+        if (def.boss || def.fam === 'boss' || rng() < BARK.leakChance) bark(e, 'leak', !!def.boss);
         if (g.lives <= 0) { g.lives = 0; g.phase = 'lost'; ev({ t: 'lost', n: g.wave }); }
       }
     }
@@ -430,7 +468,9 @@ export function createGame({ players, diff = 'normal', rng = Math.random }) {
     if (g.phase !== 'wave') return;
     g.waveT += dt;
     const sp = g.plan.spawns;
-    while (g.spawnI < sp.length && sp[g.spawnI].t <= g.waveT) { const s = sp[g.spawnI++]; spawn(s.type, s.path); }
+    while (g.spawnI < sp.length && sp[g.spawnI].t <= g.waveT) { const s = sp[g.spawnI++]; const e = spawn(s.type, s.path);
+      // The first of each kind in a wave sometimes announces itself.
+      if (!g.waveTypes.has(s.type)) { g.waveTypes.add(s.type); if (!ENEMIES[s.type].boss && rng() < BARK.spawnChance) bark(e, 'spawn'); } }
     moveEnemies(dt);
     if (g.phase !== 'wave') return;
     towersFire(dt);
